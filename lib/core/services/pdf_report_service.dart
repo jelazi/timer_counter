@@ -506,7 +506,7 @@ class PdfReportService {
                   pw.TableRow(
                     children: [
                       pw.Container(
-                        height: 1.69 * PdfPageFormat.cm,
+                        height: 2.2 * PdfPageFormat.cm,
                         decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
                         padding: const pw.EdgeInsets.all(3),
                         child: pw.Padding(
@@ -544,7 +544,7 @@ class PdfReportService {
                         ),
                       ),
                       pw.Container(
-                        height: 1.69 * PdfPageFormat.cm,
+                        height: 2.2 * PdfPageFormat.cm,
                         decoration: const pw.BoxDecoration(
                           border: pw.Border(right: pw.BorderSide(width: 1), bottom: pw.BorderSide(width: 1.5)),
                         ),

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -79,6 +81,48 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
     final outputDir = await FilePicker.platform.getDirectoryPath(dialogTitle: tr('pdf_reports.select_output_dir'));
     if (outputDir == null) return;
 
+    // Check for existing files
+    final invoiceSettings = _loadInvoiceSettings();
+    final monthName = _czechMonthsLower[_selectedMonth] ?? '$_selectedMonth';
+    final filenames = [
+      '${invoiceSettings.reportFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf',
+      '${invoiceSettings.reportRezijniFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf',
+      '${invoiceSettings.invoiceFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf',
+    ];
+    final existingFiles = filenames.where((f) => File('$outputDir/$f').existsSync()).toList();
+    if (existingFiles.isNotEmpty && mounted) {
+      final overwrite = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 36),
+          title: Text(tr('pdf_reports.files_exist_title')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tr('pdf_reports.files_exist_desc')),
+              const SizedBox(height: 12),
+              ...existingFiles.map((f) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.insert_drive_file, size: 16, color: Colors.orange),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(f, style: const TextStyle(fontWeight: FontWeight.w500))),
+                  ],
+                ),
+              )),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('common.cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('pdf_reports.overwrite_files'))),
+          ],
+        ),
+      );
+      if (overwrite != true) return;
+    }
+
     setState(() {
       _isGenerating = true;
       _generatedFiles = null;
@@ -86,7 +130,6 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
     });
 
     try {
-      final invoiceSettings = _loadInvoiceSettings();
       final service = PdfReportService(
         timeEntryRepo: context.read<TimeEntryRepository>(),
         projectRepo: context.read<ProjectRepository>(),
