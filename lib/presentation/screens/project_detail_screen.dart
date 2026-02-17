@@ -10,8 +10,6 @@ import '../../data/repositories/time_entry_repository.dart';
 import '../blocs/task/task_bloc.dart';
 import '../blocs/task/task_event.dart';
 import '../blocs/task/task_state.dart';
-import '../blocs/timer/timer_bloc.dart';
-import '../blocs/timer/timer_event.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
   final ProjectModel project;
@@ -155,10 +153,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               return _TaskListItem(
                 task: task,
                 project: widget.project,
-                onStartTimer: () {
-                  context.read<TimerBloc>().add(StartTimer(projectId: widget.project.id, taskId: task.id));
-                },
                 onDelete: () {
+                  // Check if task has time entries
+                  final timeEntryRepo = context.read<TimeEntryRepository>();
+                  final taskEntries = timeEntryRepo.getByTask(task.id);
+                  if (taskEntries.isNotEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('projects.cannot_delete_task_has_entries')), backgroundColor: Colors.orange));
+                    return;
+                  }
                   context.read<TaskBloc>().add(DeleteTask(taskId: task.id, projectId: widget.project.id));
                 },
               );
@@ -250,10 +252,9 @@ class _InfoRow extends StatelessWidget {
 class _TaskListItem extends StatelessWidget {
   final TaskModel task;
   final ProjectModel project;
-  final VoidCallback onStartTimer;
   final VoidCallback onDelete;
 
-  const _TaskListItem({required this.task, required this.project, required this.onStartTimer, required this.onDelete});
+  const _TaskListItem({required this.task, required this.project, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -288,11 +289,6 @@ class _TaskListItem extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.play_arrow, color: Colors.green),
-              onPressed: onStartTimer,
-              tooltip: tr('time_tracking.start_timer'),
-            ),
             IconButton(
               icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
               onPressed: onDelete,

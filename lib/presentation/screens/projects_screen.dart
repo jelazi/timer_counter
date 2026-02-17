@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/project_model.dart';
+import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
 import '../blocs/category/category_bloc.dart';
@@ -240,6 +241,21 @@ class ProjectsScreen extends StatelessWidget {
   }
 
   void _showDeleteCategoryDialog(BuildContext context, CategoryModel category) {
+    // Check if category has projects
+    final projectRepo = context.read<ProjectRepository>();
+    final categoryProjects = projectRepo.getByCategory(category.id);
+    if (categoryProjects.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: Text(tr('categories.delete_category')),
+          content: Text(tr('categories.cannot_delete_has_projects')),
+          actions: [FilledButton(onPressed: () => Navigator.pop(context), child: Text(tr('common.ok')))],
+        ),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(

@@ -10,6 +10,7 @@
         "title": "Time Tracking",
         "start_timer": "Start Timer",
         "stop_timer": "Stop Timer",
+        "switch_timer": "Switch",
         "no_entries_today": "No time entries today",
         "today": "Today",
         "this_week": "This Week",
@@ -37,6 +38,7 @@
         "edit_project": "Edit Project",
         "delete_project": "Delete Project",
         "delete_confirm": "Are you sure you want to delete this project?",
+        "cannot_delete_has_entries": "Cannot delete project that has time entries. Remove entries first.",
         "project_name": "Project Name",
         "category": "Category",
         "hourly_rate": "Hourly Rate",
@@ -58,6 +60,7 @@
         "edit_task": "Edit Task",
         "delete_task": "Delete Task",
         "delete_task_confirm": "Are you sure you want to delete this task?",
+        "cannot_delete_task_has_entries": "Cannot delete task that has time entries. Remove entries first.",
         "task_name": "Task Name",
         "tracked_time": "Tracked Time",
         "budget_remaining": "Budget Remaining",
@@ -70,6 +73,7 @@
         "edit_category": "Edit Category",
         "delete_category": "Delete Category",
         "delete_confirm": "Are you sure you want to delete this category?",
+        "cannot_delete_has_projects": "Cannot delete category that has projects. Remove or reassign projects first.",
         "category_name": "Category Name",
         "no_categories": "No categories yet",
         "uncategorized": "Uncategorized"
@@ -198,7 +202,8 @@
     },
     "import": {
         "title": "Import Data",
-        "select_file": "Select JSON File",
+        "select_file": "Select File",
+        "select_file_csv": "Select CSV File",
         "overwrite": "Overwrite",
         "overwrite_desc": "Delete all existing data and replace with imported data",
         "append": "Append",
@@ -223,6 +228,9 @@
         "to": "To",
         "export": "Export",
         "select_range": "Select date range for export",
-        "this_month": "This Month"
+        "this_month": "This Month",
+        "format": "Format",
+        "json_format": "JSON",
+        "csv_format": "CSV"
     }
 }

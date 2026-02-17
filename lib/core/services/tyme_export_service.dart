@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:csv/csv.dart';
+import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../data/models/category_model.dart';
@@ -26,11 +28,11 @@ class TymeExportService {
     required TaskRepository taskRepository,
     required CategoryRepository categoryRepository,
     required SettingsRepository settingsRepository,
-  })  : _timeEntryRepository = timeEntryRepository,
-        _projectRepository = projectRepository,
-        _taskRepository = taskRepository,
-        _categoryRepository = categoryRepository,
-        _settingsRepository = settingsRepository;
+  }) : _timeEntryRepository = timeEntryRepository,
+       _projectRepository = projectRepository,
+       _taskRepository = taskRepository,
+       _categoryRepository = categoryRepository,
+       _settingsRepository = settingsRepository;
 
   /// Export all time entries in Tyme-compatible JSON format.
   /// Returns the path of the exported file.
@@ -146,14 +148,112 @@ class TymeExportService {
       'task': task?.name ?? '',
       'task_id': task?.id ?? '',
       'type': 'timed',
+      'start_time': DateFormat('HH:mm').format(entry.startTime),
+      'stop_time': entry.endTime != null ? DateFormat('HH:mm').format(entry.endTime!) : '',
+      'start_datetime': entry.startTime.toIso8601String(),
+      'stop_datetime': entry.endTime?.toIso8601String() ?? '',
       'user': '',
       'user_id': 'ID_LOCAL_USER',
     };
   }
 
-  Future<String> _getDefaultExportPath() async {
+  /// Export all time entries in CSV format.
+  /// Returns the path of the exported file.
+  Future<String> exportToCsv({String? outputPath, DateTime? startDate, DateTime? endDate}) async {
+    List<TimeEntryModel> entries;
+    if (startDate != null && endDate != null) {
+      entries = _timeEntryRepository.getByDateRange(startDate, endDate);
+    } else {
+      entries = _timeEntryRepository.getAll();
+    }
+
+    final roundTime = _settingsRepository.getRoundTime();
+    final roundToMinutes = _settingsRepository.getRoundToMinutes();
+    final dateFormat = DateFormat('dd.MM.yyyy');
+    final timeFormat = DateFormat('HH:mm');
+
+    final rows = <List<dynamic>>[
+      // Header
+      [
+        'type',
+        'category',
+        'project',
+        'task',
+        'subtask',
+        'unix_start',
+        'unix_end',
+        'start',
+        'end',
+        'date',
+        'start_time',
+        'end_time',
+        'duration',
+        'distance',
+        'quantity',
+        'rate',
+        'sum',
+        'rounding_minutes',
+        'rounding_method',
+        'billing',
+        'note',
+        'user',
+      ],
+    ];
+
+    for (final entry in entries) {
+      final project = _projectRepository.getById(entry.projectId);
+      final task = _taskRepository.getById(entry.taskId);
+      CategoryModel? category;
+      if (project?.categoryId != null) {
+        category = _categoryRepository.getById(project!.categoryId!);
+      }
+
+      final durationMinutes = _calculateDurationMinutes(entry, roundTime, roundToMinutes);
+      final rate = _getRate(project, task);
+      final sum = (durationMinutes / 60.0) * rate;
+
+      final unixStart = entry.startTime.millisecondsSinceEpoch ~/ 1000;
+      final unixEnd = entry.endTime != null ? entry.endTime!.millisecondsSinceEpoch ~/ 1000 : unixStart + entry.durationSeconds;
+      final endTime = entry.endTime ?? entry.startTime.add(Duration(seconds: entry.durationSeconds));
+
+      rows.add([
+        'timed',
+        category?.name ?? '',
+        project?.name ?? '',
+        task?.name ?? '',
+        '',
+        unixStart,
+        unixEnd,
+        '${dateFormat.format(entry.startTime)} ${timeFormat.format(entry.startTime)}',
+        '${dateFormat.format(endTime)} ${timeFormat.format(endTime)}',
+        dateFormat.format(entry.startTime),
+        timeFormat.format(entry.startTime),
+        timeFormat.format(endTime),
+        durationMinutes,
+        0,
+        0,
+        rate,
+        sum,
+        roundToMinutes,
+        roundTime ? 'NEAREST' : 'NEAREST',
+        entry.isBillable ? 'UNBILLED' : 'NON_BILLABLE',
+        entry.notes,
+        '',
+      ]);
+    }
+
+    final csvOutput = const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
+
+    final filePath = outputPath ?? await _getDefaultExportPath(extension: 'csv');
+    final file = File(filePath);
+    await file.writeAsString(csvOutput);
+
+    return filePath;
+  }
+
+  Future<String> _getDefaultExportPath({String extension = 'json'}) async {
     final dir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
-    return '${dir.path}/tyme_export_$timestamp.json';
+    return '${dir.path}/tyme_export_$timestamp.$extension';
   }
 }
