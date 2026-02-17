@@ -46,6 +46,10 @@ class StatisticsBloc extends Bloc<StatisticsEvent, StatisticsState> {
           startDate = DateTime(now.year, now.month, 1);
           endDate = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
           break;
+        case 'year':
+          startDate = DateTime(now.year, 1, 1);
+          endDate = DateTime(now.year, 12, 31, 23, 59, 59);
+          break;
         default:
           startDate = DateTime(now.year, now.month, now.day);
           endDate = startDate.add(const Duration(days: 1));

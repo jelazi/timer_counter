@@ -90,7 +90,16 @@
         "non_billable_hours": "Non-billable Hours",
         "date_range": "Date Range",
         "custom_range": "Custom Range",
-        "no_data": "No data available"
+        "no_data": "No data available",
+        "this_year": "This Year",
+        "select_period": "Select Period",
+        "select_day": "Day",
+        "select_week": "Week",
+        "select_month": "Month",
+        "select_year": "Year",
+        "from": "From",
+        "to": "To",
+        "apply": "Apply"
     },
     "settings": {
         "title": "Settings",
@@ -205,5 +214,15 @@
         "import_mode": "Import Mode",
         "confirm_overwrite": "This will delete ALL existing data. Are you sure?",
         "no_data": "No valid data found in file"
+    },
+    "export": {
+        "title": "Export Data",
+        "date_range": "Date Range",
+        "filename": "File Name",
+        "from": "From",
+        "to": "To",
+        "export": "Export",
+        "select_range": "Select date range for export",
+        "this_month": "This Month"
     }
 }

@@ -21,6 +21,7 @@ class TimerCard extends StatelessWidget {
 
     return SizedBox(
       width: 280,
+      height: 250,
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: Container(

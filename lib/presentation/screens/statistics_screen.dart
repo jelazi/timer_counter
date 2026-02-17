@@ -35,7 +35,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(context),
+                _buildHeader(context, state),
                 const SizedBox(height: 24),
                 if (state is StatisticsLoaded) ...[
                   _buildSummaryCards(context, state),
@@ -63,24 +63,216 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildHeader(BuildContext context, StatisticsState state) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(tr('statistics.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-        SegmentedButton<String>(
-          segments: [
-            ButtonSegment(value: 'today', label: Text(tr('time_tracking.today'))),
-            ButtonSegment(value: 'week', label: Text(tr('time_tracking.this_week'))),
-            ButtonSegment(value: 'month', label: Text(tr('time_tracking.this_month'))),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(tr('statistics.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SegmentedButton<String>(
+                  segments: [
+                    ButtonSegment(value: 'today', label: Text(tr('time_tracking.today'))),
+                    ButtonSegment(value: 'week', label: Text(tr('time_tracking.this_week'))),
+                    ButtonSegment(value: 'month', label: Text(tr('time_tracking.this_month'))),
+                    ButtonSegment(value: 'year', label: Text(tr('statistics.this_year'))),
+                  ],
+                  selected: _selectedRange != 'custom' ? {_selectedRange} : {},
+                  emptySelectionAllowed: true,
+                  onSelectionChanged: (selected) {
+                    if (selected.isNotEmpty) {
+                      setState(() => _selectedRange = selected.first);
+                      context.read<StatisticsBloc>().add(ChangeStatisticsRange(selected.first));
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                FilledButton.tonal(
+                  onPressed: () => _showCustomRangePicker(context),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.date_range, size: 18), const SizedBox(width: 4), Text(tr('statistics.custom_range'))]),
+                ),
+              ],
+            ),
           ],
-          selected: {_selectedRange},
-          onSelectionChanged: (selected) {
-            setState(() => _selectedRange = selected.first);
-            context.read<StatisticsBloc>().add(ChangeStatisticsRange(_selectedRange));
-          },
         ),
+        if (state is StatisticsLoaded)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '${DateFormat('d.M.yyyy', context.locale.languageCode).format(state.startDate)} — ${DateFormat('d.M.yyyy', context.locale.languageCode).format(state.endDate)}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+              ),
+            ),
+          ),
       ],
+    );
+  }
+
+  void _showCustomRangePicker(BuildContext parentContext) {
+    final statisticsBloc = parentContext.read<StatisticsBloc>();
+    final locale = parentContext.locale.languageCode;
+    final now = DateTime.now();
+
+    showDialog(
+      context: parentContext,
+      builder: (_) {
+        String mode = 'month';
+        DateTime selectedDate = now;
+        int selectedYear = now.year;
+        int selectedMonth = now.month;
+
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            Widget buildModeControls() {
+              switch (mode) {
+                case 'day':
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.calendar_today),
+                    title: Text(DateFormat('d MMMM yyyy', locale).format(selectedDate)),
+                    subtitle: Text(tr('statistics.select_day')),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 1)),
+                      );
+                      if (picked != null) setDialogState(() => selectedDate = picked);
+                    },
+                  );
+                case 'week':
+                  final weekStart = DateTime(selectedDate.year, selectedDate.month, selectedDate.day - (selectedDate.weekday - 1));
+                  final weekEnd = weekStart.add(const Duration(days: 6));
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.view_week),
+                    title: Text('${DateFormat('d.M.', locale).format(weekStart)} — ${DateFormat('d.M.yyyy', locale).format(weekEnd)}'),
+                    subtitle: Text(tr('statistics.select_week')),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 7)),
+                      );
+                      if (picked != null) setDialogState(() => selectedDate = picked);
+                    },
+                  );
+                case 'month':
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            decoration: InputDecoration(labelText: tr('statistics.select_year')),
+                            value: selectedYear,
+                            items: List.generate(now.year - 2019, (i) => 2020 + i).map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
+                            onChanged: (v) {
+                              if (v != null) setDialogState(() => selectedYear = v);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            decoration: InputDecoration(labelText: tr('statistics.select_month')),
+                            value: selectedMonth,
+                            items: List.generate(
+                              12,
+                              (i) => i + 1,
+                            ).map((m) => DropdownMenuItem(value: m, child: Text(DateFormat('MMMM', locale).format(DateTime(2024, m))))).toList(),
+                            onChanged: (v) {
+                              if (v != null) setDialogState(() => selectedMonth = v);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                case 'year':
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: DropdownButtonFormField<int>(
+                      decoration: InputDecoration(labelText: tr('statistics.select_year')),
+                      value: selectedYear,
+                      isExpanded: true,
+                      items: List.generate(now.year - 2019, (i) => 2020 + i).map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
+                      onChanged: (v) {
+                        if (v != null) setDialogState(() => selectedYear = v);
+                      },
+                    ),
+                  );
+                default:
+                  return const SizedBox();
+              }
+            }
+
+            return AlertDialog(
+              title: Text(tr('statistics.select_period')),
+              content: SizedBox(
+                width: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SegmentedButton<String>(
+                      segments: [
+                        ButtonSegment(value: 'day', label: Text(tr('statistics.select_day'))),
+                        ButtonSegment(value: 'week', label: Text(tr('statistics.select_week'))),
+                        ButtonSegment(value: 'month', label: Text(tr('statistics.select_month'))),
+                        ButtonSegment(value: 'year', label: Text(tr('statistics.select_year'))),
+                      ],
+                      selected: {mode},
+                      onSelectionChanged: (s) => setDialogState(() => mode = s.first),
+                    ),
+                    const SizedBox(height: 16),
+                    buildModeControls(),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text(tr('common.cancel'))),
+                FilledButton(
+                  onPressed: () {
+                    DateTime startDate, endDate;
+                    switch (mode) {
+                      case 'day':
+                        startDate = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+                        endDate = startDate.add(const Duration(days: 1));
+                        break;
+                      case 'week':
+                        startDate = DateTime(selectedDate.year, selectedDate.month, selectedDate.day - (selectedDate.weekday - 1));
+                        endDate = startDate.add(const Duration(days: 7));
+                        break;
+                      case 'month':
+                        startDate = DateTime(selectedYear, selectedMonth, 1);
+                        endDate = DateTime(selectedYear, selectedMonth + 1, 0, 23, 59, 59);
+                        break;
+                      case 'year':
+                        startDate = DateTime(selectedYear, 1, 1);
+                        endDate = DateTime(selectedYear, 12, 31, 23, 59, 59);
+                        break;
+                      default:
+                        return;
+                    }
+                    Navigator.pop(dialogContext);
+                    setState(() => _selectedRange = 'custom');
+                    statisticsBloc.add(LoadStatistics(startDate: startDate, endDate: endDate));
+                  },
+                  child: Text(tr('statistics.apply')),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -144,7 +336,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           if (index >= 0 && index < state.dailyStatistics.length) {
                             return Padding(
                               padding: const EdgeInsets.only(top: 8),
-                              child: Text(DateFormat('E').format(state.dailyStatistics[index].date), style: const TextStyle(fontSize: 10)),
+                              child: Text(DateFormat('E', context.locale.languageCode).format(state.dailyStatistics[index].date), style: const TextStyle(fontSize: 10)),
                             );
                           }
                           return const SizedBox();
