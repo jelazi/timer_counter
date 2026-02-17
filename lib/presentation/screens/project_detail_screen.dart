@@ -32,6 +32,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
+        toolbarHeight: kToolbarHeight + 28,
         title: Row(
           children: [
             Container(

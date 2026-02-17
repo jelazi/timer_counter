@@ -148,6 +148,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                     ),
                   ],
                 ),
+                if (isRunning) ...[_buildRunningBadge(context, timerState, settingsState)],
               ],
             ),
             const SizedBox(height: 16),
@@ -253,6 +254,55 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildRunningBadge(BuildContext context, TimerRunning timerState, SettingsState settingsState) {
+    final timer = timerState.runningTimers.first;
+    final projectRepo = context.read<ProjectRepository>();
+    final taskRepo = context.read<TaskRepository>();
+    final project = projectRepo.getById(timer.projectId);
+    final task = taskRepo.getById(timer.taskId);
+    final projectColor = project != null ? Color(project.colorValue) : Colors.grey;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: projectColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: projectColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+              boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1)],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                project?.name ?? 'Unknown',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: projectColor),
+              ),
+              Text(task?.name ?? '', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Text(
+            TimeFormatter.formatDuration(timer.elapsedSeconds, showSeconds: settingsState.showSeconds),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, fontFeatures: [const FontFeature.tabularFigures()]),
+          ),
+        ],
       ),
     );
   }

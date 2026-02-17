@@ -1,5 +1,48 @@
 # Development Log
 
+## 2026-02-17 (session 7) — Project detail fix, export date fix, PDF reports tab, running timer badge
+
+### What was done
+1. **Project detail top overlap fix** — Increased `toolbarHeight` to `kToolbarHeight + 28` in `project_detail_screen.dart` AppBar so the 3 macOS traffic light icons no longer overlap with the title/action icons.
+2. **Export date picker error fix** — Changed end-date picker `lastDate` from `DateTime.now() + 1 day` to `DateTime.now() + 365 days` in `settings_screen.dart`. Previously, selecting an end date at end-of-month (e.g. Feb 28) when today was earlier (Feb 17) caused `initialDate > lastDate` assertion error.
+3. **PDF Reports tab (new feature)** — Implemented a 6th NavigationRail tab "PDF Reporty" that generates 3 PDF files matching the Python `json_to_pdf.py` script output exactly:
+   - `report_{month}_{year}.pdf` — Monthly table with days x tasks, color-coded (blue header, light blue day column, green totals column, green CELKEM row, alternating row colors), summary with total time, hourly rate, total amount
+   - `report_{month}_{year}_rezijni.pdf` — Same report but with "Angličtina" entries merged into "Režijní čas"
+   - `faktura_{month}_{year}.pdf` — Invoice with supplier (Lubomír Žižka), buyer (Medutech s.r.o.), bank details, item table, CELKEM K ÚHRADĚ, QR payment code, signature sections
+4. **Running timer badge in header** — Added `_buildRunningBadge()` to `time_tracking_screen.dart` that shows project name, task name, and elapsed time in a colored badge (with project color border and red pulsing dot) in the top-right header area when a timer is running. Always visible without scrolling.
+5. **New service: PdfReportService** — Created `lib/core/services/pdf_report_service.dart` using the `pdf` Dart package. Processes time entries from repositories, generates PDF with layout matching the Python script: same colors, fonts, table structure, invoice layout, QR code.
+6. **New screen: PdfReportsScreen** — Created `lib/presentation/screens/pdf_reports_screen.dart` with month/year selection, period summary (total hours, entry count), file list preview, and directory picker for output.
+
+### New translation keys
+- `nav.pdf_reports` — "PDF Reporty" / "PDF Reports"
+- `pdf_reports.title`, `pdf_reports.subtitle`, `pdf_reports.select_period`, `pdf_reports.month`, `pdf_reports.year`
+- `pdf_reports.previous_month`, `pdf_reports.next_month`, `pdf_reports.period_summary`
+- `pdf_reports.total_hours`, `pdf_reports.entries_count`, `pdf_reports.period`
+- `pdf_reports.generated_files`, `pdf_reports.report_desc`, `pdf_reports.report_rezijni_desc`, `pdf_reports.invoice_desc`
+- `pdf_reports.generate`, `pdf_reports.generating`, `pdf_reports.select_output_dir`
+- `pdf_reports.success`, `pdf_reports.no_entries`, `pdf_reports.preview_saved`
+
+### Files modified
+- `lib/presentation/screens/project_detail_screen.dart` — toolbarHeight fix (task 1)
+- `lib/presentation/screens/settings_screen.dart` — date picker lastDate fix (task 2)
+- `lib/presentation/screens/time_tracking_screen.dart` — running timer badge (task 4)
+- `lib/presentation/screens/home_screen.dart` — added 6th NavigationRail destination + PdfReportsScreen import (task 3)
+- `assets/translations/cs.json` — new pdf_reports keys + nav.pdf_reports
+- `assets/translations/en.json` — new pdf_reports keys + nav.pdf_reports
+
+### Files created
+- `lib/core/services/pdf_report_service.dart` — PDF generation service (task 5)
+- `lib/presentation/screens/pdf_reports_screen.dart` — PDF reports UI screen (task 6)
+
+### Current state
+- All 4 requested features implemented
+- `flutter analyze` passes with 0 errors, 0 warnings (19 info-level deprecation notices)
+- PDF generation uses Inter fonts from assets, matching Python script colors and layout
+
+### Known issues / pending
+- Invoice has hardcoded supplier/buyer data (matching Python script) — could be made configurable
+- Pre-existing deprecation warnings (`DropdownButtonFormField.value`, `RadioListTile.groupValue`)
+
 ## 2026-02-18 (session 6) — Timer UX overhaul, CSV support, statistics charts, delete protection, Czech locale fixes
 
 ### What was done

@@ -4,7 +4,8 @@
         "time_tracking": "Time Tracking",
         "projects": "Projects",
         "statistics": "Statistics",
-        "settings": "Settings"
+        "settings": "Settings",
+        "pdf_reports": "PDF Reports"
     },
     "time_tracking": {
         "title": "Time Tracking",
@@ -232,5 +233,28 @@
         "format": "Format",
         "json_format": "JSON",
         "csv_format": "CSV"
+    },
+    "pdf_reports": {
+        "title": "PDF Reports",
+        "subtitle": "Generate monthly reports and invoices in PDF format",
+        "select_period": "Select Period",
+        "month": "Month",
+        "year": "Year",
+        "previous_month": "Previous month",
+        "next_month": "Next month",
+        "period_summary": "Period Summary",
+        "total_hours": "Total Hours",
+        "entries_count": "Entries Count",
+        "period": "Period",
+        "generated_files": "Generated Files",
+        "report_desc": "Monthly report - daily task breakdown table",
+        "report_rezijni_desc": "Monthly report - Angličtina moved to Režijní čas",
+        "invoice_desc": "Invoice with payment QR code",
+        "generate": "Generate PDF",
+        "generating": "Generating...",
+        "select_output_dir": "Select output folder",
+        "success": "PDF files generated successfully",
+        "no_entries": "No entries in this period",
+        "preview_saved": "Preview saved"
     }
 }

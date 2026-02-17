@@ -4,7 +4,8 @@
         "time_tracking": "Sledování času",
         "projects": "Projekty",
         "statistics": "Statistiky",
-        "settings": "Nastavení"
+        "settings": "Nastavení",
+        "pdf_reports": "PDF Reporty"
     },
     "time_tracking": {
         "title": "Sledování času",
@@ -232,5 +233,28 @@
         "format": "Formát",
         "json_format": "JSON",
         "csv_format": "CSV"
+    },
+    "pdf_reports": {
+        "title": "PDF Reporty",
+        "subtitle": "Generování měsíčních reportů a faktur ve formátu PDF",
+        "select_period": "Vyberte období",
+        "month": "Měsíc",
+        "year": "Rok",
+        "previous_month": "Předchozí měsíc",
+        "next_month": "Další měsíc",
+        "period_summary": "Shrnutí období",
+        "total_hours": "Celkem hodin",
+        "entries_count": "Počet záznamů",
+        "period": "Období",
+        "generated_files": "Generované soubory",
+        "report_desc": "Měsíční report - tabulka dnů a úkolů",
+        "report_rezijni_desc": "Měsíční report - Angličtina přesunuta do Režijní čas",
+        "invoice_desc": "Faktura s QR kódem pro platbu",
+        "generate": "Generovat PDF",
+        "generating": "Generuji...",
+        "select_output_dir": "Vyberte výstupní složku",
+        "success": "PDF soubory úspěšně vygenerovány",
+        "no_entries": "Žádné záznamy v tomto období",
+        "preview_saved": "Náhled uložen"
     }
 }
