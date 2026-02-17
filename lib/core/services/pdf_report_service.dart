@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import '../../data/models/invoice_settings.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
@@ -291,7 +292,8 @@ class PdfReportService {
   }
 
   /// Generate invoice PDF matching the Python script layout.
-  Future<Uint8List> generateInvoicePdf(DateTime monthStart, DateTime monthEnd) async {
+  Future<Uint8List> generateInvoicePdf(DateTime monthStart, DateTime monthEnd, {InvoiceSettings? invoiceSettings}) async {
+    final settings = invoiceSettings ?? const InvoiceSettings();
     final fonts = await _loadFonts();
     final data = _processEntries(monthStart, monthEnd);
 
@@ -340,7 +342,7 @@ class PdfReportService {
                     children: [
                       pw.Padding(
                         padding: const pw.EdgeInsets.only(left: 8),
-                        child: pw.Text('Lubomír Žižka', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                        child: pw.Text(settings.supplier.name, style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
                       ),
                       pw.Align(
                         alignment: pw.Alignment.centerRight,
@@ -387,18 +389,18 @@ class PdfReportService {
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
                             pw.Text('Dodavatel:', style: pw.TextStyle(font: fonts.regular, fontSize: 8)),
-                            pw.Text('Lubomír Žižka', style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
-                            pw.Text('Na Hvězdě 55/3', style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
-                            pw.Text('69151 Lanžhot', style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                            pw.Text(settings.supplier.name, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                            pw.Text(settings.supplier.addressLine1, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                            pw.Text(settings.supplier.addressLine2, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
                             pw.SizedBox(height: 4),
                             pw.Padding(
                               padding: const pw.EdgeInsets.only(left: 12),
                               child: pw.Column(
                                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                                 children: [
-                                  pw.Text('IČO: 19164165', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                                  pw.Text('Mobil: 776122559', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                                  pw.Text('E-mail: lzizka@gmail.com', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                  pw.Text('IČO: ${settings.supplier.ico}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                  if (settings.supplier.phone.isNotEmpty) pw.Text('Mobil: ${settings.supplier.phone}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                  pw.Text('E-mail: ${settings.supplier.email}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
                                 ],
                               ),
                             ),
@@ -461,15 +463,15 @@ class PdfReportService {
                                   pw.SizedBox(height: 4),
                                   pw.Padding(
                                     padding: const pw.EdgeInsets.only(left: 8),
-                                    child: pw.Text('Medutech s.r.o.', style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                                    child: pw.Text(settings.customer.name, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
                                   ),
                                   pw.Padding(
                                     padding: const pw.EdgeInsets.only(left: 8),
-                                    child: pw.Text('Beranových 130', style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                                    child: pw.Text(settings.customer.addressLine1, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
                                   ),
                                   pw.Padding(
                                     padding: const pw.EdgeInsets.only(left: 8),
-                                    child: pw.Text('19900 PRAHA 18', style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                                    child: pw.Text(settings.customer.addressLine2, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
                                   ),
                                 ],
                               ),
@@ -480,12 +482,13 @@ class PdfReportService {
                                 pw.SizedBox(height: 8),
                                 pw.Padding(
                                   padding: const pw.EdgeInsets.only(right: 8),
-                                  child: pw.Text('IČO: 08975922', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                  child: pw.Text('IČO: ${settings.customer.ico}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
                                 ),
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.only(right: 8),
-                                  child: pw.Text('DIČ: CZ08975922', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                                ),
+                                if (settings.customer.dic.isNotEmpty)
+                                  pw.Padding(
+                                    padding: const pw.EdgeInsets.only(right: 8),
+                                    child: pw.Text('DIČ: ${settings.customer.dic}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                  ),
                               ],
                             ),
                           ],
@@ -511,9 +514,9 @@ class PdfReportService {
                           child: pw.Column(
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
-                              pw.Text('Banka:', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                              pw.Text('SWIFT:', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                              pw.Text('IBAN: CZ2862106701002200840281', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                              pw.Text('Banka: ${settings.bankName}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                              pw.Text('SWIFT: ${settings.swift}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                              pw.Text('IBAN: ${settings.iban}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
                               pw.RichText(
                                 text: pw.TextSpan(
                                   children: [
@@ -522,7 +525,7 @@ class PdfReportService {
                                       style: pw.TextStyle(font: fonts.regular, fontSize: 9),
                                     ),
                                     pw.TextSpan(
-                                      text: '670100-2200840281',
+                                      text: settings.accountNumber,
                                       style: pw.TextStyle(font: fonts.bold, fontSize: 9),
                                     ),
                                     pw.TextSpan(
@@ -530,7 +533,7 @@ class PdfReportService {
                                       style: pw.TextStyle(font: fonts.regular, fontSize: 9),
                                     ),
                                     pw.TextSpan(
-                                      text: '6210',
+                                      text: settings.bankCode,
                                       style: pw.TextStyle(font: fonts.bold, fontSize: 9),
                                     ),
                                   ],
@@ -614,7 +617,7 @@ class PdfReportService {
                   pw.TableRow(
                     decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(width: 0.5))),
                     children: [
-                      _invoiceCell('Vývoj aplikace Artemis', fonts.regular, 9, left: 8),
+                      _invoiceCell(settings.description, fonts.regular, 9, left: 8),
                       _invoiceCell(totalHoursFmt, fonts.regular, 9, align: pw.TextAlign.right),
                       _invoiceCell('hod', fonts.regular, 9, align: pw.TextAlign.right),
                       _invoiceCell(hourlyRateFmt, fonts.regular, 9, align: pw.TextAlign.right),
@@ -692,8 +695,8 @@ class PdfReportService {
                                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                                 children: [
                                   pw.Text('Vystavil:', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                                  pw.Text('Lubomír Žižka', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                                  pw.Text('lzizka@gmail.com', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                  pw.Text(settings.issuerName, style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                  pw.Text(settings.issuerEmail, style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
                                 ],
                               ),
                             ),
@@ -705,7 +708,7 @@ class PdfReportService {
                                 children: [
                                   pw.BarcodeWidget(
                                     barcode: pw.Barcode.qrCode(),
-                                    data: 'SPD*1.0*ACC:CZ2862106701002200840281*AM:${totalAmount.toStringAsFixed(2)}*CC:CZK*X-VS:$vs*MSG:Vyvoj aplikace Artemis',
+                                    data: 'SPD*1.0*ACC:${settings.iban}*AM:${totalAmount.toStringAsFixed(2)}*CC:CZK*X-VS:$vs*MSG:${settings.description}',
                                     width: 4 * PdfPageFormat.cm,
                                     height: 4 * PdfPageFormat.cm,
                                   ),
@@ -777,27 +780,33 @@ class PdfReportService {
 
   /// Generate all 3 PDFs and save them to [outputDir].
   /// Returns the list of generated file paths.
-  Future<List<String>> generateAllReports(DateTime monthStart, DateTime monthEnd, String outputDir) async {
+  Future<List<String>> generateAllReports(DateTime monthStart, DateTime monthEnd, String outputDir, {InvoiceSettings? invoiceSettings}) async {
+    final settings = invoiceSettings ?? const InvoiceSettings();
     final month = monthStart.month;
     final year = monthStart.year;
     final monthName = _czechMonthsLower[month] ?? '$month';
+
+    String resolveFilename(String pattern) {
+      return pattern.replaceAll('{month}', monthName).replaceAll('{year}', '$year');
+    }
+
     final paths = <String>[];
 
     // 1. Report (original)
     final reportBytes = await generateReportPdf(monthStart, monthEnd, moveAnglictina: false);
-    final reportPath = '$outputDir/report_${monthName}_$year.pdf';
+    final reportPath = '$outputDir/${resolveFilename(settings.reportFilename)}.pdf';
     await File(reportPath).writeAsBytes(reportBytes);
     paths.add(reportPath);
 
     // 2. Report (režijní variant)
     final rezijniBytes = await generateReportPdf(monthStart, monthEnd, moveAnglictina: true);
-    final rezijniPath = '$outputDir/report_${monthName}_${year}_rezijni.pdf';
+    final rezijniPath = '$outputDir/${resolveFilename(settings.reportRezijniFilename)}.pdf';
     await File(rezijniPath).writeAsBytes(rezijniBytes);
     paths.add(rezijniPath);
 
     // 3. Invoice
-    final invoiceBytes = await generateInvoicePdf(monthStart, monthEnd);
-    final invoicePath = '$outputDir/faktura_${monthName}_$year.pdf';
+    final invoiceBytes = await generateInvoicePdf(monthStart, monthEnd, invoiceSettings: settings);
+    final invoicePath = '$outputDir/${resolveFilename(settings.invoiceFilename)}.pdf';
     await File(invoicePath).writeAsBytes(invoiceBytes);
     paths.add(invoicePath);
 

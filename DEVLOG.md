@@ -1,5 +1,59 @@
 # Development Log
 
+## 2026-02-17 (session 8) — PDF reports overflow fix, configurable invoice settings, tray task name
+
+### What was done
+1. **PDF reports overflow fix** — Wrapped the main content of `PdfReportsScreen` in `Expanded` + `SingleChildScrollView` so it scrolls instead of overflowing the vertical `Column`.
+2. **Configurable invoice supplier** — Added supplier management with Hive persistence. Users can save multiple suppliers to a list (stored as JSON maps in the settings box), select from saved ones via InputChips, or enter new data. Fields: name, address line 1, address line 2, IČO, phone, email.
+3. **Configurable invoice customer (odběratel)** — Same as supplier but for customers. Fields: name, address line 1, address line 2, IČO, DIČ. Also stored as a list in Hive with selection index.
+4. **Editable invoice description** — "Vývoj aplikace Artemis" is now configurable via settings. Stored in Hive as `invoice_description`. Also used in QR payment code.
+5. **Bank account, bank code & SWIFT** — Added editable fields for bank name, account number, bank code, IBAN, and SWIFT. All rendered on the invoice PDF. Previously bank name and SWIFT were empty.
+6. **Editable issuer name & email** — "Vystavil" section on the invoice now uses configurable issuer name and email from settings.
+7. **Editable file names** — Users can customize the generated PDF file name patterns using `{month}` and `{year}` placeholders. Defaults: `report_{month}_{year}`, `report_{month}_{year}_rezijni`, `faktura_{month}_{year}`.
+8. **Tray icon shows task name** — System tray title now displays `taskName elapsed | totalToday` instead of just `elapsed | totalToday`.
+
+### Architecture: Invoice Settings
+- Created `InvoiceParty` data class and `InvoiceSettings` model in `lib/data/models/invoice_settings.dart`
+- Extended `SettingsRepository` with ~30 new getter/setter methods for invoice settings (suppliers list, customers list, selection indexes, bank info, description, issuer, filenames)
+- Extended `AppConstants` with 15 new keys for invoice settings
+- Updated `PdfReportService.generateInvoicePdf()` and `generateAllReports()` to accept optional `InvoiceSettings` parameter
+- Created `_InvoiceSettingsDialog` with 5-tab interface (Supplier, Customer, Bank, Invoice, Files)
+
+### New translation keys (cs.json + en.json)
+- `pdf_reports.invoice_settings`, `pdf_reports.invoice_info`, `pdf_reports.edit`
+- `pdf_reports.supplier`, `pdf_reports.customer`, `pdf_reports.bank_tab`, `pdf_reports.invoice_tab`, `pdf_reports.files_tab`
+- `pdf_reports.bank_info`, `pdf_reports.description_label`, `pdf_reports.issuer_section`
+- `pdf_reports.saved_suppliers`, `pdf_reports.saved_customers`, `pdf_reports.save_to_list`
+- `pdf_reports.supplier_saved`, `pdf_reports.customer_saved`
+- `pdf_reports.field_name`, `pdf_reports.field_address1`, `pdf_reports.field_address2`
+- `pdf_reports.field_ico`, `pdf_reports.field_dic`, `pdf_reports.field_phone`, `pdf_reports.field_email`
+- `pdf_reports.field_bank_name`, `pdf_reports.field_account_number`, `pdf_reports.field_bank_code`
+- `pdf_reports.field_description`, `pdf_reports.field_issuer_name`, `pdf_reports.field_issuer_email`
+- `pdf_reports.field_report_filename`, `pdf_reports.field_report_rezijni_filename`, `pdf_reports.field_invoice_filename`
+- `pdf_reports.filenames_hint`
+
+### Files modified
+- `lib/core/constants/app_constants.dart` — 15 new invoice settings keys
+- `lib/core/services/pdf_report_service.dart` — parameterized invoice generation (supplier, customer, bank, description, issuer, filenames)
+- `lib/data/repositories/settings_repository.dart` — invoice settings getter/setter methods, `getInvoiceSettings()` aggregate loader
+- `lib/presentation/screens/pdf_reports_screen.dart` — overflow fix, invoice info card, settings dialog button, full rewrite with `_InvoiceSettingsDialog`
+- `lib/app/app.dart` — tray title now includes task name
+- `assets/translations/cs.json` — new invoice settings keys
+- `assets/translations/en.json` — new invoice settings keys
+
+### Files created
+- `lib/data/models/invoice_settings.dart` — `InvoiceParty` and `InvoiceSettings` data classes
+
+### Current state
+- All 7 requested features implemented + overflow fix
+- `flutter analyze` passes with 0 errors, 0 warnings (21 info-level notices — pre-existing deprecations + async context)
+- Invoice settings stored in Hive settings box as key-value pairs
+- Supplier/customer lists stored as JSON arrays in Hive
+- Default values match the original hardcoded data
+
+### Known issues / pending
+- Pre-existing deprecation warnings (`DropdownButtonFormField.value`, `RadioListTile.groupValue`)
+
 ## 2026-02-17 (session 7) — Project detail fix, export date fix, PDF reports tab, running timer badge
 
 ### What was done
