@@ -49,6 +49,12 @@ class AppConstants {
   static const String invoiceReportRezijniFilename = 'invoice_report_rezijni_filename';
   static const String invoiceInvoiceFilename = 'invoice_invoice_filename';
 
+  // Firebase Sync Keys
+  static const String firebaseProjectId = 'firebase_project_id';
+  static const String firebaseApiKey = 'firebase_api_key';
+  static const String firebaseEnabled = 'firebase_enabled';
+  static const String firebaseLastSync = 'firebase_last_sync';
+
   // Default Values
   static const double defaultDailyWorkingHours = 8.0;
   static const int defaultWeeklyWorkingDays = 5;

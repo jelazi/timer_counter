@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/services/firebase_sync_service.dart';
 import '../../core/services/tyme_export_service.dart';
 import '../../core/services/tyme_import_service.dart';
 import '../../data/repositories/category_repository.dart';
@@ -290,6 +291,11 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
 
+                // Cloud Sync
+                _buildSectionTitle(context, tr('sync.title')),
+                _FirebaseSyncSection(settingsRepo: context.read<SettingsRepository>()),
+                const SizedBox(height: 20),
+
                 // Reminders
                 _buildSectionTitle(context, tr('settings.reminders')),
                 Card(
@@ -505,12 +511,7 @@ class _ExportDialogState extends State<_ExportDialog> {
                     subtitle: Text(DateFormat('d.M.yyyy').format(_endDate)),
                     onTap: () async {
                       final lastAllowed = DateTime.now().add(const Duration(days: 365));
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: _endDate,
-                        firstDate: DateTime(2020),
-                        lastDate: lastAllowed,
-                      );
+                      final picked = await showDatePicker(context: context, initialDate: _endDate, firstDate: DateTime(2020), lastDate: lastAllowed);
                       if (picked != null) {
                         setState(() => _endDate = picked);
                       }
@@ -631,5 +632,375 @@ class _ImportDialogState extends State<_ImportDialog> {
 
     Navigator.pop(context);
     widget.onImport(_selectedFilePath!, _selectedMode);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firebase Cloud Sync Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FirebaseSyncSection extends StatefulWidget {
+  final SettingsRepository settingsRepo;
+
+  const _FirebaseSyncSection({required this.settingsRepo});
+
+  @override
+  State<_FirebaseSyncSection> createState() => _FirebaseSyncSectionState();
+}
+
+class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
+  bool _isSyncing = false;
+  String? _syncMessage;
+
+  bool get _isConfigured => widget.settingsRepo.isFirebaseConfigured;
+
+  FirebaseSyncService _createService() {
+    return FirebaseSyncService(
+      projectId: widget.settingsRepo.getFirebaseProjectId(),
+      apiKey: widget.settingsRepo.getFirebaseApiKey(),
+      projectRepo: context.read<ProjectRepository>(),
+      taskRepo: context.read<TaskRepository>(),
+      timeEntryRepo: context.read<TimeEntryRepository>(),
+      categoryRepo: context.read<CategoryRepository>(),
+    );
+  }
+
+  Future<void> _doUpload() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(tr('sync.upload')),
+        content: Text(tr('sync.confirm_upload')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('sync.upload'))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _runSync(() => _createService().uploadAll(onProgress: _onProgress), tr('sync.upload_success'));
+  }
+
+  Future<void> _doDownload() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(tr('sync.download')),
+        content: Text(tr('sync.confirm_download')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            child: Text(tr('sync.download')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _runSync(() => _createService().downloadAll(onProgress: _onProgress), tr('sync.download_success'));
+  }
+
+  Future<void> _doMergeSync() async {
+    await _runSync(() => _createService().syncAll(onProgress: _onProgress), tr('sync.sync_success'));
+  }
+
+  void _onProgress(String message, double progress) {
+    if (!mounted) return;
+    setState(() => _syncMessage = message);
+  }
+
+  Future<void> _runSync(Future<SyncResult> Function() action, String successMsg) async {
+    setState(() {
+      _isSyncing = true;
+      _syncMessage = tr('sync.syncing');
+    });
+    try {
+      final result = await action();
+      if (!mounted) return;
+      if (result.hasError) {
+        setState(() {
+          _isSyncing = false;
+          _syncMessage = '${tr('sync.sync_error')}: ${result.error}';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('sync.sync_error')}: ${result.error}'), backgroundColor: Colors.red));
+      } else {
+        widget.settingsRepo.setFirebaseLastSync(DateTime.now().toIso8601String());
+        setState(() {
+          _isSyncing = false;
+          _syncMessage = '$successMsg (${tr('sync.items_synced')}: ${result.total})';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '$successMsg — '
+              '${tr('sync.categories')}: ${result.categoriesSynced}, '
+              '${tr('sync.projects')}: ${result.projectsSynced}, '
+              '${tr('sync.tasks')}: ${result.tasksSynced}, '
+              '${tr('sync.time_entries')}: ${result.timeEntriesSynced}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSyncing = false;
+        _syncMessage = '${tr('sync.sync_error')}: $e';
+      });
+    }
+  }
+
+  String _formatLastSync() {
+    final raw = widget.settingsRepo.getFirebaseLastSync();
+    if (raw.isEmpty) return tr('sync.never');
+    final dt = DateTime.tryParse(raw);
+    if (dt == null) return tr('sync.never');
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 1) return tr('sync.last_sync_just_now');
+    if (diff.inHours < 1) return '${diff.inMinutes} min';
+    if (diff.inDays < 1) return '${diff.inHours}h ${diff.inMinutes % 60}min';
+    return '${dt.day}.${dt.month}.${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _openConfig() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => _FirebaseConfigDialog(settingsRepo: widget.settingsRepo),
+    );
+    if (result == true && mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final configured = _isConfigured;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Config row
+            ListTile(
+              leading: Icon(configured ? Icons.cloud_done : Icons.cloud_off, color: configured ? Colors.green : theme.colorScheme.onSurfaceVariant),
+              title: Text(tr('sync.firebase_config')),
+              subtitle: Text(
+                configured ? tr('sync.configured') : tr('sync.not_configured'),
+                style: TextStyle(color: configured ? Colors.green : theme.colorScheme.onSurfaceVariant),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _openConfig,
+            ),
+
+            if (configured) ...[
+              const Divider(),
+
+              // Last sync
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.schedule, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Text('${tr('sync.last_sync')}: ${_formatLastSync()}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // Sync status message
+              if (_syncMessage != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Text(
+                    _syncMessage!,
+                    style: theme.textTheme.bodySmall?.copyWith(color: _syncMessage!.contains('error') || _syncMessage!.contains('Chyba') ? Colors.red : Colors.green),
+                  ),
+                ),
+
+              // Progress indicator
+              if (_isSyncing) const Padding(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: LinearProgressIndicator()),
+
+              const SizedBox(height: 8),
+
+              // Action buttons
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isSyncing ? null : _doUpload,
+                        icon: const Icon(Icons.cloud_upload, size: 18),
+                        label: Text(tr('sync.upload'), style: const TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isSyncing ? null : _doDownload,
+                        icon: const Icon(Icons.cloud_download, size: 18),
+                        label: Text(tr('sync.download'), style: const TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _isSyncing ? null : _doMergeSync,
+                        icon: const Icon(Icons.sync, size: 18),
+                        label: Text(tr('sync.sync_merge'), style: const TextStyle(fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+
+              // Hint
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Text(tr('sync.firestore_hint'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firebase Configuration Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _FirebaseConfigDialog extends StatefulWidget {
+  final SettingsRepository settingsRepo;
+
+  const _FirebaseConfigDialog({required this.settingsRepo});
+
+  @override
+  State<_FirebaseConfigDialog> createState() => _FirebaseConfigDialogState();
+}
+
+class _FirebaseConfigDialogState extends State<_FirebaseConfigDialog> {
+  late final TextEditingController _projectIdCtrl;
+  late final TextEditingController _apiKeyCtrl;
+  bool _testing = false;
+  bool? _connectionOk;
+
+  @override
+  void initState() {
+    super.initState();
+    _projectIdCtrl = TextEditingController(text: widget.settingsRepo.getFirebaseProjectId());
+    _apiKeyCtrl = TextEditingController(text: widget.settingsRepo.getFirebaseApiKey());
+  }
+
+  @override
+  void dispose() {
+    _projectIdCtrl.dispose();
+    _apiKeyCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _testConnection() async {
+    if (_projectIdCtrl.text.trim().isEmpty || _apiKeyCtrl.text.trim().isEmpty) return;
+    setState(() {
+      _testing = true;
+      _connectionOk = null;
+    });
+    final service = FirebaseSyncService(
+      projectId: _projectIdCtrl.text.trim(),
+      apiKey: _apiKeyCtrl.text.trim(),
+      projectRepo: context.read<ProjectRepository>(),
+      taskRepo: context.read<TaskRepository>(),
+      timeEntryRepo: context.read<TimeEntryRepository>(),
+      categoryRepo: context.read<CategoryRepository>(),
+    );
+    final ok = await service.testConnection();
+    if (!mounted) return;
+    setState(() {
+      _testing = false;
+      _connectionOk = ok;
+    });
+  }
+
+  void _save() {
+    widget.settingsRepo.setFirebaseProjectId(_projectIdCtrl.text.trim());
+    widget.settingsRepo.setFirebaseApiKey(_apiKeyCtrl.text.trim());
+    Navigator.pop(context, true);
+  }
+
+  void _clear() {
+    widget.settingsRepo.setFirebaseProjectId('');
+    widget.settingsRepo.setFirebaseApiKey('');
+    Navigator.pop(context, true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(tr('sync.firebase_config')),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _projectIdCtrl,
+              decoration: InputDecoration(labelText: tr('sync.project_id'), hintText: 'my-project-id', border: const OutlineInputBorder()),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _apiKeyCtrl,
+              decoration: InputDecoration(labelText: tr('sync.api_key'), hintText: 'AIza...', border: const OutlineInputBorder()),
+              obscureText: true,
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _testing ? null : _testConnection,
+                  icon: _testing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.wifi_find, size: 18),
+                  label: Text(tr('sync.test_connection')),
+                ),
+                const SizedBox(width: 12),
+                if (_connectionOk == true)
+                  Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                      const SizedBox(width: 4),
+                      Text(tr('sync.connection_ok'), style: const TextStyle(color: Colors.green)),
+                    ],
+                  ),
+                if (_connectionOk == false)
+                  Row(
+                    children: [
+                      const Icon(Icons.error, color: Colors.red, size: 20),
+                      const SizedBox(width: 4),
+                      Text(tr('sync.connection_failed'), style: const TextStyle(color: Colors.red)),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _clear,
+          child: Text(tr('sync.clear_config'), style: const TextStyle(color: Colors.red)),
+        ),
+        const Spacer(),
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+        FilledButton(onPressed: _save, child: Text(tr('common.save'))),
+      ],
+      actionsAlignment: MainAxisAlignment.start,
+    );
   }
 }
