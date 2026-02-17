@@ -164,10 +164,10 @@ class _AppWithTheme extends StatelessWidget {
       tooltip += ' | Today: $totalFormatted';
       trayService.updateTooltip(tooltip);
 
-      // Update title — always show elapsed | total today
+      // Update title — show task name + elapsed | total today
       if (runningTimerInfos.isNotEmpty) {
         final first = runningTimerInfos.first;
-        trayService.updateTitle('${first.elapsed} | $totalFormatted');
+        trayService.updateTitle('${first.taskName} ${first.elapsed} | $totalFormatted');
       } else {
         trayService.updateTitle('0:00 | $totalFormatted');
       }

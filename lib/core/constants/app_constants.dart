@@ -32,6 +32,23 @@ class AppConstants {
   static const String lastTaskId = 'last_task_id';
   static const String allowOverlapTimes = 'allow_overlap_times';
 
+  // Invoice Settings Keys
+  static const String invoiceSuppliers = 'invoice_suppliers';
+  static const String invoiceCustomers = 'invoice_customers';
+  static const String invoiceSelectedSupplierIndex = 'invoice_selected_supplier_index';
+  static const String invoiceSelectedCustomerIndex = 'invoice_selected_customer_index';
+  static const String invoiceDescription = 'invoice_description';
+  static const String invoiceBankName = 'invoice_bank_name';
+  static const String invoiceBankCode = 'invoice_bank_code';
+  static const String invoiceSwift = 'invoice_swift';
+  static const String invoiceAccountNumber = 'invoice_account_number';
+  static const String invoiceIban = 'invoice_iban';
+  static const String invoiceIssuerName = 'invoice_issuer_name';
+  static const String invoiceIssuerEmail = 'invoice_issuer_email';
+  static const String invoiceReportFilename = 'invoice_report_filename';
+  static const String invoiceReportRezijniFilename = 'invoice_report_rezijni_filename';
+  static const String invoiceInvoiceFilename = 'invoice_invoice_filename';
+
   // Default Values
   static const double defaultDailyWorkingHours = 8.0;
   static const int defaultWeeklyWorkingDays = 5;
