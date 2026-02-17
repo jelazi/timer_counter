@@ -1,5 +1,38 @@
 # Development Log
 
+## 2026-02-17 (session 5) — Statistics ranges, export dialog, import fixes, Czech localization, README
+
+### What was done
+1. **Statistics: This Year + custom period picker** — Added "This Year" preset to statistics SegmentedButton. Added "Custom Range" button that opens a dialog where user can select: specific Day (date picker), Week (pick date → shows Mon-Sun range), Month (year + month dropdowns), or Year (year dropdown). Date range is displayed below the header. Statistics BLoC now handles 'year' range.
+2. **Export: date range selection + custom filename** — Replaced simple directory picker with full export dialog: from/to date pickers (default: current month), auto-generated filename based on range (e.g., `timer_counter_2026-02.json`), editable filename field, directory picker. Export service already supported date ranges.
+3. **Import: auto-create categories/tasks if not existing** — Import now checks existing categories, projects, and tasks BY NAME (case-insensitive) before creating. If an entity with the same name already exists, it reuses the existing ID instead of creating a duplicate. Only truly new entities are created.
+4. **Import: fix start/end times** — Fixed timezone parsing: dates are now converted to local time before extracting the calendar date. Entries are stacked throughout the day starting at 8:00 AM instead of all starting at midnight. Each subsequent entry on the same day starts where the previous one ended.
+5. **Czech month/week names in time entries overview** — Added locale parameter (`context.locale.languageCode`) to all `DateFormat` calls that display day/month names: month navigator, day section headers, date pickers in Add/Edit dialogs. Also added locale to statistics chart day labels.
+6. **README for Git** — Created comprehensive README.md with full English section + full Czech (Česky) section. Covers: features, tech stack, architecture diagram, getting started, build instructions.
+
+### New translation keys
+- `statistics.this_year`, `statistics.select_period`, `statistics.select_day/week/month/year`, `statistics.from`, `statistics.to`, `statistics.apply`
+- `export.title`, `export.date_range`, `export.filename`, `export.from`, `export.to`, `export.export`, `export.select_range`, `export.this_month`
+
+### Files modified
+- `assets/translations/en.json` — Added statistics + export translation keys
+- `assets/translations/cs.json` — Added statistics + export translation keys (Czech)
+- `lib/presentation/blocs/statistics/statistics_bloc.dart` — Added 'year' case in _onChangeRange
+- `lib/presentation/screens/statistics_screen.dart` — New header with This Year + custom range button, custom period picker dialog with Day/Week/Month/Year modes, locale-aware DateFormat in chart
+- `lib/presentation/screens/settings_screen.dart` — Replaced _exportData with dialog-based export, added _ExportDialog widget with date range + filename + directory picker
+- `lib/core/services/tyme_import_service.dart` — Name-based entity deduplication, timezone-correct date parsing, day-stacking for sequential start times
+- `lib/presentation/screens/time_entries_overview_screen.dart` — Added locale parameter to all DateFormat calls (month navigator, day headers, dialog date pickers)
+- `README.md` — Complete rewrite with English + Czech sections
+
+### Build status
+- `flutter analyze` — 0 errors, 0 warnings, 13 info only (pre-existing deprecation warnings)
+
+### What is pending
+- Some deprecated API warnings (`DropdownButtonFormField.value` → `initialValue`, `RadioListTile.groupValue/onChanged`)
+- The `start_timer_dialog.dart` is orphaned (can be deleted in cleanup)
+
+---
+
 ## 2026-02-17 (session 4) — 10 feature requests: rename, dock hiding, tray total, overlap blocking, text time input, icon fix, export fix
 
 ### What was done

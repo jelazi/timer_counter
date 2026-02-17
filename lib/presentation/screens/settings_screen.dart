@@ -351,29 +351,30 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Future<void> _exportData(BuildContext context) async {
-    try {
-      final selectedDir = await FilePicker.platform.getDirectoryPath(dialogTitle: tr('settings.select_directory'));
-      if (selectedDir == null) return;
-
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-').split('.').first;
-      final outputPath = '$selectedDir/tyme_export_$timestamp.json';
-
-      final exportService = TymeExportService(
-        timeEntryRepository: context.read<TimeEntryRepository>(),
-        projectRepository: context.read<ProjectRepository>(),
-        taskRepository: context.read<TaskRepository>(),
-        categoryRepository: context.read<CategoryRepository>(),
-        settingsRepository: context.read<SettingsRepository>(),
-      );
-      final path = await exportService.exportToJson(outputPath: outputPath);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.success')}: $path'), duration: const Duration(seconds: 5)));
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.error')}: $e')));
-      }
-    }
+    showDialog(
+      context: context,
+      builder: (_) => _ExportDialog(
+        onExport: (outputPath, startDate, endDate) async {
+          try {
+            final exportService = TymeExportService(
+              timeEntryRepository: context.read<TimeEntryRepository>(),
+              projectRepository: context.read<ProjectRepository>(),
+              taskRepository: context.read<TaskRepository>(),
+              categoryRepository: context.read<CategoryRepository>(),
+              settingsRepository: context.read<SettingsRepository>(),
+            );
+            final path = await exportService.exportToJson(outputPath: outputPath, startDate: startDate, endDate: endDate);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.success')}: $path'), duration: const Duration(seconds: 5)));
+            }
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.error')}: $e')));
+            }
+          }
+        },
+      ),
+    );
   }
 
   void _showImportDialog(BuildContext context) {
@@ -407,6 +408,146 @@ class SettingsScreen extends StatelessWidget {
           }
         },
       ),
+    );
+  }
+}
+
+class _ExportDialog extends StatefulWidget {
+  final Function(String outputPath, DateTime startDate, DateTime endDate) onExport;
+
+  const _ExportDialog({required this.onExport});
+
+  @override
+  State<_ExportDialog> createState() => _ExportDialogState();
+}
+
+class _ExportDialogState extends State<_ExportDialog> {
+  late DateTime _startDate;
+  late DateTime _endDate;
+  late TextEditingController _filenameController;
+  String? _selectedDir;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _startDate = DateTime(now.year, now.month, 1);
+    _endDate = DateTime(now.year, now.month + 1, 0);
+    _filenameController = TextEditingController(text: _generateFilename());
+  }
+
+  @override
+  void dispose() {
+    _filenameController.dispose();
+    super.dispose();
+  }
+
+  String _generateFilename() {
+    if (_startDate.month == _endDate.month && _startDate.year == _endDate.year) {
+      return 'timer_counter_${DateFormat('yyyy-MM').format(_startDate)}.json';
+    }
+    final startStr = DateFormat('yyyy-MM-dd').format(_startDate);
+    final endStr = DateFormat('yyyy-MM-dd').format(_endDate);
+    return 'timer_counter_${startStr}_$endStr.json';
+  }
+
+  void _updateFilename() {
+    _filenameController.text = _generateFilename();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(tr('export.title')),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tr('export.date_range'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.calendar_today, size: 20),
+                    title: Text(tr('export.from')),
+                    subtitle: Text(DateFormat('d.M.yyyy').format(_startDate)),
+                    onTap: () async {
+                      final picked = await showDatePicker(context: context, initialDate: _startDate, firstDate: DateTime(2020), lastDate: DateTime.now());
+                      if (picked != null) {
+                        setState(() {
+                          _startDate = picked;
+                          _updateFilename();
+                        });
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.calendar_today, size: 20),
+                    title: Text(tr('export.to')),
+                    subtitle: Text(DateFormat('d.M.yyyy').format(_endDate)),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _endDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now().add(const Duration(days: 1)),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _endDate = picked;
+                          _updateFilename();
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _filenameController,
+              decoration: InputDecoration(labelText: tr('export.filename'), prefixIcon: const Icon(Icons.file_present), helperText: tr('export.select_range')),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.folder_outlined),
+              title: Text(_selectedDir != null ? _selectedDir!.split('/').last : tr('settings.select_directory'), overflow: TextOverflow.ellipsis),
+              subtitle: _selectedDir != null ? Text(_selectedDir!, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+              trailing: FilledButton.tonal(
+                onPressed: () async {
+                  final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: tr('settings.select_directory'));
+                  if (dir != null) setState(() => _selectedDir = dir);
+                },
+                child: Text(tr('settings.select_directory')),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('common.cancel'))),
+        FilledButton.icon(
+          onPressed: _selectedDir != null
+              ? () {
+                  final outputPath = '$_selectedDir/${_filenameController.text}';
+                  final endOfDay = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
+                  Navigator.pop(context);
+                  widget.onExport(outputPath, _startDate, endOfDay);
+                }
+              : null,
+          icon: const Icon(Icons.file_download),
+          label: Text(tr('export.export')),
+        ),
+      ],
     );
   }
 }

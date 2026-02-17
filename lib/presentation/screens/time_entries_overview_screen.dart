@@ -102,7 +102,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
               setState(() => _selectedMonth = DateTime(picked.year, picked.month, 1));
             }
           },
-          child: Text(DateFormat('MMMM yyyy').format(_selectedMonth), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          child: Text(DateFormat('MMMM yyyy', context.locale.languageCode).format(_selectedMonth), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
         ),
         IconButton(
           icon: const Icon(Icons.chevron_right),
@@ -226,7 +226,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
-                Text(DateFormat('EEEE, d MMMM').format(day), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                Text(DateFormat('EEEE, d MMMM', context.locale.languageCode).format(day), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
                 const Spacer(),
                 Text(
                   '${entries.length} \u2014 ${TimeFormatter.formatDuration(dayTotal, showSeconds: false)}',
@@ -575,7 +575,7 @@ class _AddManualEntryDialogState extends State<_AddManualEntryDialog> {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.calendar_today),
               title: Text(tr('time_entries.date')),
-              subtitle: Text(DateFormat('EEEE, d MMMM yyyy').format(_selectedDate)),
+              subtitle: Text(DateFormat('EEEE, d MMMM yyyy', context.locale.languageCode).format(_selectedDate)),
               onTap: () async {
                 final picked = await showDatePicker(
                   context: context,
@@ -898,7 +898,7 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.calendar_today),
               title: Text(tr('time_entries.date')),
-              subtitle: Text(DateFormat('EEEE, d MMMM yyyy').format(_selectedDate)),
+              subtitle: Text(DateFormat('EEEE, d MMMM yyyy', context.locale.languageCode).format(_selectedDate)),
               onTap: () async {
                 final picked = await showDatePicker(
                   context: context,

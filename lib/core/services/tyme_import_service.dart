@@ -22,13 +22,7 @@ class ImportResult {
   final int entriesImported;
   final String? error;
 
-  const ImportResult({
-    this.categoriesImported = 0,
-    this.projectsImported = 0,
-    this.tasksImported = 0,
-    this.entriesImported = 0,
-    this.error,
-  });
+  const ImportResult({this.categoriesImported = 0, this.projectsImported = 0, this.tasksImported = 0, this.entriesImported = 0, this.error});
 
   bool get hasError => error != null;
 }
@@ -44,10 +38,10 @@ class TymeImportService {
     required ProjectRepository projectRepository,
     required TaskRepository taskRepository,
     required CategoryRepository categoryRepository,
-  })  : _timeEntryRepository = timeEntryRepository,
-        _projectRepository = projectRepository,
-        _taskRepository = taskRepository,
-        _categoryRepository = categoryRepository;
+  }) : _timeEntryRepository = timeEntryRepository,
+       _projectRepository = projectRepository,
+       _taskRepository = taskRepository,
+       _categoryRepository = categoryRepository;
 
   Future<ImportResult> importFromJson(String filePath, ImportMode mode) async {
     try {
@@ -73,89 +67,131 @@ class TymeImportService {
         await _clearAllData();
       }
 
-      // Extract unique categories, projects, tasks from the import data
-      final categories = <String, CategoryModel>{};
-      final projects = <String, ProjectModel>{};
-      final tasks = <String, TaskModel>{};
+      // Get existing entities for name-based deduplication
+      final existingCategories = _categoryRepository.getAll();
+      final existingProjects = _projectRepository.getAll();
+      final existingTasks = _taskRepository.getAll();
+
+      // ID mappings: import file ID → database ID (for reusing existing entities)
+      final Map<String, String> catIdMap = {};
+      final Map<String, String> projIdMap = {};
+      final Map<String, String> taskIdMap = {};
+
+      // Entities to create (only truly new ones)
+      final categoriesToCreate = <String, CategoryModel>{};
+      final projectsToCreate = <String, ProjectModel>{};
+      final tasksToCreate = <String, TaskModel>{};
+
+      // Day stacking tracker: entries on the same day start after the previous one
+      final Map<String, DateTime> dayNextStart = {};
+
       final timeEntries = <TimeEntryModel>[];
 
       for (final entry in entries) {
         if (entry is! Map<String, dynamic>) continue;
 
-        // Extract category
         final categoryId = entry['category_id'] as String? ?? '';
         final categoryName = entry['category'] as String? ?? '';
-        if (categoryId.isNotEmpty && categoryName.isNotEmpty && !categories.containsKey(categoryId)) {
-          categories[categoryId] = CategoryModel(
-            id: categoryId,
-            name: categoryName,
-            colorValue: 0xFF6366F1,
-            createdAt: DateTime.now(),
-          );
-        }
-
-        // Extract project
         final projectId = entry['project_id'] as String? ?? '';
         final projectName = entry['project'] as String? ?? '';
-        if (projectId.isNotEmpty && projectName.isNotEmpty && !projects.containsKey(projectId)) {
-          final rate = (entry['rate'] as num?)?.toDouble() ?? 0.0;
-          final billing = entry['billing'] as String? ?? '';
-          projects[projectId] = ProjectModel(
-            id: projectId,
-            name: projectName,
-            categoryId: categoryId.isNotEmpty ? categoryId : null,
-            colorValue: 0xFF6366F1,
-            hourlyRate: rate,
-            isBillable: billing != 'NON_BILLABLE',
-            createdAt: DateTime.now(),
-          );
-        }
-
-        // Extract task
         final taskId = entry['task_id'] as String? ?? '';
         final taskName = entry['task'] as String? ?? '';
-        if (taskId.isNotEmpty && taskName.isNotEmpty && !tasks.containsKey(taskId)) {
-          tasks[taskId] = TaskModel(
-            id: taskId,
-            projectId: projectId,
-            name: taskName,
-            isBillable: (entry['billing'] as String? ?? '') != 'NON_BILLABLE',
-            createdAt: DateTime.now(),
-          );
+        final rate = (entry['rate'] as num?)?.toDouble() ?? 0.0;
+        final billing = entry['billing'] as String? ?? '';
+
+        // Category: check by name first to avoid duplicates
+        if (categoryId.isNotEmpty && categoryName.isNotEmpty && !catIdMap.containsKey(categoryId)) {
+          final existingByName = existingCategories.where((c) => c.name.toLowerCase() == categoryName.toLowerCase()).toList();
+          if (existingByName.isNotEmpty) {
+            catIdMap[categoryId] = existingByName.first.id;
+          } else {
+            catIdMap[categoryId] = categoryId;
+            categoriesToCreate[categoryId] = CategoryModel(id: categoryId, name: categoryName, colorValue: 0xFF6366F1, createdAt: DateTime.now());
+          }
         }
 
-        // Build time entry
+        // Project: check by name first to avoid duplicates
+        if (projectId.isNotEmpty && projectName.isNotEmpty && !projIdMap.containsKey(projectId)) {
+          final existingByName = existingProjects.where((p) => p.name.toLowerCase() == projectName.toLowerCase()).toList();
+          if (existingByName.isNotEmpty) {
+            projIdMap[projectId] = existingByName.first.id;
+          } else {
+            final actualCatId = catIdMap[categoryId] ?? (categoryId.isNotEmpty ? categoryId : null);
+            projIdMap[projectId] = projectId;
+            projectsToCreate[projectId] = ProjectModel(
+              id: projectId,
+              name: projectName,
+              categoryId: actualCatId,
+              colorValue: 0xFF6366F1,
+              hourlyRate: rate,
+              isBillable: billing != 'NON_BILLABLE',
+              createdAt: DateTime.now(),
+            );
+          }
+        }
+
+        // Task: check by name within the same project to avoid duplicates
+        if (taskId.isNotEmpty && taskName.isNotEmpty && !taskIdMap.containsKey(taskId)) {
+          final actualProjId = projIdMap[projectId] ?? projectId;
+          final existingByName = existingTasks.where((t) => t.name.toLowerCase() == taskName.toLowerCase() && t.projectId == actualProjId).toList();
+          if (existingByName.isNotEmpty) {
+            taskIdMap[taskId] = existingByName.first.id;
+          } else {
+            taskIdMap[taskId] = taskId;
+            tasksToCreate[taskId] = TaskModel(id: taskId, projectId: actualProjId, name: taskName, isBillable: billing != 'NON_BILLABLE', createdAt: DateTime.now());
+          }
+        }
+
+        // Build time entry with correct date/time
         final entryId = entry['id'] as String? ?? const Uuid().v4();
         final dateStr = entry['date'] as String? ?? '';
         final durationMinutes = (entry['duration'] as num?)?.toInt() ?? 0;
         final note = entry['note'] as String? ?? '';
 
-        DateTime startTime;
+        if (dateStr.isEmpty || durationMinutes <= 0) continue;
+
+        // Parse date correctly — convert to local to get the right calendar date
+        DateTime localDate;
         try {
-          startTime = DateTime.parse(dateStr);
+          final parsed = DateTime.parse(dateStr);
+          localDate = parsed.toLocal();
         } catch (_) {
-          continue; // Skip entries with invalid dates
+          continue;
         }
 
+        // Stack entries through the day starting from 8:00 AM
+        final dayKey = '${localDate.year}-${localDate.month}-${localDate.day}';
+        DateTime startTime;
+        if (dayNextStart.containsKey(dayKey)) {
+          startTime = dayNextStart[dayKey]!;
+        } else {
+          startTime = DateTime(localDate.year, localDate.month, localDate.day, 8, 0);
+        }
         final endTime = startTime.add(Duration(minutes: durationMinutes));
+        dayNextStart[dayKey] = endTime;
 
-        timeEntries.add(TimeEntryModel(
-          id: entryId,
-          projectId: projectId,
-          taskId: taskId,
-          startTime: startTime,
-          endTime: endTime,
-          durationSeconds: durationMinutes * 60,
-          notes: note,
-          createdAt: DateTime.now(),
-          isBillable: (entry['billing'] as String? ?? '') != 'NON_BILLABLE',
-        ));
+        final actualProjectId = projIdMap[projectId] ?? projectId;
+        final actualTaskId = taskIdMap[taskId] ?? taskId;
+
+        timeEntries.add(
+          TimeEntryModel(
+            id: entryId,
+            projectId: actualProjectId,
+            taskId: actualTaskId,
+            startTime: startTime,
+            endTime: endTime,
+            durationSeconds: durationMinutes * 60,
+            notes: note,
+            createdAt: DateTime.now(),
+            isBillable: billing != 'NON_BILLABLE',
+          ),
+        );
       }
 
       // Import in dependency order
       int catCount = 0, projCount = 0, taskCount = 0, entryCount = 0;
 
-      for (final category in categories.values) {
+      for (final category in categoriesToCreate.values) {
         if (mode == ImportMode.merge) {
           final existing = _categoryRepository.getById(category.id);
           if (existing != null) {
@@ -169,14 +205,11 @@ class TymeImportService {
         catCount++;
       }
 
-      for (final project in projects.values) {
+      for (final project in projectsToCreate.values) {
         if (mode == ImportMode.merge) {
           final existing = _projectRepository.getById(project.id);
           if (existing != null) {
-            await _projectRepository.update(project.copyWith(
-              colorValue: existing.colorValue,
-              createdAt: existing.createdAt,
-            ));
+            await _projectRepository.update(project.copyWith(colorValue: existing.colorValue, createdAt: existing.createdAt));
           } else {
             await _projectRepository.add(project);
           }
@@ -186,7 +219,7 @@ class TymeImportService {
         projCount++;
       }
 
-      for (final task in tasks.values) {
+      for (final task in tasksToCreate.values) {
         if (mode == ImportMode.merge) {
           final existing = _taskRepository.getById(task.id);
           if (existing != null) {
@@ -214,12 +247,7 @@ class TymeImportService {
         entryCount++;
       }
 
-      return ImportResult(
-        categoriesImported: catCount,
-        projectsImported: projCount,
-        tasksImported: taskCount,
-        entriesImported: entryCount,
-      );
+      return ImportResult(categoriesImported: catCount, projectsImported: projCount, tasksImported: taskCount, entriesImported: entryCount);
     } catch (e) {
       debugPrint('Import error: $e');
       return ImportResult(error: e.toString());
