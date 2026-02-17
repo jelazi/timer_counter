@@ -273,7 +273,7 @@ class SettingsScreen extends StatelessWidget {
                       ListTile(
                         leading: const Icon(Icons.file_download_outlined),
                         title: Text(tr('settings.export_data')),
-                        subtitle: const Text('Tyme JSON format'),
+                        subtitle: const Text('JSON / CSV'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => _exportData(context),
                       ),
@@ -281,7 +281,7 @@ class SettingsScreen extends StatelessWidget {
                       ListTile(
                         leading: const Icon(Icons.file_upload_outlined),
                         title: Text(tr('settings.import_data')),
-                        subtitle: const Text('Tyme JSON format'),
+                        subtitle: const Text('JSON / CSV'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => _showImportDialog(context),
                       ),
@@ -354,7 +354,7 @@ class SettingsScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (_) => _ExportDialog(
-        onExport: (outputPath, startDate, endDate) async {
+        onExport: (outputPath, startDate, endDate, format) async {
           try {
             final exportService = TymeExportService(
               timeEntryRepository: context.read<TimeEntryRepository>(),
@@ -363,7 +363,12 @@ class SettingsScreen extends StatelessWidget {
               categoryRepository: context.read<CategoryRepository>(),
               settingsRepository: context.read<SettingsRepository>(),
             );
-            final path = await exportService.exportToJson(outputPath: outputPath, startDate: startDate, endDate: endDate);
+            String path;
+            if (format == 'csv') {
+              path = await exportService.exportToCsv(outputPath: outputPath, startDate: startDate, endDate: endDate);
+            } else {
+              path = await exportService.exportToJson(outputPath: outputPath, startDate: startDate, endDate: endDate);
+            }
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.success')}: $path'), duration: const Duration(seconds: 5)));
             }
@@ -388,7 +393,12 @@ class SettingsScreen extends StatelessWidget {
             taskRepository: context.read<TaskRepository>(),
             categoryRepository: context.read<CategoryRepository>(),
           );
-          final result = await importService.importFromJson(filePath, mode);
+          ImportResult result;
+          if (filePath.toLowerCase().endsWith('.csv')) {
+            result = await importService.importFromCsv(filePath, mode);
+          } else {
+            result = await importService.importFromJson(filePath, mode);
+          }
           if (context.mounted) {
             if (result.hasError) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('import.error')}: ${result.error}'), backgroundColor: Colors.red));
@@ -413,7 +423,7 @@ class SettingsScreen extends StatelessWidget {
 }
 
 class _ExportDialog extends StatefulWidget {
-  final Function(String outputPath, DateTime startDate, DateTime endDate) onExport;
+  final Function(String outputPath, DateTime startDate, DateTime endDate, String format) onExport;
 
   const _ExportDialog({required this.onExport});
 
@@ -424,8 +434,7 @@ class _ExportDialog extends StatefulWidget {
 class _ExportDialogState extends State<_ExportDialog> {
   late DateTime _startDate;
   late DateTime _endDate;
-  late TextEditingController _filenameController;
-  String? _selectedDir;
+  String _selectedFormat = 'json';
 
   @override
   void initState() {
@@ -433,26 +442,16 @@ class _ExportDialogState extends State<_ExportDialog> {
     final now = DateTime.now();
     _startDate = DateTime(now.year, now.month, 1);
     _endDate = DateTime(now.year, now.month + 1, 0);
-    _filenameController = TextEditingController(text: _generateFilename());
-  }
-
-  @override
-  void dispose() {
-    _filenameController.dispose();
-    super.dispose();
   }
 
   String _generateFilename() {
+    final ext = _selectedFormat;
     if (_startDate.month == _endDate.month && _startDate.year == _endDate.year) {
-      return 'timer_counter_${DateFormat('yyyy-MM').format(_startDate)}.json';
+      return 'timer_counter_${DateFormat('yyyy-MM').format(_startDate)}.$ext';
     }
     final startStr = DateFormat('yyyy-MM-dd').format(_startDate);
     final endStr = DateFormat('yyyy-MM-dd').format(_endDate);
-    return 'timer_counter_${startStr}_$endStr.json';
-  }
-
-  void _updateFilename() {
-    _filenameController.text = _generateFilename();
+    return 'timer_counter_${startStr}_$endStr.$ext';
   }
 
   @override
@@ -465,6 +464,20 @@ class _ExportDialogState extends State<_ExportDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Format selection
+            Text(tr('export.format'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: [
+                ButtonSegment(value: 'json', label: Text(tr('export.json_format'))),
+                ButtonSegment(value: 'csv', label: Text(tr('export.csv_format'))),
+              ],
+              selected: {_selectedFormat},
+              onSelectionChanged: (selected) {
+                setState(() => _selectedFormat = selected.first);
+              },
+            ),
+            const SizedBox(height: 16),
             Text(tr('export.date_range'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Row(
@@ -478,10 +491,7 @@ class _ExportDialogState extends State<_ExportDialog> {
                     onTap: () async {
                       final picked = await showDatePicker(context: context, initialDate: _startDate, firstDate: DateTime(2020), lastDate: DateTime.now());
                       if (picked != null) {
-                        setState(() {
-                          _startDate = picked;
-                          _updateFilename();
-                        });
+                        setState(() => _startDate = picked);
                       }
                     },
                   ),
@@ -501,34 +511,12 @@ class _ExportDialogState extends State<_ExportDialog> {
                         lastDate: DateTime.now().add(const Duration(days: 1)),
                       );
                       if (picked != null) {
-                        setState(() {
-                          _endDate = picked;
-                          _updateFilename();
-                        });
+                        setState(() => _endDate = picked);
                       }
                     },
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _filenameController,
-              decoration: InputDecoration(labelText: tr('export.filename'), prefixIcon: const Icon(Icons.file_present), helperText: tr('export.select_range')),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.folder_outlined),
-              title: Text(_selectedDir != null ? _selectedDir!.split('/').last : tr('settings.select_directory'), overflow: TextOverflow.ellipsis),
-              subtitle: _selectedDir != null ? Text(_selectedDir!, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
-              trailing: FilledButton.tonal(
-                onPressed: () async {
-                  final dir = await FilePicker.platform.getDirectoryPath(dialogTitle: tr('settings.select_directory'));
-                  if (dir != null) setState(() => _selectedDir = dir);
-                },
-                child: Text(tr('settings.select_directory')),
-              ),
             ),
           ],
         ),
@@ -536,14 +524,17 @@ class _ExportDialogState extends State<_ExportDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('common.cancel'))),
         FilledButton.icon(
-          onPressed: _selectedDir != null
-              ? () {
-                  final outputPath = '$_selectedDir/${_filenameController.text}';
-                  final endOfDay = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
-                  Navigator.pop(context);
-                  widget.onExport(outputPath, _startDate, endOfDay);
-                }
-              : null,
+          onPressed: () async {
+            final filename = _generateFilename();
+            final ext = _selectedFormat;
+            final result = await FilePicker.platform.saveFile(dialogTitle: tr('export.title'), fileName: filename, type: FileType.custom, allowedExtensions: [ext]);
+            if (result != null) {
+              final outputPath = result.endsWith('.$ext') ? result : '$result.$ext';
+              final endOfDay = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
+              if (context.mounted) Navigator.pop(context);
+              widget.onExport(outputPath, _startDate, endOfDay, _selectedFormat);
+            }
+          },
           icon: const Icon(Icons.file_download),
           label: Text(tr('export.export')),
         ),
@@ -611,7 +602,7 @@ class _ImportDialogState extends State<_ImportDialog> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json'], dialogTitle: tr('import.select_file'));
+    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json', 'csv'], dialogTitle: tr('import.select_file'));
     if (result != null && result.files.single.path != null) {
       setState(() => _selectedFilePath = result.files.single.path);
     }

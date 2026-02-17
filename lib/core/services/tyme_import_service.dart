@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../data/models/category_model.dart';
@@ -250,6 +252,164 @@ class TymeImportService {
       return ImportResult(categoriesImported: catCount, projectsImported: projCount, tasksImported: taskCount, entriesImported: entryCount);
     } catch (e) {
       debugPrint('Import error: $e');
+      return ImportResult(error: e.toString());
+    }
+  }
+
+  Future<ImportResult> importFromCsv(String filePath, ImportMode mode) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        return const ImportResult(error: 'File not found');
+      }
+
+      final content = await file.readAsString();
+      final rows = const CsvToListConverter(fieldDelimiter: ';', eol: '\n').convert(content);
+
+      if (rows.length < 2) {
+        return const ImportResult(error: 'CSV file is empty or has no data rows');
+      }
+
+      // First row is header
+      final header = rows.first.map((e) => e.toString().trim().toLowerCase()).toList();
+      final dataRows = rows.skip(1).toList();
+
+      int col(String name) => header.indexOf(name);
+      final iCategory = col('category');
+      final iProject = col('project');
+      final iTask = col('task');
+      final iUnixStart = col('unix_start');
+      final iUnixEnd = col('unix_end');
+      final iDate = col('date');
+      final iStartTime = col('start_time');
+      final iEndTime = col('end_time');
+      final iDuration = col('duration');
+      final iRate = col('rate');
+      final iBilling = col('billing');
+      final iNote = col('note');
+
+      // Convert CSV rows to the same format as JSON entries for reuse
+      final entries = <Map<String, dynamic>>[];
+      for (final row in dataRows) {
+        if (row.isEmpty) continue;
+        String val(int idx) => idx >= 0 && idx < row.length ? row[idx].toString().trim() : '';
+
+        final categoryName = val(iCategory);
+        final projectName = val(iProject);
+        final taskName = val(iTask);
+        final note = iNote >= 0 ? val(iNote).replaceAll('"', '') : '';
+        final billing = val(iBilling);
+
+        // Parse rate (handles European format: space thousands, comma decimal)
+        double rate = 0;
+        if (iRate >= 0) {
+          final rateStr = val(iRate).replaceAll(' ', '').replaceAll(',', '.');
+          rate = double.tryParse(rateStr) ?? 0;
+        }
+
+        // Parse start/end times
+        DateTime? startTime;
+        DateTime? endTime;
+
+        // Try unix timestamps first
+        if (iUnixStart >= 0 && val(iUnixStart).isNotEmpty) {
+          final unixStart = int.tryParse(val(iUnixStart));
+          if (unixStart != null && unixStart > 0) {
+            startTime = DateTime.fromMillisecondsSinceEpoch(unixStart * 1000);
+          }
+        }
+        if (iUnixEnd >= 0 && val(iUnixEnd).isNotEmpty) {
+          final unixEnd = int.tryParse(val(iUnixEnd));
+          if (unixEnd != null && unixEnd > 0) {
+            endTime = DateTime.fromMillisecondsSinceEpoch(unixEnd * 1000);
+          }
+        }
+
+        // Fallback to date + time columns
+        if (startTime == null && iDate >= 0 && iStartTime >= 0) {
+          final dateStr = val(iDate);
+          final timeStr = val(iStartTime);
+          if (dateStr.isNotEmpty && timeStr.isNotEmpty) {
+            try {
+              startTime = DateFormat('dd.MM.yyyy HH:mm').parse('$dateStr $timeStr');
+            } catch (_) {}
+          }
+        }
+        if (endTime == null && iDate >= 0 && iEndTime >= 0) {
+          final dateStr = val(iDate);
+          final timeStr = val(iEndTime);
+          if (dateStr.isNotEmpty && timeStr.isNotEmpty) {
+            try {
+              endTime = DateFormat('dd.MM.yyyy HH:mm').parse('$dateStr $timeStr');
+            } catch (_) {}
+          }
+        }
+
+        // Parse duration (in minutes)
+        int durationMinutes = 0;
+        if (iDuration >= 0) {
+          final durStr = val(iDuration).replaceAll(' ', '').replaceAll(',', '.');
+          durationMinutes = (double.tryParse(durStr) ?? 0).round();
+        }
+
+        // If we still have no start time, skip
+        if (startTime == null) continue;
+
+        // If no end time, compute from duration
+        endTime ??= startTime.add(Duration(minutes: durationMinutes > 0 ? durationMinutes : 1));
+        if (durationMinutes <= 0) {
+          durationMinutes = endTime.difference(startTime).inMinutes;
+        }
+
+        final dateOnly = DateTime(startTime.year, startTime.month, startTime.day);
+        final offset = startTime.timeZoneOffset;
+        final sign = offset.isNegative ? '-' : '+';
+        final hours = offset.inHours.abs().toString().padLeft(2, '0');
+        final mins = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
+        final dateStr = '${dateOnly.toIso8601String().split('.').first}$sign$hours:$mins';
+
+        // Create a category ID and project ID from names for dedup
+        final catId = categoryName.isNotEmpty ? 'csv_cat_${categoryName.toLowerCase().replaceAll(' ', '_')}' : '';
+        final projId = projectName.isNotEmpty ? 'csv_proj_${projectName.toLowerCase().replaceAll(' ', '_')}' : '';
+        final tskId = taskName.isNotEmpty ? 'csv_task_${projectName.toLowerCase().replaceAll(' ', '_')}_${taskName.toLowerCase().replaceAll(' ', '_')}' : '';
+
+        entries.add({
+          'category_id': catId,
+          'category': categoryName,
+          'project_id': projId,
+          'project': projectName,
+          'task_id': tskId,
+          'task': taskName,
+          'id': const Uuid().v4(),
+          'date': dateStr,
+          'duration': durationMinutes,
+          'note': note,
+          'rate': rate,
+          'billing': billing,
+        });
+      }
+
+      if (entries.isEmpty) {
+        return const ImportResult(error: 'No valid data rows found in CSV');
+      }
+
+      // Reuse JSON import logic by creating a temporary JSON-like structure
+      // Save to temp file and import via existing importFromJson
+      final tempDir = await Directory.systemTemp.createTemp('csv_import_');
+      final tempFile = File('${tempDir.path}/csv_import.json');
+      await tempFile.writeAsString(jsonEncode({'data': entries}));
+
+      final result = await importFromJson(tempFile.path, mode);
+
+      // Cleanup temp file
+      try {
+        await tempFile.delete();
+        await tempDir.delete();
+      } catch (_) {}
+
+      return result;
+    } catch (e) {
+      debugPrint('CSV Import error: $e');
       return ImportResult(error: e.toString());
     }
   }

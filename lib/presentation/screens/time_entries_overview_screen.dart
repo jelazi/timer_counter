@@ -102,7 +102,10 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
               setState(() => _selectedMonth = DateTime(picked.year, picked.month, 1));
             }
           },
-          child: Text(DateFormat('MMMM yyyy', context.locale.languageCode).format(_selectedMonth), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          child: Text(
+            DateFormat('LLLL yyyy', context.locale.languageCode).format(_selectedMonth),
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+          ),
         ),
         IconButton(
           icon: const Icon(Icons.chevron_right),
@@ -226,7 +229,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
-                Text(DateFormat('EEEE, d MMMM', context.locale.languageCode).format(day), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                Text(DateFormat("EEEE, d'.' MMMM", context.locale.languageCode).format(day), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
                 const Spacer(),
                 Text(
                   '${entries.length} \u2014 ${TimeFormatter.formatDuration(dayTotal, showSeconds: false)}',

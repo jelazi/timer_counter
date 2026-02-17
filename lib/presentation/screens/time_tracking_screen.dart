@@ -14,7 +14,6 @@ import '../blocs/timer/timer_bloc.dart';
 import '../blocs/timer/timer_event.dart';
 import '../blocs/timer/timer_state.dart';
 import '../widgets/time_entry_list_item.dart';
-import '../widgets/timer_card.dart';
 
 class TimeTrackingScreen extends StatefulWidget {
   const TimeTrackingScreen({super.key});
@@ -57,7 +56,6 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
       }
     }
 
-    // If no last selection, default to first project+task
     if (_selectedProject == null) {
       final projects = projectRepo.getActive();
       if (projects.isNotEmpty) {
@@ -80,13 +78,31 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
 
   void _startTimer() {
     if (_selectedProject == null || _selectedTask == null) return;
-
-    // Save last selection
     final settingsRepo = context.read<SettingsRepository>();
     settingsRepo.setLastProjectId(_selectedProject!.id);
     settingsRepo.setLastTaskId(_selectedTask!.id);
-
     context.read<TimerBloc>().add(StartTimer(projectId: _selectedProject!.id, taskId: _selectedTask!.id));
+  }
+
+  void _stopTimer(String timerId) {
+    context.read<TimerBloc>().add(StopTimer(timerId));
+  }
+
+  void _switchTimer() {
+    if (_selectedProject == null || _selectedTask == null) return;
+    final settingsRepo = context.read<SettingsRepository>();
+    settingsRepo.setLastProjectId(_selectedProject!.id);
+    settingsRepo.setLastTaskId(_selectedTask!.id);
+    context.read<TimerBloc>().add(StartTimer(projectId: _selectedProject!.id, taskId: _selectedTask!.id));
+  }
+
+  _ButtonMode _getButtonMode(TimerRunning timerState) {
+    if (timerState.runningTimers.isEmpty) return _ButtonMode.start;
+    final runningTimer = timerState.runningTimers.first;
+    if (_selectedProject?.id == runningTimer.projectId && _selectedTask?.id == runningTimer.taskId) {
+      return _ButtonMode.stop;
+    }
+    return _ButtonMode.switchTimer;
   }
 
   @override
@@ -108,6 +124,8 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
 
   Widget _buildContent(BuildContext context, TimerRunning timerState, SettingsState settingsState) {
     final projects = context.read<ProjectRepository>().getActive();
+    final buttonMode = _getButtonMode(timerState);
+    final isRunning = timerState.runningTimers.isNotEmpty;
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -116,7 +134,6 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -134,14 +151,11 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
               ],
             ),
             const SizedBox(height: 16),
-
-            // Quick-start bar: [Project] [Task] [Start]
             Card(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
-                    // Project dropdown
                     Expanded(
                       flex: 3,
                       child: DropdownButtonFormField<ProjectModel>(
@@ -176,8 +190,6 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-
-                    // Task dropdown
                     Expanded(
                       flex: 3,
                       child: DropdownButtonFormField<TaskModel>(
@@ -194,61 +206,15 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-
-                    // Start button
-                    SizedBox(
-                      height: 48,
-                      child: FilledButton.icon(
-                        onPressed: (_selectedProject != null && _selectedTask != null) ? _startTimer : null,
-                        icon: const Icon(Icons.play_arrow),
-                        label: Text(tr('time_tracking.start_timer')),
-                      ),
-                    ),
+                    SizedBox(height: 48, child: _buildActionButton(buttonMode, timerState)),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
-
-            // Summary Cards
-            _buildSummaryCards(context, timerState, settingsState),
+            if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
+            _buildTotalTodayCard(context, timerState, settingsState),
             const SizedBox(height: 24),
-
-            // Running Timers
-            if (timerState.runningTimers.isNotEmpty) ...[
-              Text(tr('time_tracking.running'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: timerState.runningTimers.length,
-                  itemBuilder: (context, index) {
-                    final timer = timerState.runningTimers[index];
-                    final projectRepo = context.read<ProjectRepository>();
-                    final taskRepo = context.read<TaskRepository>();
-                    final project = projectRepo.getById(timer.projectId);
-                    final task = taskRepo.getById(timer.taskId);
-
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: TimerCard(
-                        timer: timer,
-                        project: project,
-                        task: task,
-                        showSeconds: settingsState.showSeconds,
-                        onStop: () {
-                          context.read<TimerBloc>().add(StopTimer(timer.id));
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-
-            // Today's Entries
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -278,7 +244,6 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                               final taskRepo = context.read<TaskRepository>();
                               final project = projectRepo.getById(entry.projectId);
                               final task = taskRepo.getById(entry.taskId);
-
                               return TimeEntryListItem(entry: entry, project: project, task: task, showSeconds: settingsState.showSeconds);
                             },
                           ),
@@ -292,40 +257,93 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     );
   }
 
-  Widget _buildSummaryCards(BuildContext context, TimerRunning timerState, SettingsState settingsState) {
-    return Row(
-      children: [
-        Expanded(
-          child: _SummaryCard(
-            title: tr('time_tracking.total_today'),
-            value: TimeFormatter.formatDuration(timerState.totalTodaySeconds, showSeconds: settingsState.showSeconds),
-            icon: Icons.today,
-            color: Theme.of(context).colorScheme.primary,
-          ),
+  Widget _buildActionButton(_ButtonMode mode, TimerRunning timerState) {
+    switch (mode) {
+      case _ButtonMode.start:
+        return FilledButton.icon(
+          onPressed: (_selectedProject != null && _selectedTask != null) ? _startTimer : null,
+          icon: const Icon(Icons.play_arrow),
+          label: Text(tr('time_tracking.start_timer')),
+        );
+      case _ButtonMode.stop:
+        return FilledButton.icon(
+          onPressed: () => _stopTimer(timerState.runningTimers.first.id),
+          icon: const Icon(Icons.stop),
+          label: Text(tr('time_tracking.stop_timer')),
+          style: FilledButton.styleFrom(backgroundColor: Colors.red),
+        );
+      case _ButtonMode.switchTimer:
+        return FilledButton.icon(
+          onPressed: (_selectedProject != null && _selectedTask != null) ? _switchTimer : null,
+          icon: const Icon(Icons.swap_horiz),
+          label: Text(tr('time_tracking.switch_timer')),
+          style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+        );
+    }
+  }
+
+  Widget _buildRunningTimerCard(BuildContext context, TimerRunning timerState, SettingsState settingsState) {
+    final timer = timerState.runningTimers.first;
+    final projectRepo = context.read<ProjectRepository>();
+    final taskRepo = context.read<TaskRepository>();
+    final project = projectRepo.getById(timer.projectId);
+    final task = taskRepo.getById(timer.taskId);
+    final projectColor = project != null ? Color(project.colorValue) : Colors.grey;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: projectColor, width: 4)),
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _SummaryCard(title: tr('time_tracking.running'), value: '${timerState.runningTimers.length}', icon: Icons.play_circle_outline, color: Colors.green),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.4), blurRadius: 8, spreadRadius: 2)],
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    project?.name ?? 'Unknown Project',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    task?.name ?? 'Unknown Task',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              TimeFormatter.formatDuration(timer.elapsedSeconds, showSeconds: settingsState.showSeconds),
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, fontFeatures: [const FontFeature.tabularFigures()]),
+            ),
+            const SizedBox(width: 16),
+            IconButton.filled(
+              onPressed: () => _stopTimer(timer.id),
+              icon: const Icon(Icons.stop),
+              style: IconButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            ),
+          ],
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _SummaryCard(title: tr('time_tracking.today'), value: '${timerState.todayEntries.length}', icon: Icons.list_alt, color: Colors.orange),
-        ),
-      ],
+      ),
     );
   }
-}
 
-class _SummaryCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _SummaryCard({required this.title, required this.value, required this.icon, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildTotalTodayCard(BuildContext context, TimerRunning timerState, SettingsState settingsState) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -333,16 +351,22 @@ class _SummaryCard extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: color, size: 24),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+              child: Icon(Icons.today, color: Theme.of(context).colorScheme.primary, size: 24),
             ),
             const SizedBox(width: 16),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+                Text(
+                  tr('time_tracking.total_today'),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                ),
                 const SizedBox(height: 4),
-                Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  TimeFormatter.formatDuration(timerState.totalTodaySeconds, showSeconds: settingsState.showSeconds),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
               ],
             ),
           ],
@@ -351,3 +375,5 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 }
+
+enum _ButtonMode { start, stop, switchTimer }

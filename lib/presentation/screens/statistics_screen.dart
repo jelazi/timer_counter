@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/utils/time_formatter.dart';
+import '../../data/repositories/time_entry_repository.dart';
 import '../blocs/statistics/statistics_bloc.dart';
 import '../blocs/statistics/statistics_event.dart';
 import '../blocs/statistics/statistics_state.dart';
@@ -309,9 +310,71 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildDailyChart(BuildContext context, StatisticsLoaded state) {
-    if (state.dailyStatistics.isEmpty) {
+    final locale = context.locale.languageCode;
+    final range = state.range;
+
+    // Build chart data based on range
+    List<_ChartBar> bars;
+
+    if (range == 'today') {
+      // Show 24 hours
+      final timeEntryRepo = context.read<TimeEntryRepository>();
+      final entries = timeEntryRepo.getByDateRange(state.startDate, state.endDate);
+      final hourlySeconds = List<int>.filled(24, 0);
+      for (final entry in entries) {
+        final hour = entry.startTime.hour;
+        hourlySeconds[hour] += entry.actualDurationSeconds;
+      }
+      bars = List.generate(24, (i) => _ChartBar(label: '${i.toString().padLeft(2, '0')}', hours: hourlySeconds[i] / 3600));
+    } else if (range == 'week') {
+      // Show all 7 days of the week (Mon-Sun)
+      final weekStart = state.startDate;
+      final dailyMap = <DateTime, double>{};
+      for (final ds in state.dailyStatistics) {
+        dailyMap[DateTime(ds.date.year, ds.date.month, ds.date.day)] = ds.totalSeconds / 3600;
+      }
+      bars = List.generate(7, (i) {
+        final day = weekStart.add(Duration(days: i));
+        final dayKey = DateTime(day.year, day.month, day.day);
+        return _ChartBar(label: DateFormat('E', locale).format(day), hours: dailyMap[dayKey] ?? 0);
+      });
+    } else if (range == 'month') {
+      // Show all days of the month
+      final daysInMonth = DateTime(state.startDate.year, state.startDate.month + 1, 0).day;
+      final dailyMap = <int, double>{};
+      for (final ds in state.dailyStatistics) {
+        dailyMap[ds.date.day] = ds.totalSeconds / 3600;
+      }
+      bars = List.generate(daysInMonth, (i) {
+        final dayNum = i + 1;
+        return _ChartBar(label: '$dayNum', hours: dailyMap[dayNum] ?? 0);
+      });
+    } else if (range == 'year') {
+      // Show 12 months
+      final monthlySeconds = List<int>.filled(12, 0);
+      for (final ds in state.dailyStatistics) {
+        monthlySeconds[ds.date.month - 1] += ds.totalSeconds;
+      }
+      bars = List.generate(12, (i) {
+        final monthDate = DateTime(state.startDate.year, i + 1);
+        return _ChartBar(label: DateFormat('MMM', locale).format(monthDate), hours: monthlySeconds[i] / 3600);
+      });
+    } else {
+      // Custom range: show daily stats as-is
+      if (state.dailyStatistics.isEmpty) {
+        return Card(child: Center(child: Text(tr('statistics.no_data'))));
+      }
+      bars = state.dailyStatistics.map((ds) {
+        return _ChartBar(label: DateFormat('d/M', locale).format(ds.date), hours: ds.totalSeconds / 3600);
+      }).toList();
+    }
+
+    if (bars.isEmpty) {
       return Card(child: Center(child: Text(tr('statistics.no_data'))));
     }
+
+    final maxY = bars.map((b) => b.hours).fold(0.0, (a, b) => a > b ? a : b);
+    final chartMaxY = maxY > 0 ? maxY * 1.2 : 1.0;
 
     return Card(
       child: Padding(
@@ -325,18 +388,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
-                  maxY: state.dailyStatistics.map((e) => e.totalSeconds / 3600).fold(0.0, (a, b) => a > b ? a : b) * 1.2,
+                  maxY: chartMaxY,
                   titlesData: FlTitlesData(
                     show: true,
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
+                        reservedSize: 28,
                         getTitlesWidget: (value, meta) {
                           final index = value.toInt();
-                          if (index >= 0 && index < state.dailyStatistics.length) {
+                          if (index >= 0 && index < bars.length) {
+                            // For month with many days, skip some labels
+                            if (bars.length > 15 && index % (bars.length > 20 ? 5 : 3) != 0) {
+                              return const SizedBox();
+                            }
                             return Padding(
                               padding: const EdgeInsets.only(top: 8),
-                              child: Text(DateFormat('E', context.locale.languageCode).format(state.dailyStatistics[index].date), style: const TextStyle(fontSize: 10)),
+                              child: Text(bars[index].label, style: const TextStyle(fontSize: 9)),
                             );
                           }
                           return const SizedBox();
@@ -356,15 +424,15 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
                   borderData: FlBorderData(show: false),
-                  gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 2),
-                  barGroups: state.dailyStatistics.asMap().entries.map((e) {
+                  gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: maxY > 8 ? 4 : 2),
+                  barGroups: bars.asMap().entries.map((e) {
                     return BarChartGroupData(
                       x: e.key,
                       barRods: [
                         BarChartRodData(
-                          toY: e.value.totalSeconds / 3600,
-                          color: Theme.of(context).colorScheme.primary,
-                          width: 20,
+                          toY: e.value.hours,
+                          color: e.value.hours > 0 ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+                          width: bars.length > 20 ? 8 : (bars.length > 12 ? 14 : 20),
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                         ),
                       ],
@@ -474,4 +542,11 @@ class _StatCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ChartBar {
+  final String label;
+  final double hours;
+
+  const _ChartBar({required this.label, required this.hours});
 }

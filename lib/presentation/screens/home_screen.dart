@@ -63,43 +63,66 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, settingsState) {
         return Scaffold(
-          body: Row(
-            children: [
-              NavigationRail(
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: (index) {
-                  setState(() {
-                    _selectedIndex = index;
-                  });
-                },
-                extended: MediaQuery.of(context).size.width > 1200,
-                minExtendedWidth: 200,
-                leading: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(10)),
-                        child: const Icon(Icons.timer, color: Colors.white, size: 24),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('Timer', style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
-                    ],
+          body: Padding(
+            padding: const EdgeInsets.only(top: 28),
+            child: Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: _selectedIndex,
+                  onDestinationSelected: (index) {
+                    setState(() {
+                      _selectedIndex = index;
+                    });
+                  },
+                  extended: MediaQuery.of(context).size.width > 1200,
+                  minExtendedWidth: 200,
+                  leading: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(10)),
+                          child: const Icon(Icons.timer, color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(height: 4),
+                        Text('Timer', style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
                   ),
+                  destinations: [
+                    NavigationRailDestination(
+                      icon: Tooltip(message: tr('nav.time_tracking'), child: const Icon(Icons.access_time)),
+                      selectedIcon: Tooltip(message: tr('nav.time_tracking'), child: const Icon(Icons.access_time_filled)),
+                      label: Text(tr('nav.time_tracking')),
+                    ),
+                    NavigationRailDestination(
+                      icon: Tooltip(message: tr('time_entries.title'), child: const Icon(Icons.list_alt_outlined)),
+                      selectedIcon: Tooltip(message: tr('time_entries.title'), child: const Icon(Icons.list_alt)),
+                      label: Text(tr('time_entries.title')),
+                    ),
+                    NavigationRailDestination(
+                      icon: Tooltip(message: tr('nav.projects'), child: const Icon(Icons.folder_outlined)),
+                      selectedIcon: Tooltip(message: tr('nav.projects'), child: const Icon(Icons.folder)),
+                      label: Text(tr('nav.projects')),
+                    ),
+                    NavigationRailDestination(
+                      icon: Tooltip(message: tr('nav.statistics'), child: const Icon(Icons.bar_chart_outlined)),
+                      selectedIcon: Tooltip(message: tr('nav.statistics'), child: const Icon(Icons.bar_chart)),
+                      label: Text(tr('nav.statistics')),
+                    ),
+                    NavigationRailDestination(
+                      icon: Tooltip(message: tr('nav.settings'), child: const Icon(Icons.settings_outlined)),
+                      selectedIcon: Tooltip(message: tr('nav.settings'), child: const Icon(Icons.settings)),
+                      label: Text(tr('nav.settings')),
+                    ),
+                  ],
                 ),
-                destinations: [
-                  NavigationRailDestination(icon: const Icon(Icons.access_time), selectedIcon: const Icon(Icons.access_time_filled), label: Text(tr('nav.time_tracking'))),
-                  NavigationRailDestination(icon: const Icon(Icons.list_alt_outlined), selectedIcon: const Icon(Icons.list_alt), label: Text(tr('time_entries.title'))),
-                  NavigationRailDestination(icon: const Icon(Icons.folder_outlined), selectedIcon: const Icon(Icons.folder), label: Text(tr('nav.projects'))),
-                  NavigationRailDestination(icon: const Icon(Icons.bar_chart_outlined), selectedIcon: const Icon(Icons.bar_chart), label: Text(tr('nav.statistics'))),
-                  NavigationRailDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings), label: Text(tr('nav.settings'))),
-                ],
-              ),
-              const VerticalDivider(thickness: 1, width: 1),
-              Expanded(child: _screens[_selectedIndex]),
-            ],
+                const VerticalDivider(thickness: 1, width: 1),
+                Expanded(child: _screens[_selectedIndex]),
+              ],
+            ),
           ),
         );
       },

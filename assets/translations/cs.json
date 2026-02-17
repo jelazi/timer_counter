@@ -10,6 +10,7 @@
         "title": "Sledování času",
         "start_timer": "Spustit časovač",
         "stop_timer": "Zastavit časovač",
+        "switch_timer": "Přepnout",
         "no_entries_today": "Dnes žádné záznamy",
         "today": "Dnes",
         "this_week": "Tento týden",
@@ -37,6 +38,7 @@
         "edit_project": "Upravit projekt",
         "delete_project": "Smazat projekt",
         "delete_confirm": "Opravdu chcete smazat tento projekt?",
+        "cannot_delete_has_entries": "Nelze smazat projekt, který má časové záznamy. Nejprve smažte záznamy.",
         "project_name": "Název projektu",
         "category": "Kategorie",
         "hourly_rate": "Hodinová sazba",
@@ -58,6 +60,7 @@
         "edit_task": "Upravit úkol",
         "delete_task": "Smazat úkol",
         "delete_task_confirm": "Opravdu chcete smazat tento úkol?",
+        "cannot_delete_task_has_entries": "Nelze smazat úkol, který má časové záznamy. Nejprve smažte záznamy.",
         "task_name": "Název úkolu",
         "tracked_time": "Sledovaný čas",
         "budget_remaining": "Zbývající rozpočet",
@@ -70,6 +73,7 @@
         "edit_category": "Upravit kategorii",
         "delete_category": "Smazat kategorii",
         "delete_confirm": "Opravdu chcete smazat tuto kategorii?",
+        "cannot_delete_has_projects": "Nelze smazat kategorii, která obsahuje projekty. Nejprve smažte nebo přesuňte projekty.",
         "category_name": "Název kategorie",
         "no_categories": "Zatím žádné kategorie",
         "uncategorized": "Bez kategorie"
@@ -198,7 +202,8 @@
     },
     "import": {
         "title": "Import dat",
-        "select_file": "Vybrat JSON soubor",
+        "select_file": "Vybrat soubor",
+        "select_file_csv": "Vybrat CSV soubor",
         "overwrite": "Přepsat",
         "overwrite_desc": "Smazat všechna stávající data a nahradit importovanými",
         "append": "Přidat",
@@ -223,6 +228,9 @@
         "to": "Do",
         "export": "Exportovat",
         "select_range": "Vyberte období pro export",
-        "this_month": "Tento měsíc"
+        "this_month": "Tento měsíc",
+        "format": "Formát",
+        "json_format": "JSON",
+        "csv_format": "CSV"
     }
 }

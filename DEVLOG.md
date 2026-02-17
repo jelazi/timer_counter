@@ -1,5 +1,56 @@
 # Development Log
 
+## 2026-02-18 (session 6) — Timer UX overhaul, CSV support, statistics charts, delete protection, Czech locale fixes
+
+### What was done
+1. **Timer card: start/stop/switch** — Rewrote `time_tracking_screen.dart` with `_ButtonMode` enum (start, stop, switchTimer). When no timer is running, shows green "Start" button. When selected task's timer is running, shows red "Stop". When a different task is selected, shows orange "Switch" button. Inline running timer card with project color left border and red pulsing indicator.
+2. **Single timer enforcement** — Only one timer can run. Button dynamically changes between stop/switch based on whether the running timer matches the selected project+task.
+3. **Removed unnecessary cards** — Removed "Running" count card and "Today entries count" card. Only "Total Today" summary card remains.
+4. **Export: start_time/stop_time** — Added `start_time`, `stop_time`, `start_datetime`, `stop_datetime` fields to JSON export in `_buildEntryJson`.
+5. **CSV export** — Added `exportToCsv()` method to `TymeExportService`. Uses semicolon delimiter matching Tyme format. Includes all standard columns.
+6. **CSV import** — Added `importFromCsv()` method to `TymeImportService`. Parses semicolon-delimited CSV, supports unix timestamps and date+time columns, handles European number format, auto-creates categories/projects/tasks by name.
+7. **Tooltips on NavigationRail icons** — Added `Tooltip` widgets wrapping all 5 navigation icons in `home_screen.dart`.
+8. **Statistics: full period charts** — Rewrote `_buildDailyChart` to show: 24 hourly bars for "today", 7 day bars for "week", all days for "month", 12 monthly bars for "year". Empty periods show faint bars. Dynamic bar width based on count.
+9. **Top padding for macOS traffic lights** — Added `EdgeInsets.only(top: 28)` padding to body in `home_screen.dart`.
+10. **Delete protection: category with projects** — `_showDeleteCategoryDialog` in `projects_screen.dart` now checks `projectRepo.getByCategory()` first. Shows info dialog if projects exist.
+11. **Delete protection: task with time entries** — Task delete in `project_detail_screen.dart` checks `timeEntryRepo.getByTask()` first. Shows SnackBar warning if entries exist.
+12. **Removed timer from projects tab** — Removed play button (`onStartTimer`) from `_TaskListItem` in `project_detail_screen.dart`. Timer can only be started from time tracking screen.
+13. **Export: file_picker saveFile** — Replaced directory picker + filename field with `FilePicker.platform.saveFile()` in export dialog. User picks full path in one step.
+14. **Export/Import: format selection** — Export dialog now has JSON/CSV segmented button. Import accepts both `.json` and `.csv` files, auto-detects format by extension.
+15. **Czech month names: nominative** — Changed `DateFormat('MMMM yyyy')` to `DateFormat('LLLL yyyy')` in month navigator (time_entries_overview_screen) for standalone/nominative form (leden vs. ledna).
+16. **Czech day format: period after day** — Changed `DateFormat('EEEE, d MMMM')` to `DateFormat("EEEE, d'.' MMMM")` in day section headers.
+
+### New/updated translation keys
+- `time_tracking.switch_timer` — "Přepnout timer" / "Switch Timer"
+- `categories.cannot_delete_has_projects` — warning when deleting category with projects
+- `projects.cannot_delete_task_has_entries` — warning when deleting task with entries
+- `projects.cannot_delete_has_entries` — warning when deleting project with entries
+- `export.format`, `export.json_format`, `export.csv_format` — format selection labels
+- `import.select_file_csv` — CSV file selection label
+
+### Files modified
+- `lib/presentation/screens/time_tracking_screen.dart` — full rewrite (tasks 1-3)
+- `lib/presentation/screens/home_screen.dart` — tooltips + top padding (tasks 7, 9)
+- `lib/core/services/tyme_export_service.dart` — start/stop_time, CSV export (tasks 4-5)
+- `lib/core/services/tyme_import_service.dart` — CSV import (task 6)
+- `lib/presentation/screens/statistics_screen.dart` — full period charts (task 8)
+- `lib/presentation/screens/projects_screen.dart` — category delete protection (task 10)
+- `lib/presentation/screens/project_detail_screen.dart` — task delete protection, removed timer button (tasks 11-12)
+- `lib/presentation/screens/settings_screen.dart` — saveFile, format selection, CSV support (tasks 13-14)
+- `lib/presentation/screens/time_entries_overview_screen.dart` — Czech locale fixes (tasks 15-16)
+- `assets/translations/cs.json` — new keys
+- `assets/translations/en.json` — new keys
+
+### Current state
+- All 12 requested features implemented
+- `flutter analyze` passes with 0 errors, 0 warnings (only info-level deprecation notices)
+- Timer tracking, CSV/JSON export/import, statistics charts, delete protection all functional
+
+### Known issues / pending
+- `DropdownButtonFormField.value` deprecation warnings (Flutter wants `initialValue` in newer versions)
+- `RadioListTile.groupValue` & `.onChanged` deprecated in latest Flutter (use `RadioGroup` ancestor)
+- The `timer_card.dart` widget may now be unused (was replaced by inline running card in time_tracking_screen)
+
 ## 2026-02-17 (session 5) — Statistics ranges, export dialog, import fixes, Czech localization, README
 
 ### What was done
