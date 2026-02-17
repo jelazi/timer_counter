@@ -7,6 +7,7 @@ import '../../core/services/dock_service.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../blocs/settings/settings_bloc.dart';
 import '../blocs/settings/settings_state.dart';
+import 'pdf_reports_screen.dart';
 import 'projects_screen.dart';
 import 'settings_screen.dart';
 import 'statistics_screen.dart';
@@ -23,7 +24,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WindowListener {
   int _selectedIndex = 0;
 
-  final List<Widget> _screens = const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), SettingsScreen()];
+  final List<Widget> _screens = const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), PdfReportsScreen(), SettingsScreen()];
 
   @override
   void initState() {
@@ -111,6 +112,11 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
                       icon: Tooltip(message: tr('nav.statistics'), child: const Icon(Icons.bar_chart_outlined)),
                       selectedIcon: Tooltip(message: tr('nav.statistics'), child: const Icon(Icons.bar_chart)),
                       label: Text(tr('nav.statistics')),
+                    ),
+                    NavigationRailDestination(
+                      icon: Tooltip(message: tr('nav.pdf_reports'), child: const Icon(Icons.picture_as_pdf_outlined)),
+                      selectedIcon: Tooltip(message: tr('nav.pdf_reports'), child: const Icon(Icons.picture_as_pdf)),
+                      label: Text(tr('nav.pdf_reports')),
                     ),
                     NavigationRailDestination(
                       icon: Tooltip(message: tr('nav.settings'), child: const Icon(Icons.settings_outlined)),

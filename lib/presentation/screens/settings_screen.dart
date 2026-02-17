@@ -504,11 +504,12 @@ class _ExportDialogState extends State<_ExportDialog> {
                     title: Text(tr('export.to')),
                     subtitle: Text(DateFormat('d.M.yyyy').format(_endDate)),
                     onTap: () async {
+                      final lastAllowed = DateTime.now().add(const Duration(days: 365));
                       final picked = await showDatePicker(
                         context: context,
                         initialDate: _endDate,
                         firstDate: DateTime(2020),
-                        lastDate: DateTime.now().add(const Duration(days: 1)),
+                        lastDate: lastAllowed,
                       );
                       if (picked != null) {
                         setState(() => _endDate = picked);
