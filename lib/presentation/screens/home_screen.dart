@@ -75,11 +75,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
           children: [
             Text('${tr('settings.version')}: 1.0.0', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.7))),
             const SizedBox(height: 16),
-            Text(
-              tr('app_about.description'),
-              textAlign: TextAlign.center,
-              style: Theme.of(ctx).textTheme.bodyMedium,
-            ),
+            Text(tr('app_about.description'), textAlign: TextAlign.center, style: Theme.of(ctx).textTheme.bodyMedium),
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 8),
@@ -104,9 +100,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
             Text('© ${DateTime.now().year}', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.4))),
           ],
         ),
-        actions: [
-          FilledButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('common.ok'))),
-        ],
+        actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('common.ok')))],
       ),
     );
   }

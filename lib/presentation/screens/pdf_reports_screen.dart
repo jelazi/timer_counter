@@ -102,16 +102,20 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
             children: [
               Text(tr('pdf_reports.files_exist_desc')),
               const SizedBox(height: 12),
-              ...existingFiles.map((f) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    const Icon(Icons.insert_drive_file, size: 16, color: Colors.orange),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(f, style: const TextStyle(fontWeight: FontWeight.w500))),
-                  ],
+              ...existingFiles.map(
+                (f) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.insert_drive_file, size: 16, color: Colors.orange),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(f, style: const TextStyle(fontWeight: FontWeight.w500)),
+                      ),
+                    ],
+                  ),
                 ),
-              )),
+              ),
             ],
           ),
           actions: [
