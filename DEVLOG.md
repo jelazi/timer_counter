@@ -1,5 +1,32 @@
 # Development Log
 
+## 2026-02-17 (session 9) — Invoice bank fix, file overwrite dialog, about dialog
+
+### What was done
+1. **Invoice bank info fix** — Increased the bank info container height in the invoice PDF from 1.69cm to 2.2cm. The previous height was too tight for 4 lines of 9pt text with padding, causing the "Číslo účtu" and "Kód banky" line to be clipped/hidden. Now matches the Python `json_to_pdf.py` output.
+2. **File overwrite confirmation** — Added a dialog that checks if any PDF files already exist in the chosen output directory before generating. If files exist, it lists them and asks the user to confirm overwrite or cancel. Previously files were silently overwritten.
+3. **About dialog on Timer icon** — Clicking the Timer icon in the NavigationRail leading now opens an info/about dialog showing app name, version (1.0.0), description, tech stack (Flutter + Dart), author (Lubomír Žižka), and year.
+
+### New translation keys (cs.json + en.json)
+- `app_about.description` — App description for the about dialog
+- `pdf_reports.files_exist_title` — Title for overwrite confirmation dialog
+- `pdf_reports.files_exist_desc` — Description text listing existing files
+- `pdf_reports.overwrite_files` — Overwrite button label
+
+### Files modified
+- `lib/core/services/pdf_report_service.dart` — bank container height 1.69cm → 2.2cm (+ matching right cell)
+- `lib/presentation/screens/pdf_reports_screen.dart` — added `dart:io` import, file existence check + overwrite dialog in `_generatePdfs()`
+- `lib/presentation/screens/home_screen.dart` — Timer icon wrapped in InkWell, added `_showAboutDialog()` method
+- `assets/translations/cs.json` — 4 new keys
+- `assets/translations/en.json` — 4 new keys
+
+### Current state
+- All 3 requested features implemented
+- `flutter analyze` passes with 0 errors, 0 warnings (21 info-level notices — pre-existing deprecations)
+
+### Known issues / pending
+- Pre-existing deprecation warnings (`DropdownButtonFormField.value`, `RadioListTile.groupValue`)
+
 ## 2026-02-17 (session 8) — PDF reports overflow fix, configurable invoice settings, tray task name
 
 ### What was done

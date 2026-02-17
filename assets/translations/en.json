@@ -1,5 +1,8 @@
 {
     "app_name": "Timer Counter",
+    "app_about": {
+        "description": "Application for time tracking, generating PDF reports and invoices."
+    },
     "nav": {
         "time_tracking": "Time Tracking",
         "projects": "Projects",
@@ -288,6 +291,9 @@
         "field_report_filename": "Report filename",
         "field_report_rezijni_filename": "Režijní report filename",
         "field_invoice_filename": "Invoice filename",
-        "filenames_hint": "Use {month} and {year} as variables. The .pdf extension is added automatically."
+        "filenames_hint": "Use {month} and {year} as variables. The .pdf extension is added automatically.",
+        "files_exist_title": "Files already exist",
+        "files_exist_desc": "The following files already exist in the target directory:",
+        "overwrite_files": "Overwrite"
     }
 }

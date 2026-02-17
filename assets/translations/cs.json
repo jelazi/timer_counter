@@ -1,5 +1,8 @@
 {
     "app_name": "Timer Counter",
+    "app_about": {
+        "description": "Aplikace pro sledování pracovního času, generování PDF reportů a faktur."
+    },
     "nav": {
         "time_tracking": "Sledování času",
         "projects": "Projekty",
@@ -288,6 +291,9 @@
         "field_report_filename": "Název souboru reportu",
         "field_report_rezijni_filename": "Název souboru režijního reportu",
         "field_invoice_filename": "Název souboru faktury",
-        "filenames_hint": "Použijte {month} a {year} jako proměnné. Přípona .pdf se přidá automaticky."
+        "filenames_hint": "Použijte {month} a {year} jako proměnné. Přípona .pdf se přidá automaticky.",
+        "files_exist_title": "Soubory již existují",
+        "files_exist_desc": "V cílovém adresáři již existují následující soubory:",
+        "overwrite_files": "Přepsat"
     }
 }

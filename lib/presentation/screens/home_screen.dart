@@ -59,6 +59,58 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
     }
   }
 
+  void _showAboutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(color: Theme.of(ctx).colorScheme.primary, borderRadius: BorderRadius.circular(14)),
+          child: const Icon(Icons.timer, color: Colors.white, size: 32),
+        ),
+        title: const Text('Timer Counter'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${tr('settings.version')}: 1.0.0', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.7))),
+            const SizedBox(height: 16),
+            Text(
+              tr('app_about.description'),
+              textAlign: TextAlign.center,
+              style: Theme.of(ctx).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.code, size: 16, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
+                const SizedBox(width: 8),
+                Text('Flutter + Dart', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.person_outline, size: 16, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
+                const SizedBox(width: 8),
+                Text('Lubomír Žižka', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text('© ${DateTime.now().year}', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.4))),
+          ],
+        ),
+        actions: [
+          FilledButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('common.ok'))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<SettingsBloc, SettingsState>(
@@ -81,11 +133,15 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Column(
                       children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(10)),
-                          child: const Icon(Icons.timer, color: Colors.white, size: 24),
+                        InkWell(
+                          onTap: () => _showAboutDialog(context),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(10)),
+                            child: const Icon(Icons.timer, color: Colors.white, size: 24),
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text('Timer', style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
