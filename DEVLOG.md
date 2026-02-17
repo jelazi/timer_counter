@@ -1,5 +1,54 @@
 # Development Log
 
+## 2026-02-17 (session 10) — Firebase Cloud Sync
+
+### What was done
+1. **Firebase Sync Service** — Created `lib/core/services/firebase_sync_service.dart` (~430 lines) that uses Firestore REST API to sync all app data (categories, projects, tasks, time entries) with Firebase. No native Firebase SDK required — uses `http` package for REST calls.
+   - Three sync modes: **Upload** (local→remote replace), **Download** (remote→local replace), **Sync/Merge** (bidirectional union, conflicts resolved by `createdAt`)
+   - Batch writes with 500-item chunking for efficiency
+   - Pagination for collection listing (1000 per page)
+   - Full Firestore value type conversion (String, int, double, bool, DateTime)
+   - Progress callback for UI feedback
+
+2. **Firebase Settings in Settings Screen** — Added "Cloud Sync" section between Data and Reminders in settings:
+   - Firebase configuration tile (opens config dialog with Project ID + API Key fields)
+   - Connection test button in config dialog
+   - Three action buttons: Upload / Download / Sync
+   - Progress indicator during sync operations
+   - Last sync timestamp display
+   - Confirmation dialogs for Upload/Download (destructive operations)
+   - SnackBar feedback with per-entity counts
+
+3. **Settings persistence** — Added Firebase config keys to `AppConstants` and getter/setter methods to `SettingsRepository` (Project ID, API Key, Enabled, Last Sync, `isFirebaseConfigured` computed property)
+
+### New/modified files
+- `lib/core/services/firebase_sync_service.dart` (NEW) — Firestore REST API sync service
+- `lib/core/constants/app_constants.dart` — 4 new Firebase setting keys
+- `lib/data/repositories/settings_repository.dart` — Firebase config getters/setters + `isFirebaseConfigured`
+- `lib/presentation/screens/settings_screen.dart` — `_FirebaseSyncSection` + `_FirebaseConfigDialog` widgets, import for sync service
+- `assets/translations/cs.json` — ~28 new `sync.*` translation keys
+- `assets/translations/en.json` — ~28 new `sync.*` translation keys
+- `pubspec.yaml` — added `http: ^1.6.0` dependency
+
+### New translation keys
+- `sync.title`, `sync.subtitle`, `sync.firebase_config`, `sync.not_configured`, `sync.configured`
+- `sync.project_id`, `sync.api_key`, `sync.test_connection`, `sync.connection_ok`, `sync.connection_failed`
+- `sync.upload`, `sync.download`, `sync.sync_merge`, `sync.last_sync`, `sync.never`, `sync.last_sync_just_now`
+- `sync.syncing`, `sync.upload_success`, `sync.download_success`, `sync.sync_success`, `sync.sync_error`
+- `sync.confirm_upload`, `sync.confirm_download`, `sync.items_synced`, `sync.clear_config`
+- `sync.projects`, `sync.tasks`, `sync.time_entries`, `sync.categories`, `sync.firestore_hint`
+
+### Current state
+- Firebase sync fully implemented with UI
+- `flutter analyze` passes with 0 errors, 0 warnings (21 info-level — pre-existing deprecations)
+- User needs to create a Firebase project, enable Firestore, set rules to `allow read, write: if true;`, and enter Project ID + API Key in settings
+
+### Known issues / pending
+- Sync uses `createdAt` for conflict resolution (models don't have `updatedAt` field)
+- No Firebase Auth — relies on Firestore rules + API key only
+- Running timers and settings are not synced (device-specific)
+- Pre-existing deprecation warnings remain
+
 ## 2026-02-17 (session 9) — Invoice bank fix, file overwrite dialog, about dialog
 
 ### What was done

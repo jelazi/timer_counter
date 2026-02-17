@@ -165,6 +165,22 @@ class SettingsRepository {
   String getInvoiceInvoiceFilename() => _box.get(AppConstants.invoiceInvoiceFilename, defaultValue: 'faktura_{month}_{year}') as String;
   Future<void> setInvoiceInvoiceFilename(String v) => _box.put(AppConstants.invoiceInvoiceFilename, v);
 
+  // === Firebase Sync Settings ===
+
+  String getFirebaseProjectId() => _box.get(AppConstants.firebaseProjectId, defaultValue: '') as String;
+  Future<void> setFirebaseProjectId(String v) => _box.put(AppConstants.firebaseProjectId, v);
+
+  String getFirebaseApiKey() => _box.get(AppConstants.firebaseApiKey, defaultValue: '') as String;
+  Future<void> setFirebaseApiKey(String v) => _box.put(AppConstants.firebaseApiKey, v);
+
+  bool getFirebaseEnabled() => _box.get(AppConstants.firebaseEnabled, defaultValue: false) as bool;
+  Future<void> setFirebaseEnabled(bool v) => _box.put(AppConstants.firebaseEnabled, v);
+
+  String getFirebaseLastSync() => _box.get(AppConstants.firebaseLastSync, defaultValue: '') as String;
+  Future<void> setFirebaseLastSync(String v) => _box.put(AppConstants.firebaseLastSync, v);
+
+  bool get isFirebaseConfigured => getFirebaseProjectId().isNotEmpty && getFirebaseApiKey().isNotEmpty;
+
   /// Load complete invoice settings from Hive
   InvoiceSettings getInvoiceSettings() {
     final suppliers = getSuppliers();
