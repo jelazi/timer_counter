@@ -380,6 +380,7 @@
         "progress": "{current} / {target}h",
         "completed": "Completed ✓",
         "remaining": "{} h remaining",
+        "daily_needed": "~{hours}h/day needed ({days} work days left)",
         "description": "Group projects with a monthly hours target to track progress"
     }
 }
