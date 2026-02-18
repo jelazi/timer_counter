@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ce_flutter/hive_ce_flutter.dart';
@@ -8,8 +9,11 @@ import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app/app.dart';
+import 'app/desktop_window_handler.dart';
 import 'app/system_tray_service.dart';
 import 'core/constants/app_constants.dart';
+import 'core/services/firebase_sync_service_v2.dart';
+import 'core/utils/platform_utils.dart';
 import 'data/models/category_model.dart';
 import 'data/models/monthly_hours_target_model.dart';
 import 'data/models/project_model.dart';
@@ -23,6 +27,7 @@ import 'data/repositories/running_timer_repository.dart';
 import 'data/repositories/settings_repository.dart';
 import 'data/repositories/task_repository.dart';
 import 'data/repositories/time_entry_repository.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,7 +36,17 @@ Future<void> main() async {
   // Use bundled fonts — don't fetch from network
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  // Initialize Hive
+  // ── Firebase ────────────────────────────────────────────────────────────
+  bool firebaseAvailable = false;
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    firebaseAvailable = true;
+    debugPrint('[main] Firebase initialized successfully');
+  } catch (e) {
+    debugPrint('[main] Firebase not available: $e');
+  }
+
+  // ── Hive ────────────────────────────────────────────────────────────────
   await Hive.initFlutter();
 
   // Register Hive Adapters
@@ -58,8 +73,27 @@ Future<void> main() async {
   final monthlyHoursTargetRepository = MonthlyHoursTargetRepository();
   await monthlyHoursTargetRepository.init();
 
-  // Initialize Window Manager (Desktop)
-  if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+  // ── Firebase Sync Service ──────────────────────────────────────────────
+  FirebaseSyncService? firebaseSyncService;
+  if (firebaseAvailable) {
+    firebaseSyncService = FirebaseSyncService(
+      categoryRepo: categoryRepository,
+      projectRepo: projectRepository,
+      taskRepo: taskRepository,
+      timeEntryRepo: timeEntryRepository,
+      runningTimerRepo: runningTimerRepository,
+      monthlyTargetRepo: monthlyHoursTargetRepository,
+      settingsRepo: settingsRepository,
+    );
+    // Auto-start listeners if already signed in
+    if (firebaseSyncService.isSignedIn) {
+      firebaseSyncService.startListeners();
+    }
+  }
+
+  // ── Desktop Window Manager & System Tray ───────────────────────────────
+  SystemTrayService? systemTrayService;
+  if (PlatformUtils.isDesktop) {
     await windowManager.ensureInitialized();
 
     final windowOptions = WindowOptions(
@@ -81,12 +115,13 @@ Future<void> main() async {
 
     // Setup launch at startup
     launchAtStartup.setup(appName: 'Timer Counter', appPath: Platform.resolvedExecutable);
-  }
 
-  // System Tray
-  final systemTrayService = SystemTrayService();
-  if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+    // System Tray
+    systemTrayService = SystemTrayService();
     await systemTrayService.initialize();
+
+    // Desktop window handler (close-to-tray, minimize-to-tray)
+    DesktopWindowHandler(settingsRepo: settingsRepository);
   }
 
   runApp(
@@ -103,6 +138,7 @@ Future<void> main() async {
         settingsRepository: settingsRepository,
         monthlyHoursTargetRepository: monthlyHoursTargetRepository,
         systemTrayService: systemTrayService,
+        firebaseSyncService: firebaseSyncService,
       ),
     ),
   );

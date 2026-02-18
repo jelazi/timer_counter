@@ -1,5 +1,115 @@
 # Development Log
 
+## 2026-02-19 (session 16) — Mobile support (Android/iOS) with Firebase real-time sync
+
+### What was done
+
+#### 1. Firebase SDK dependencies
+- Added `firebase_core: ^3.9.0`, `firebase_auth: ^5.4.0`, `cloud_firestore: ^5.6.0` to pubspec.yaml
+- Created `lib/firebase_options.dart` placeholder (must be overwritten by `flutterfire configure`)
+
+#### 2. Platform utilities
+- Created `lib/core/utils/platform_utils.dart` with `isMobile`, `isDesktop`, `isWeb` static getters
+- Used throughout the app to conditionally enable desktop-only features (window_manager, system_tray, launch_at_startup)
+
+#### 3. New FirebaseSyncService (v2) — real-time Cloud Firestore SDK
+- Created `lib/core/services/firebase_sync_service_v2.dart` (~700 lines)
+- Uses `FirebaseAuth` for email/password authentication (signIn, signUp, signOut)
+- Uses `FirebaseFirestore` snapshot listeners for all 6 collections: categories, projects, tasks, time_entries, running_timers, monthly_targets
+- Real-time bidirectional sync: local changes pushed immediately, remote changes applied via listeners
+- SyncStatus stream (disabled, connecting, connected, error) for UI status display
+- SyncCollection stream for BLoC notification when specific collections change
+- Push/delete methods for each model type
+- Bulk uploadAll/downloadAll with progress callbacks
+- Replaces old REST API-based `firebase_sync_service.dart` (kept for reference)
+
+#### 4. Mobile-compatible app initialization (main.dart)
+- Firebase.initializeApp() wrapped in try/catch (app still works without Firebase)
+- Desktop-only code (window_manager, system_tray, launch_at_startup) wrapped in `PlatformUtils.isDesktop`
+- SystemTrayService and FirebaseSyncService created conditionally
+- Auto-starts Firebase listeners if user already signed in
+
+#### 5. Nullable services in app.dart
+- `SystemTrayService?` and `FirebaseSyncService?` are now nullable optional parameters
+- Added `Provider<FirebaseSyncService?>.value` for settings screen access
+- TimerBloc receives optional `firebaseSyncService` constructor param
+- System tray listener guarded by `PlatformUtils.isDesktop`
+
+#### 6. Desktop window handling extracted
+- Created `lib/app/desktop_window_handler.dart`
+- Moved `WindowListener` mixin logic (onWindowClose, onWindowMinimize) out of HomeScreen
+- Prevents window_manager mixin from being used on mobile
+
+#### 7. Responsive HomeScreen layout
+- Mobile: `NavigationBar` (bottom) with 5 tabs (no PDF reports)
+- Desktop: `NavigationRail` (left sidebar) with 6 tabs (includes PDF reports)
+- Removed window_manager dependency from home_screen.dart
+
+#### 8. Firebase sync integrated into TimerBloc
+- Constructor accepts optional `FirebaseSyncService?`
+- Listens to `onCollectionChanged` for running_timers and time_entries collections
+- StartTimer pushes running timer to Firebase
+- StopTimer pushes time entry and deletes running timer from Firebase
+- Added `SyncTimersChanged` event to re-emit state on remote changes
+
+#### 9. Settings screen Firebase section rewritten
+- Replaced old REST API config dialog (project_id + api_key) with email/password auth dialog
+- `_FirebaseSyncSection` reads `FirebaseSyncService?` from Provider
+- Shows real-time sync status chip (connected/connecting/disconnected/error)
+- Sign in/out buttons, upload/download bulk operations
+- `_FirebaseAuthDialog` with email + password fields, sign in and sign up buttons
+
+#### 10. Translations updated
+- Added new keys to both en.json and cs.json:
+  - `sync.firebase_auth`, `sync.email`, `sync.password`, `sync.sign_in`, `sync.sign_up`, `sync.sign_out`
+  - `sync.confirm_sign_out`, `sync.signed_in_as`, `sync.not_signed_in`, `sync.fill_all_fields`
+  - `sync.firebase_not_available`, `sync.firebase_not_configured_hint`
+  - `sync.real_time_hint`, `sync.status_disabled`, `sync.status_connecting`, `sync.status_connected`, `sync.status_error`
+
+#### 11. Android/iOS build configuration
+- Android: `minSdk = 23` in android/app/build.gradle.kts (required for Firebase)
+- iOS: `platform :ios, '13.0'` uncommented in ios/Podfile (required for Firebase)
+
+#### 12. Documentation
+- Created `FIREBASE_SETUP.md` with full setup instructions (Firebase Console, FlutterFire CLI, Firestore rules, troubleshooting)
+
+### Files created
+- `lib/firebase_options.dart` — Firebase config placeholder
+- `lib/core/utils/platform_utils.dart` — cross-platform detection
+- `lib/core/services/firebase_sync_service_v2.dart` — real-time Firestore sync service
+- `lib/app/desktop_window_handler.dart` — desktop window close/minimize handler
+- `FIREBASE_SETUP.md` — Firebase setup guide
+
+### Files modified
+- `pubspec.yaml` — added firebase_core, firebase_auth, cloud_firestore
+- `lib/main.dart` — conditional platform init, Firebase init, nullable services
+- `lib/app/app.dart` — nullable SystemTrayService/FirebaseSyncService, Provider setup
+- `lib/presentation/screens/home_screen.dart` — responsive mobile/desktop layout
+- `lib/presentation/screens/settings_screen.dart` — new Firebase auth UI section
+- `lib/presentation/blocs/timer/timer_bloc.dart` — Firebase sync integration
+- `lib/presentation/blocs/timer/timer_event.dart` — added SyncTimersChanged event
+- `assets/translations/en.json` — new sync auth translation keys
+- `assets/translations/cs.json` — new sync auth translation keys
+- `android/app/build.gradle.kts` — minSdk = 23
+- `ios/Podfile` — platform :ios, '13.0'
+
+### Current state
+- App compiles and runs on desktop (macOS) as before
+- Mobile support (Android/iOS) structurally implemented
+- Firebase SDK integration complete with real-time sync
+- **To fully enable Firebase**: run `flutterfire configure` to generate real `firebase_options.dart`
+- Old REST API sync service (`firebase_sync_service.dart`) still exists but is no longer used by the UI
+- PDF reports and import/export features are desktop-only (hidden on mobile)
+
+### Pending / Next steps
+- Run `flutterfire configure` with actual Firebase project to generate platform configs
+- Test on Android emulator and iOS simulator
+- Consider adding Firebase sync to other BLoCs (projects, categories, time entries) for full real-time push
+- May want to remove or deprecate old `firebase_sync_service.dart`
+- Mobile-specific UI polish (responsive time tracking screen, etc.)
+
+---
+
 ## 2026-02-18 (session 15) — Bug fixes: version, red line, period button, daily hours needed
 
 ### What was done

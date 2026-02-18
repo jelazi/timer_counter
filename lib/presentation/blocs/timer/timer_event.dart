@@ -16,11 +16,7 @@ class StartTimer extends TimerEvent {
   final String taskId;
   final String notes;
 
-  const StartTimer({
-    required this.projectId,
-    required this.taskId,
-    this.notes = '',
-  });
+  const StartTimer({required this.projectId, required this.taskId, this.notes = ''});
 
   @override
   List<Object?> get props => [projectId, taskId, notes];
@@ -49,4 +45,9 @@ class UpdateTimerNotes extends TimerEvent {
 
   @override
   List<Object?> get props => [timerId, notes];
+}
+
+/// Emitted when Firestore sync updates running timers or time entries.
+class SyncTimersChanged extends TimerEvent {
+  const SyncTimersChanged();
 }
