@@ -365,5 +365,21 @@
         "time_entries": "záznamů",
         "categories": "kategorií",
         "firestore_hint": "Nastavte Firestore pravidla na 'allow read, write: if true;' pro přístup s API klíčem."
+    },
+    "monthly_targets": {
+        "title": "Měsíční hodinové cíle",
+        "add_target": "Přidat cíl",
+        "edit_target": "Upravit cíl",
+        "delete_target": "Smazat cíl",
+        "delete_confirm": "Opravdu chcete smazat tento měsíční cíl?",
+        "target_name": "Název cíle",
+        "target_hours": "Cílové hodiny",
+        "select_projects": "Vybrat projekty",
+        "no_targets": "Žádné měsíční cíle nejsou definovány",
+        "no_projects_selected": "Žádné projekty nevybrány",
+        "progress": "{current} / {target}h",
+        "completed": "Splněno ✓",
+        "remaining": "Zbývá {} h",
+        "description": "Seskupte projekty s měsíčním hodinovým cílem pro sledování pokroku"
     }
 }

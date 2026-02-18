@@ -395,7 +395,8 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                               spacing: 8,
                               runSpacing: 8,
                               children: allProjects.map((project) {
-                                final isSelected = _selectedProjectIds.contains(project.id);
+                                final allSelected = _selectedProjectIds.isEmpty;
+                                final isSelected = allSelected || _selectedProjectIds.contains(project.id);
                                 return FilterChip(
                                   label: Text(project.name),
                                   selected: isSelected,
@@ -403,10 +404,22 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                                   avatar: CircleAvatar(backgroundColor: Color(project.colorValue), radius: 8),
                                   onSelected: (selected) {
                                     setState(() {
-                                      if (selected) {
-                                        _selectedProjectIds.add(project.id);
+                                      if (allSelected) {
+                                        // Switching from "all" to explicit selection
+                                        _selectedProjectIds = allProjects.map((p) => p.id).toList();
+                                        if (!selected) {
+                                          _selectedProjectIds.remove(project.id);
+                                        }
                                       } else {
-                                        _selectedProjectIds.remove(project.id);
+                                        if (selected) {
+                                          _selectedProjectIds.add(project.id);
+                                        } else {
+                                          _selectedProjectIds.remove(project.id);
+                                        }
+                                        // If all selected, switch back to empty (= all)
+                                        if (_selectedProjectIds.length == allProjects.length) {
+                                          _selectedProjectIds = [];
+                                        }
                                       }
                                     });
                                     context.read<SettingsRepository>().setPdfReportProjectIds(_selectedProjectIds);

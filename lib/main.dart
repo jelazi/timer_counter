@@ -11,11 +11,13 @@ import 'app/app.dart';
 import 'app/system_tray_service.dart';
 import 'core/constants/app_constants.dart';
 import 'data/models/category_model.dart';
+import 'data/models/monthly_hours_target_model.dart';
 import 'data/models/project_model.dart';
 import 'data/models/running_timer_model.dart';
 import 'data/models/task_model.dart';
 import 'data/models/time_entry_model.dart';
 import 'data/repositories/category_repository.dart';
+import 'data/repositories/monthly_hours_target_repository.dart';
 import 'data/repositories/project_repository.dart';
 import 'data/repositories/running_timer_repository.dart';
 import 'data/repositories/settings_repository.dart';
@@ -38,6 +40,7 @@ Future<void> main() async {
   Hive.registerAdapter(TaskModelAdapter());
   Hive.registerAdapter(TimeEntryModelAdapter());
   Hive.registerAdapter(RunningTimerModelAdapter());
+  Hive.registerAdapter(MonthlyHoursTargetModelAdapter());
 
   // Create & Initialize Repositories
   final categoryRepository = CategoryRepository();
@@ -52,6 +55,8 @@ Future<void> main() async {
   await runningTimerRepository.init();
   final settingsRepository = SettingsRepository();
   await settingsRepository.init();
+  final monthlyHoursTargetRepository = MonthlyHoursTargetRepository();
+  await monthlyHoursTargetRepository.init();
 
   // Initialize Window Manager (Desktop)
   if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
@@ -96,6 +101,7 @@ Future<void> main() async {
         timeEntryRepository: timeEntryRepository,
         runningTimerRepository: runningTimerRepository,
         settingsRepository: settingsRepository,
+        monthlyHoursTargetRepository: monthlyHoursTargetRepository,
         systemTrayService: systemTrayService,
       ),
     ),

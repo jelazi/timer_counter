@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/time_formatter.dart';
 import '../data/repositories/category_repository.dart';
+import '../data/repositories/monthly_hours_target_repository.dart';
 import '../data/repositories/project_repository.dart';
 import '../data/repositories/running_timer_repository.dart';
 import '../data/repositories/settings_repository.dart';
@@ -33,6 +34,7 @@ class TymeApp extends StatelessWidget {
   final TimeEntryRepository timeEntryRepository;
   final RunningTimerRepository runningTimerRepository;
   final SettingsRepository settingsRepository;
+  final MonthlyHoursTargetRepository monthlyHoursTargetRepository;
   final SystemTrayService systemTrayService;
 
   const TymeApp({
@@ -43,6 +45,7 @@ class TymeApp extends StatelessWidget {
     required this.timeEntryRepository,
     required this.runningTimerRepository,
     required this.settingsRepository,
+    required this.monthlyHoursTargetRepository,
     required this.systemTrayService,
   });
 
@@ -56,6 +59,7 @@ class TymeApp extends StatelessWidget {
         Provider<TimeEntryRepository>.value(value: timeEntryRepository),
         Provider<RunningTimerRepository>.value(value: runningTimerRepository),
         Provider<SettingsRepository>.value(value: settingsRepository),
+        Provider<MonthlyHoursTargetRepository>.value(value: monthlyHoursTargetRepository),
         Provider<SystemTrayService>.value(value: systemTrayService),
       ],
       child: MultiBlocProvider(

@@ -7,6 +7,7 @@ import '../../core/utils/time_formatter.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/task_model.dart';
 import '../../data/models/time_entry_model.dart';
+import '../../data/repositories/monthly_hours_target_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/task_repository.dart';
@@ -186,17 +187,90 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
         ),
         const SizedBox(height: 12),
 
+        // Monthly targets progress
+        _buildMonthlyTargetsProgress(context, entries, projectRepo),
+
         // Day sections
         Expanded(
           child: ListView.builder(
             itemCount: sortedDays.length,
             itemBuilder: (context, index) {
               final day = sortedDays[index];
-              final dayEntries = grouped[day]!..sort((a, b) => a.startTime.compareTo(b.startTime));
+              final dayEntries = grouped[day]!..sort((a, b) => b.startTime.compareTo(a.startTime));
               return _buildDaySection(context, day, dayEntries, projectRepo, taskRepo, settingsState);
             },
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildMonthlyTargetsProgress(BuildContext context, List<TimeEntryModel> monthEntries, ProjectRepository projectRepo) {
+    final targetRepo = context.read<MonthlyHoursTargetRepository>();
+    final targets = targetRepo.getAll();
+    if (targets.isEmpty) return const SizedBox.shrink();
+
+    // Calculate hours per project for the current month
+    final hoursPerProject = <String, double>{};
+    for (final entry in monthEntries) {
+      hoursPerProject.update(entry.projectId, (val) => val + entry.actualDurationSeconds / 3600.0, ifAbsent: () => entry.actualDurationSeconds / 3600.0);
+    }
+
+    return Column(
+      children: [
+        ...targets.map((target) {
+          final workedHours = target.projectIds.fold(0.0, (sum, pid) => sum + (hoursPerProject[pid] ?? 0));
+          final progress = target.targetHours > 0 ? (workedHours / target.targetHours).clamp(0.0, 1.0) : 0.0;
+          final isComplete = workedHours >= target.targetHours;
+          final projectNames = target.projectIds
+              .map((id) {
+                final p = projectRepo.getById(id);
+                return p?.name ?? '';
+              })
+              .where((n) => n.isNotEmpty)
+              .join(', ');
+
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(isComplete ? Icons.check_circle : Icons.track_changes, color: isComplete ? Colors.green : Theme.of(context).colorScheme.primary, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(target.name, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                      ),
+                      Text(
+                        '${workedHours.toStringAsFixed(1)}h / ${target.targetHours.toStringAsFixed(0)}h',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: isComplete ? Colors.green : null),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 6,
+                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: isComplete ? Colors.green : Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    projectNames,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        const SizedBox(height: 4),
       ],
     );
   }

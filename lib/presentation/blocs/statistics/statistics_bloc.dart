@@ -26,7 +26,7 @@ class StatisticsBloc extends Bloc<StatisticsEvent, StatisticsState> {
   void _onLoadStatistics(LoadStatistics event, Emitter<StatisticsState> emit) {
     try {
       emit(const StatisticsLoading());
-      _loadStats(event.startDate, event.endDate, 'custom', emit);
+      _loadStats(event.startDate, event.endDate, event.range, emit);
     } catch (e) {
       emit(StatisticsError(e.toString()));
     }

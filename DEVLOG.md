@@ -1,5 +1,83 @@
 # Development Log
 
+## 2026-02-20 (session 14) — Refinements: sort fix, statistics navigation, monthly targets rework
+
+### What was done
+
+#### 1. Version from pubspec.yaml in Settings
+- Added `package_info_plus: ^8.3.0` to pubspec.yaml
+- Settings About section now uses `FutureBuilder<PackageInfo>` to display the real app version dynamically instead of hardcoded value
+
+#### 2. Fix time entries sort order
+- Within each day group in time_entries_overview_screen.dart, entries are now sorted `b.startTime.compareTo(a.startTime)` (newest on top)
+
+#### 3. Statistics date navigation
+- Statistics header now shows actual date range (e.g. "Mon 16 Jun – Sun 22 Jun 2025") with prev/next arrows
+- Added `_periodOffset` state variable to track navigation offset
+- Added `_dispatchRange()`, `_getDateRange()`, `_formatRangeLabel()` helper methods
+- "Back to current" button appears when offset ≠ 0
+- SegmentedButton shows short labels (Day/Week/Month/Year) + custom range button
+- `LoadStatistics` event now accepts `range` parameter (default 'custom')
+- `StatisticsBloc._onLoadStatistics` uses `event.range` instead of hardcoded 'custom'
+
+#### 4. Filter chips initially selected
+- In both statistics_screen.dart and pdf_reports_screen.dart, project filter chips now appear visually selected when filteredIds is empty (meaning all projects are included)
+- Smart toggle logic: deselecting one chip switches to explicit mode (all-except-one); re-selecting all switches back to empty list (all included)
+
+#### 5. Remove redundant daily/weekly settings
+- Removed daily_working_hours and weekly_working_days dropdown ListTiles from settings_screen.dart UI
+- Kept underlying bloc/repository methods for backward compatibility (used by chart expected hours line and work schedule)
+
+#### 6. Monthly hours targets rework
+- **Removed** `monthlyRequiredHours` from `ProjectModel`, `.g.dart` adapter (backward-compat read still ignores field 13), `ProjectFormDialog`, `project_detail_screen.dart`, `projects_screen.dart`
+- **Created** `MonthlyHoursTargetModel` (Hive typeId: 6) with fields: id, name, targetHours, projectIds (List<String>), createdAt
+- **Created** `MonthlyHoursTargetModelAdapter` (manually written Hive adapter)
+- **Created** `MonthlyHoursTargetRepository` with CRUD methods (getAll, getById, add, update, delete, deleteAll)
+- **Registered** adapter in main.dart, created repository instance, passed to TymeApp via Provider in app.dart
+- **Settings UI**: New "Monthly Targets" section with list of targets (name, hours, project chips), add/edit/delete functionality
+- **Target dialog**: Name field, hours field, multi-select project chips, save/update logic
+- **Time Entries Overview**: Monthly targets progress cards with progress bars, worked/target hours, project names
+- **Statistics Screen**: Horizontal scrollable target progress chips shown when range is "month"
+- Added `monthlyHoursTargetsBox` constant to AppConstants
+- Added translations for `monthly_targets` section in both en.json and cs.json
+
+### Files created
+- `lib/data/models/monthly_hours_target_model.dart`
+- `lib/data/models/monthly_hours_target_model.g.dart`
+- `lib/data/repositories/monthly_hours_target_repository.dart`
+
+### Files modified
+- `pubspec.yaml` — added package_info_plus
+- `lib/main.dart` — adapter registration, repository creation
+- `lib/app/app.dart` — MonthlyHoursTargetRepository field + Provider
+- `lib/core/constants/app_constants.dart` — monthlyHoursTargetsBox
+- `lib/data/models/project_model.dart` — removed monthlyRequiredHours
+- `lib/data/models/project_model.g.dart` — backward-compat adapter update
+- `lib/presentation/widgets/project_form_dialog.dart` — removed monthly hours field
+- `lib/presentation/screens/project_detail_screen.dart` — removed monthly target section
+- `lib/presentation/screens/projects_screen.dart` — removed monthly progress bar
+- `lib/presentation/screens/settings_screen.dart` — StatefulWidget, version FutureBuilder, removed daily/weekly settings, monthly targets section + dialog
+- `lib/presentation/screens/time_entries_overview_screen.dart` — sort fix, monthly targets progress
+- `lib/presentation/screens/statistics_screen.dart` — date navigation, filter chips fix, monthly targets progress
+- `lib/presentation/screens/pdf_reports_screen.dart` — filter chips fix
+- `lib/presentation/blocs/statistics/statistics_event.dart` — LoadStatistics range param
+- `lib/presentation/blocs/statistics/statistics_bloc.dart` — uses event.range
+- `assets/translations/en.json` — monthly_targets section
+- `assets/translations/cs.json` — monthly_targets section
+
+### Current state
+- All 6 requested changes implemented
+- Monthly hours are now managed as grouped targets (not per-project) in Settings > Monthly Targets
+- Target progress is visible in Time Entries Overview (card format) and Statistics (horizontal chips, month view only)
+- Statistics screen has full date navigation with prev/next arrows and back-to-current button
+- Build verification needed
+
+### Known issues / technical debt
+- The settings `daily_working_hours` and `weekly_working_days` Hive keys still exist in repository/bloc for backward compat — could be cleaned up in future
+- `ProjectModel` adapter still reads field 13 silently for backward compatibility with existing Hive data
+
+---
+
 ## 2026-02-19 (session 13) — Three major features: project filter, work schedule, monthly hours
 
 ### What was done
