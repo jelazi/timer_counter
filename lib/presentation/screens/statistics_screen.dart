@@ -98,10 +98,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Widget build(BuildContext context) {
     return BlocBuilder<StatisticsBloc, StatisticsState>(
       builder: (context, state) {
+        final isMobile = MediaQuery.of(context).size.width < 600;
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.surface,
           body: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isMobile ? 16 : 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -114,13 +115,28 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state)],
                   const SizedBox(height: 24),
                   Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 2, child: _buildDailyChart(context, state)),
-                        const SizedBox(width: 16),
-                        Expanded(child: _buildProjectDistribution(context, state)),
-                      ],
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < 600) {
+                          return SingleChildScrollView(
+                            child: Column(
+                              children: [
+                                SizedBox(height: 350, child: _buildDailyChart(context, state)),
+                                const SizedBox(height: 16),
+                                SizedBox(height: 400, child: _buildProjectDistribution(context, state)),
+                              ],
+                            ),
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(flex: 2, child: _buildDailyChart(context, state)),
+                            const SizedBox(width: 16),
+                            Expanded(child: _buildProjectDistribution(context, state)),
+                          ],
+                        );
+                      },
                     ),
                   ),
                 ] else if (state is StatisticsLoading) ...[
@@ -138,43 +154,57 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   Widget _buildHeader(BuildContext context, StatisticsState state) {
     final locale = context.locale.languageCode;
+
+    final titleWidget = Text(tr('statistics.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold));
+    final segmentedButton = SegmentedButton<String>(
+      segments: [
+        ButtonSegment(value: 'today', label: Text(tr('statistics.select_day'))),
+        ButtonSegment(value: 'week', label: Text(tr('statistics.select_week'))),
+        ButtonSegment(value: 'month', label: Text(tr('statistics.select_month'))),
+        ButtonSegment(value: 'year', label: Text(tr('statistics.select_year'))),
+      ],
+      selected: _selectedRange != 'custom' ? {_selectedRange} : {},
+      emptySelectionAllowed: true,
+      onSelectionChanged: (selected) {
+        if (selected.isNotEmpty) {
+          setState(() {
+            _selectedRange = selected.first;
+            _periodOffset = 0;
+          });
+          _dispatchRange();
+        }
+      },
+    );
+    final customRangeButton = FilledButton.tonal(
+      onPressed: () => _showCustomRangePicker(context),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.date_range, size: 18), const SizedBox(width: 4), Text(tr('statistics.custom_range'))]),
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(tr('statistics.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 600) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  titleWidget,
+                  const SizedBox(height: 12),
+                  SizedBox(width: double.infinity, child: segmentedButton),
+                  const SizedBox(height: 8),
+                  customRangeButton,
+                ],
+              );
+            }
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                SegmentedButton<String>(
-                  segments: [
-                    ButtonSegment(value: 'today', label: Text(tr('statistics.select_day'))),
-                    ButtonSegment(value: 'week', label: Text(tr('statistics.select_week'))),
-                    ButtonSegment(value: 'month', label: Text(tr('statistics.select_month'))),
-                    ButtonSegment(value: 'year', label: Text(tr('statistics.select_year'))),
-                  ],
-                  selected: _selectedRange != 'custom' ? {_selectedRange} : {},
-                  emptySelectionAllowed: true,
-                  onSelectionChanged: (selected) {
-                    if (selected.isNotEmpty) {
-                      setState(() {
-                        _selectedRange = selected.first;
-                        _periodOffset = 0;
-                      });
-                      _dispatchRange();
-                    }
-                  },
-                ),
-                const SizedBox(width: 8),
-                FilledButton.tonal(
-                  onPressed: () => _showCustomRangePicker(context),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.date_range, size: 18), const SizedBox(width: 4), Text(tr('statistics.custom_range'))]),
-                ),
+                titleWidget,
+                Row(mainAxisSize: MainAxisSize.min, children: [segmentedButton, const SizedBox(width: 8), customRangeButton]),
               ],
-            ),
-          ],
+            );
+          },
         ),
         if (_selectedRange != 'custom')
           Padding(
@@ -454,34 +484,53 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildSummaryCards(BuildContext context, StatisticsLoaded state) {
-    return Row(
-      children: [
-        Expanded(
-          child: _StatCard(
-            title: tr('statistics.worked_hours'),
-            value: TimeFormatter.formatHumanReadable(state.totalSeconds),
-            icon: Icons.access_time,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _StatCard(title: tr('statistics.billable_hours'), value: TimeFormatter.formatHumanReadable(state.billableSeconds), icon: Icons.attach_money, color: Colors.green),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _StatCard(title: tr('statistics.total_revenue'), value: '${state.totalRevenue.toStringAsFixed(0)} CZK', icon: Icons.monetization_on, color: Colors.orange),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _StatCard(
-            title: tr('statistics.average_daily'),
-            value: TimeFormatter.formatHumanReadable(state.averageDailySeconds.round()),
-            icon: Icons.trending_up,
-            color: Colors.purple,
-          ),
-        ),
-      ],
+    final cards = [
+      _StatCard(
+        title: tr('statistics.worked_hours'),
+        value: TimeFormatter.formatHumanReadable(state.totalSeconds),
+        icon: Icons.access_time,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      _StatCard(title: tr('statistics.billable_hours'), value: TimeFormatter.formatHumanReadable(state.billableSeconds), icon: Icons.attach_money, color: Colors.green),
+      _StatCard(title: tr('statistics.total_revenue'), value: '${state.totalRevenue.toStringAsFixed(0)} CZK', icon: Icons.monetization_on, color: Colors.orange),
+      _StatCard(title: tr('statistics.average_daily'), value: TimeFormatter.formatHumanReadable(state.averageDailySeconds.round()), icon: Icons.trending_up, color: Colors.purple),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 600) {
+          return Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 8),
+                  Expanded(child: cards[1]),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: cards[2]),
+                  const SizedBox(width: 8),
+                  Expanded(child: cards[3]),
+                ],
+              ),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: cards[0]),
+            const SizedBox(width: 16),
+            Expanded(child: cards[1]),
+            const SizedBox(width: 16),
+            Expanded(child: cards[2]),
+            const SizedBox(width: 16),
+            Expanded(child: cards[3]),
+          ],
+        );
+      },
     );
   }
 
@@ -790,8 +839,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Expanded(
+            Flexible(
               child: ListView.builder(
+                shrinkWrap: true,
                 itemCount: state.projectStatistics.length,
                 itemBuilder: (context, index) {
                   final ps = state.projectStatistics[index];
@@ -834,7 +884,7 @@ class _StatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -842,7 +892,13 @@ class _StatCard extends StatelessWidget {
               children: [
                 Icon(icon, color: color, size: 20),
                 const SizedBox(width: 8),
-                Text(title, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),

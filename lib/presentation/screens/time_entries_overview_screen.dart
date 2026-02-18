@@ -47,10 +47,11 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
       builder: (context, timerState) {
         return BlocBuilder<SettingsBloc, SettingsState>(
           builder: (context, settingsState) {
+            final isMobile = MediaQuery.of(context).size.width < 600;
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.surface,
               body: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(isMobile ? 16 : 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -58,7 +59,13 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(tr('time_entries.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        Flexible(
+                          child: Text(
+                            tr('time_entries.title'),
+                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         FilledButton.icon(
                           onPressed: () => _showAddManualEntryDialog(context, settingsState),
                           icon: const Icon(Icons.add),
@@ -96,16 +103,24 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
             });
           },
         ),
-        TextButton(
-          onPressed: () async {
-            final picked = await showDatePicker(context: context, initialDate: _selectedMonth, firstDate: DateTime(2020), lastDate: DateTime.now().add(const Duration(days: 365)));
-            if (picked != null) {
-              setState(() => _selectedMonth = DateTime(picked.year, picked.month, 1));
-            }
-          },
-          child: Text(
-            DateFormat('LLLL yyyy', context.locale.languageCode).format(_selectedMonth),
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+        Flexible(
+          child: TextButton(
+            onPressed: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: _selectedMonth,
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked != null) {
+                setState(() => _selectedMonth = DateTime(picked.year, picked.month, 1));
+              }
+            },
+            child: Text(
+              DateFormat('LLLL yyyy', context.locale.languageCode).format(_selectedMonth),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
         IconButton(
@@ -329,8 +344,14 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
-                Text(DateFormat("EEEE, d'.' MMMM", context.locale.languageCode).format(day), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-                const Spacer(),
+                Flexible(
+                  child: Text(
+                    DateFormat("EEEE, d'.' MMMM", context.locale.languageCode).format(day),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Text(
                   '${entries.length} \u2014 ${TimeFormatter.formatDuration(dayTotal, showSeconds: false)}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
@@ -477,9 +498,17 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
       ),
       title: Row(
         children: [
-          Text(project?.name ?? 'Unknown', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(width: 8),
-          Text('/ ${task?.name ?? 'Unknown'}', style: Theme.of(context).textTheme.bodyMedium),
+          Flexible(
+            child: Text(
+              project?.name ?? 'Unknown',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text('/ ${task?.name ?? 'Unknown'}', style: Theme.of(context).textTheme.bodyMedium, overflow: TextOverflow.ellipsis),
+          ),
         ],
       ),
       subtitle: entry.notes.isNotEmpty ? Text(entry.notes, maxLines: 1, overflow: TextOverflow.ellipsis) : null,

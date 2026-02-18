@@ -1,5 +1,104 @@
 # Development Log
 
+## 2026-02-18 — Fix entry tile title overflow & DateFormat locale
+
+### What was done
+- **time_entries_overview_screen.dart:484** — `_buildEntryTile` title Row overflowed by 117-179px: project name + task name were unconstrained `Text` widgets. Wrapped both in `Flexible` with `TextOverflow.ellipsis`.
+- **Day header** — Wrapped date text in `Flexible` with ellipsis to prevent overflow in narrow day section headers.
+- **DateFormat locale** — `time_tracking_screen.dart` had `DateFormat('EEEE, d MMMM yyyy')` without locale param → English day/month names. Added `context.locale.languageCode` to both mobile and desktop DateFormat calls.
+- **initializeDateFormatting()** — Added `await initializeDateFormatting()` in `main.dart` to ensure `intl` has Czech locale date symbols loaded.
+
+### Current state
+- `flutter analyze`: No issues found
+- All DateFormat calls with weekday/month names now use locale parameter
+- Entry tiles truncate long project/task names with ellipsis instead of overflowing
+
+---
+
+## 2026-02-18 — Mobile responsive layout round 3: vertical stacking & padding
+
+### What was done
+Based on real device testing feedback ("put things vertically, not side-by-side", "some widgets too narrow"):
+
+#### 1. time_tracking_screen.dart — Project/task selection card
+- On mobile (<600px): Project dropdown, task dropdown, and action button now stack vertically (Column) instead of side-by-side (Row)
+- Action button becomes full-width on mobile
+- Header: On mobile, title/date and running badge stack vertically instead of Row
+
+#### 2. Running badge text overflow protection
+- Wrapped project/task name Column in `Flexible` with `TextOverflow.ellipsis`
+- Reduced horizontal padding on mobile (16→10)
+
+#### 3. Global padding reduction on mobile
+- All 4 main screens (statistics, settings, time_entries_overview, projects) now use `EdgeInsets.all(16)` on mobile instead of `EdgeInsets.all(24)`
+- Gives ~16px more content width on each side (~305px usable vs ~289px)
+
+#### 4. Previous fixes verified intact
+- Statistics: 2×2 summary card grid on mobile, StatCard padding 12
+- Settings: Work schedule row with Expanded day names, reduced spacers, WorkTimeButton padding 8
+
+### Current state
+- `flutter analyze`: No issues found
+- `flutter build ios --debug --no-codesign`: Build successful
+- All 5 main screens (time_tracking, time_entries_overview, projects, statistics, settings) now have responsive mobile layouts
+
+### What is pending
+- Real device testing to confirm all overflows are resolved
+- Consider reducing padding/spacing on project_detail_screen and pdf_reports_screen if they overflow on mobile
+
+---
+
+## 2026-02-18 — Fix statistics summary cards mobile overflow (1.8px)
+
+### What was done
+- Fixed `_buildSummaryCards` in `statistics_screen.dart`: 4 cards in a single Row overflowed on ~337px iPhone screens (each card only ~49px wide, content area ~9px after padding)
+- Used `LayoutBuilder` to switch to a 2×2 grid layout (two rows of two cards) when width < 600px
+- Reduced `_StatCard` internal padding from 20px to 12px to give more room for content
+
+### Current state
+- Statistics screen summary cards render correctly on both mobile (~337px) and desktop (wide) screens
+- No compile errors
+
+---
+
+## 2026-02-18 — Fix all mobile (iPhone/Android) overflow issues
+
+### What was done
+Fixed all RenderFlex overflow errors when running on iPhone/Android. The app was designed for desktop/wide screens and multiple Row/Column widgets overflowed on narrow ~337px phone screens.
+
+#### 1. time_tracking_screen.dart — Row overflow (159px)
+- `_buildTotalTodayCard`: Used `LayoutBuilder` to create a responsive layout
+- Narrow (< 500px): 2-row layout — icon + total time + progress on row 1, remaining + expected on row 2
+- Wide: original single Row preserved
+
+#### 2. time_entries_overview_screen.dart — Row overflow (8.6px)
+- Header: Wrapped title `Text` in `Flexible` with `TextOverflow.ellipsis`
+- Month navigator: Wrapped month name `TextButton` in `Flexible` with `TextOverflow.ellipsis`
+
+#### 3. projects_screen.dart — Row overflow (404px)
+- `_buildHeader`: Used `LayoutBuilder` with two layouts
+- Narrow (< 600px): Column with title + add button, full-width search, Wrap with filter chip + add category
+- Wide: original Row preserved
+
+#### 4. statistics_screen.dart — 3 distinct overflows (274px, 75-78px, 139px)
+- Header: `LayoutBuilder` — narrow screens stack title, SegmentedButton, and custom range button vertically
+- `_StatCard`: Wrapped title `Text` in `Expanded` with `TextOverflow.ellipsis`
+- Chart + Distribution: `LayoutBuilder` — narrow screens stack chart and distribution vertically in a `SingleChildScrollView`
+
+#### 5. settings_screen.dart — 3 distinct overflows (13px, 17px, 1.8px)
+- Work schedule rows: Replaced `SizedBox(width: 80)` day name with `Expanded` + ellipsis
+- Firebase sync section: Replaced `ListTile` with custom Row layout — `Expanded(Column(title, statusChip))` + trailing button
+
+### Current state
+- `flutter analyze` → **No issues found!**
+- iOS build: ✅ (`flutter build ios --debug --no-codesign`)
+- All overflow errors resolved across 5 screen files
+- Desktop/tablet layouts unchanged (breakpoint: 500-600px)
+
+### What is pending
+- Test on physical iPhone/Android device
+- Check for any remaining overflow on very small screens (< 320px width)
+
 ## 2026-02-18 — Major package upgrade + iOS build fix + analysis cleanup
 
 ### What was done

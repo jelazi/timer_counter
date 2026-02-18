@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_ce_flutter/hive_ce_flutter.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -32,6 +33,7 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EasyLocalization.ensureInitialized();
+  await initializeDateFormatting();
 
   // Use bundled fonts — don't fetch from network
   GoogleFonts.config.allowRuntimeFetching = false;
