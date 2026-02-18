@@ -73,7 +73,7 @@ class TymeApp extends StatelessWidget {
                   ..add(LoadRunningTimers()),
           ),
           BlocProvider<StatisticsBloc>(
-            create: (context) => StatisticsBloc(timeEntryRepository: timeEntryRepository, projectRepository: projectRepository),
+            create: (context) => StatisticsBloc(timeEntryRepository: timeEntryRepository, projectRepository: projectRepository, settingsRepository: settingsRepository),
           ),
           BlocProvider<SettingsBloc>(create: (context) => SettingsBloc(settingsRepository: settingsRepository)..add(LoadSettings())),
         ],

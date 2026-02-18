@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/utils/time_formatter.dart';
+import '../../data/repositories/project_repository.dart';
+import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
 import '../blocs/statistics/statistics_bloc.dart';
 import '../blocs/statistics/statistics_event.dart';
@@ -37,6 +39,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(context, state),
+                const SizedBox(height: 8),
+                _buildProjectFilter(context, state),
                 const SizedBox(height: 24),
                 if (state is StatisticsLoaded) ...[
                   _buildSummaryCards(context, state),
@@ -112,6 +116,52 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildProjectFilter(BuildContext context, StatisticsState state) {
+    final projects = context.read<ProjectRepository>().getAll().where((p) => !p.isArchived).toList();
+    final filteredIds = state is StatisticsLoaded ? state.filteredProjectIds : <String>[];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          Icon(Icons.filter_list, size: 18, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+          const SizedBox(width: 8),
+          if (filteredIds.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: ActionChip(
+                label: Text(tr('common.clear')),
+                onPressed: () => context.read<StatisticsBloc>().add(const FilterStatisticsProjects([])),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ...projects.map((project) {
+            final isSelected = filteredIds.contains(project.id);
+            return Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: FilterChip(
+                label: Text(project.name),
+                selected: isSelected,
+                selectedColor: Color(project.colorValue).withValues(alpha: 0.3),
+                avatar: CircleAvatar(backgroundColor: Color(project.colorValue), radius: 6),
+                visualDensity: VisualDensity.compact,
+                onSelected: (selected) {
+                  final newIds = List<String>.from(filteredIds);
+                  if (selected) {
+                    newIds.add(project.id);
+                  } else {
+                    newIds.remove(project.id);
+                  }
+                  context.read<StatisticsBloc>().add(FilterStatisticsProjects(newIds));
+                },
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 
@@ -374,7 +424,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
 
     final maxY = bars.map((b) => b.hours).fold(0.0, (a, b) => a > b ? a : b);
-    final chartMaxY = maxY > 0 ? maxY * 1.2 : 1.0;
+    // Get expected daily hours from settings
+    final settingsRepo = context.read<SettingsRepository>();
+    final expectedDailyHours = settingsRepo.getDailyWorkingHours();
+    final chartMaxY = [maxY, expectedDailyHours].reduce((a, b) => a > b ? a : b) * 1.2;
 
     return Card(
       child: Padding(
@@ -388,6 +441,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               child: BarChart(
                 BarChartData(
                   barTouchData: BarTouchData(enabled: false),
+                  extraLinesData: ExtraLinesData(
+                    horizontalLines: [
+                      if (expectedDailyHours > 0 && range != 'year')
+                        HorizontalLine(
+                          y: expectedDailyHours,
+                          color: Colors.red.withValues(alpha: 0.5),
+                          strokeWidth: 2,
+                          dashArray: [6, 4],
+                          label: HorizontalLineLabel(
+                            show: true,
+                            alignment: Alignment.topRight,
+                            style: TextStyle(fontSize: 10, color: Colors.red.withValues(alpha: 0.7), fontWeight: FontWeight.w500),
+                            labelResolver: (_) => '${expectedDailyHours.toStringAsFixed(1)}h',
+                          ),
+                        ),
+                    ],
+                  ),
                   alignment: BarChartAlignment.spaceAround,
                   maxY: chartMaxY,
                   titlesData: FlTitlesData(

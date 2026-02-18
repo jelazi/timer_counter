@@ -138,3 +138,14 @@ class ToggleAllowOverlapTimes extends SettingsEvent {
   @override
   List<Object?> get props => [value];
 }
+
+class ChangeWorkSchedule extends SettingsEvent {
+  final int weekday;
+  final String? start;
+  final String? end;
+  final bool? enabled;
+  const ChangeWorkSchedule({required this.weekday, this.start, this.end, this.enabled});
+
+  @override
+  List<Object?> get props => [weekday, start, end, enabled];
+}

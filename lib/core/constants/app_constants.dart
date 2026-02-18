@@ -49,6 +49,12 @@ class AppConstants {
   static const String invoiceReportRezijniFilename = 'invoice_report_rezijni_filename';
   static const String invoiceInvoiceFilename = 'invoice_invoice_filename';
 
+  // PDF Report Project Filter
+  static const String pdfReportProjectIds = 'pdf_report_project_ids';
+
+  // Work Schedule (per weekday)
+  static const String workSchedulePrefix = 'work_schedule';
+
   // Firebase Sync Keys
   static const String firebaseProjectId = 'firebase_project_id';
   static const String firebaseApiKey = 'firebase_api_key';

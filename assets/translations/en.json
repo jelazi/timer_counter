@@ -34,7 +34,10 @@
         "select_project": "Select Project",
         "select_task": "Select Task",
         "no_project_selected": "No project selected",
-        "no_task_selected": "No task selected"
+        "no_task_selected": "No task selected",
+        "remaining_today": "Remaining Today",
+        "overtime": "Overtime",
+        "expected_today": "Expected Today"
     },
     "projects": {
         "title": "Projects",
@@ -69,7 +72,13 @@
         "tracked_time": "Tracked Time",
         "budget_remaining": "Budget Remaining",
         "progress": "Progress",
-        "no_tasks": "No tasks yet"
+        "no_tasks": "No tasks yet",
+        "monthly_required_hours": "Monthly Required Hours",
+        "monthly_target": "Monthly Target",
+        "monthly_worked": "Worked This Month",
+        "monthly_remaining": "{} hours remaining",
+        "monthly_completed": "Monthly target completed ✓",
+        "monthly_short": "monthly"
     },
     "categories": {
         "title": "Categories",
@@ -162,7 +171,16 @@
         "delete_all_data_final_confirm": "This is the final confirmation. After deletion, data cannot be recovered without a backup.",
         "delete_all_data_success": "All data has been deleted",
         "allow_overlap_times": "Allow Overlapping Time Entries",
-        "allow_overlap_times_desc": "Allow time entries to overlap with each other"
+        "allow_overlap_times_desc": "Allow time entries to overlap with each other",
+        "work_schedule": "Work Schedule",
+        "work_schedule_desc": "Set work start and end times for each day of the week",
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday",
+        "sunday": "Sunday"
     },
     "common": {
         "save": "Save",
@@ -189,7 +207,8 @@
         "loading": "Loading...",
         "confirm": "Confirm",
         "undo": "Undo",
-        "redo": "Redo"
+        "redo": "Redo",
+        "clear": "Clear"
     },
     "tray": {
         "show": "Show Timer Counter",
@@ -310,7 +329,10 @@
         "filenames_hint": "Use {month} and {year} as variables. The .pdf extension is added automatically.",
         "files_exist_title": "Files already exist",
         "files_exist_desc": "The following files already exist in the target directory:",
-        "overwrite_files": "Overwrite"
+        "overwrite_files": "Overwrite",
+        "project_filter": "Project Filter",
+        "all_projects": "All projects included",
+        "filtered_projects": "{} projects selected"
     },
     "sync": {
         "title": "Cloud Sync",

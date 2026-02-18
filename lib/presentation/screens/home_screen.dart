@@ -93,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
               children: [
                 Icon(Icons.person_outline, size: 16, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
                 const SizedBox(width: 8),
-                Text('Lubomír Žižka', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
+                Text('jelazi', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
               ],
             ),
             const SizedBox(height: 4),

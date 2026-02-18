@@ -183,6 +183,99 @@ class SettingsScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (state.workSchedule.isNotEmpty) ...[
+                        const Divider(height: 1),
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(tr('settings.work_schedule'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 4),
+                              Text(
+                                tr('settings.work_schedule_desc'),
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                              ),
+                              const SizedBox(height: 12),
+                              ...List.generate(7, (i) {
+                                final weekday = i + 1;
+                                final dayNames = [
+                                  tr('settings.monday'),
+                                  tr('settings.tuesday'),
+                                  tr('settings.wednesday'),
+                                  tr('settings.thursday'),
+                                  tr('settings.friday'),
+                                  tr('settings.saturday'),
+                                  tr('settings.sunday'),
+                                ];
+                                final schedule = state.workSchedule[weekday];
+                                if (schedule == null) return const SizedBox();
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 28,
+                                        child: Checkbox(
+                                          value: schedule.enabled,
+                                          onChanged: (v) => context.read<SettingsBloc>().add(ChangeWorkSchedule(weekday: weekday, enabled: v ?? false)),
+                                        ),
+                                      ),
+                                      SizedBox(
+                                        width: 80,
+                                        child: Text(dayNames[i], style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _WorkTimeButton(
+                                        time: schedule.start,
+                                        enabled: schedule.enabled,
+                                        onTap: () async {
+                                          final parts = schedule.start.split(':');
+                                          final picked = await showTimePicker(
+                                            context: context,
+                                            initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
+                                          );
+                                          if (picked != null && context.mounted) {
+                                            context.read<SettingsBloc>().add(
+                                              ChangeWorkSchedule(weekday: weekday, start: '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}'),
+                                            );
+                                          }
+                                        },
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        child: Text('—', style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
+                                      ),
+                                      _WorkTimeButton(
+                                        time: schedule.end,
+                                        enabled: schedule.enabled,
+                                        onTap: () async {
+                                          final parts = schedule.end.split(':');
+                                          final picked = await showTimePicker(
+                                            context: context,
+                                            initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
+                                          );
+                                          if (picked != null && context.mounted) {
+                                            context.read<SettingsBloc>().add(
+                                              ChangeWorkSchedule(weekday: weekday, end: '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}'),
+                                            );
+                                          }
+                                        },
+                                      ),
+                                      const SizedBox(width: 12),
+                                      if (schedule.enabled)
+                                        Text(
+                                          _calculateDayHours(schedule.start, schedule.end),
+                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w500),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -390,6 +483,18 @@ class SettingsScreen extends StatelessWidget {
         style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary),
       ),
     );
+  }
+
+  String _calculateDayHours(String start, String end) {
+    final startParts = start.split(':');
+    final endParts = end.split(':');
+    final startMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+    final endMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
+    final diff = endMinutes - startMinutes;
+    if (diff <= 0) return '0h';
+    final hours = diff ~/ 60;
+    final minutes = diff % 60;
+    return minutes > 0 ? '${hours}h ${minutes}m' : '${hours}h';
   }
 
   Future<void> _createBackup(BuildContext context) async {
@@ -1199,6 +1304,33 @@ class _FirebaseConfigDialogState extends State<_FirebaseConfigDialog> {
         FilledButton(onPressed: _save, child: Text(tr('common.save'))),
       ],
       actionsAlignment: MainAxisAlignment.start,
+    );
+  }
+}
+
+class _WorkTimeButton extends StatelessWidget {
+  final String time;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _WorkTimeButton({required this.time, required this.enabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: enabled ? Theme.of(context).colorScheme.outline : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          time,
+          style: TextStyle(fontWeight: FontWeight.w500, color: enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)),
+        ),
+      ),
     );
   }
 }

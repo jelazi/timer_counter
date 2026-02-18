@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../data/repositories/project_repository.dart';
+import '../../../data/repositories/settings_repository.dart';
 import '../../../data/repositories/time_entry_repository.dart';
 import 'statistics_event.dart';
 import 'statistics_state.dart';
@@ -8,13 +9,18 @@ import 'statistics_state.dart';
 class StatisticsBloc extends Bloc<StatisticsEvent, StatisticsState> {
   final TimeEntryRepository _timeEntryRepository;
   final ProjectRepository _projectRepository;
+  final SettingsRepository _settingsRepository;
+  List<String> _filteredProjectIds = [];
 
-  StatisticsBloc({required TimeEntryRepository timeEntryRepository, required ProjectRepository projectRepository})
+  StatisticsBloc({required TimeEntryRepository timeEntryRepository, required ProjectRepository projectRepository, required SettingsRepository settingsRepository})
     : _timeEntryRepository = timeEntryRepository,
       _projectRepository = projectRepository,
+      _settingsRepository = settingsRepository,
       super(const StatisticsInitial()) {
     on<LoadStatistics>(_onLoadStatistics);
     on<ChangeStatisticsRange>(_onChangeRange);
+    on<FilterStatisticsProjects>(_onFilterProjects);
+    _filteredProjectIds = _settingsRepository.getPdfReportProjectIds();
   }
 
   void _onLoadStatistics(LoadStatistics event, Emitter<StatisticsState> emit) {
@@ -62,8 +68,13 @@ class StatisticsBloc extends Bloc<StatisticsEvent, StatisticsState> {
   }
 
   void _loadStats(DateTime startDate, DateTime endDate, String range, Emitter<StatisticsState> emit) {
-    final entries = _timeEntryRepository.getByDateRange(startDate, endDate);
+    var entries = _timeEntryRepository.getByDateRange(startDate, endDate);
     final projects = _projectRepository.getAll();
+
+    // Apply project filter
+    if (_filteredProjectIds.isNotEmpty) {
+      entries = entries.where((e) => _filteredProjectIds.contains(e.projectId)).toList();
+    }
 
     int totalSeconds = 0;
     int billableSeconds = 0;
@@ -141,7 +152,17 @@ class StatisticsBloc extends Bloc<StatisticsEvent, StatisticsState> {
         averageDailySeconds: averageDailySeconds,
         projectStatistics: projectStatistics,
         dailyStatistics: dailyStatistics,
+        filteredProjectIds: _filteredProjectIds,
       ),
     );
+  }
+
+  void _onFilterProjects(FilterStatisticsProjects event, Emitter<StatisticsState> emit) {
+    _filteredProjectIds = event.projectIds;
+    _settingsRepository.setPdfReportProjectIds(event.projectIds);
+    if (state is StatisticsLoaded) {
+      final loaded = state as StatisticsLoaded;
+      _loadStats(loaded.startDate, loaded.endDate, loaded.range, emit);
+    }
   }
 }

@@ -44,6 +44,9 @@ class ProjectModel extends Equatable {
   @HiveField(12)
   final DateTime createdAt;
 
+  @HiveField(13)
+  final double monthlyRequiredHours;
+
   const ProjectModel({
     required this.id,
     required this.name,
@@ -58,6 +61,7 @@ class ProjectModel extends Equatable {
     this.isArchived = false,
     this.isBillable = true,
     required this.createdAt,
+    this.monthlyRequiredHours = 0.0,
   });
 
   ProjectModel copyWith({
@@ -77,6 +81,7 @@ class ProjectModel extends Equatable {
     bool? isArchived,
     bool? isBillable,
     DateTime? createdAt,
+    double? monthlyRequiredHours,
   }) {
     return ProjectModel(
       id: id ?? this.id,
@@ -92,9 +97,25 @@ class ProjectModel extends Equatable {
       isArchived: isArchived ?? this.isArchived,
       isBillable: isBillable ?? this.isBillable,
       createdAt: createdAt ?? this.createdAt,
+      monthlyRequiredHours: monthlyRequiredHours ?? this.monthlyRequiredHours,
     );
   }
 
   @override
-  List<Object?> get props => [id, name, categoryId, colorValue, hourlyRate, plannedTimeHours, plannedBudget, startDate, dueDate, notes, isArchived, isBillable, createdAt];
+  List<Object?> get props => [
+    id,
+    name,
+    categoryId,
+    colorValue,
+    hourlyRate,
+    plannedTimeHours,
+    plannedBudget,
+    startDate,
+    dueDate,
+    notes,
+    isArchived,
+    isBillable,
+    createdAt,
+    monthlyRequiredHours,
+  ];
 }

@@ -25,6 +25,19 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<ToggleRemindStop>(_onToggleRemindStop);
     on<ToggleRemindBreak>(_onToggleRemindBreak);
     on<ToggleAllowOverlapTimes>(_onToggleAllowOverlapTimes);
+    on<ChangeWorkSchedule>(_onChangeWorkSchedule);
+  }
+
+  Map<int, ({String start, String end, bool enabled})> _loadWorkSchedule() {
+    final schedule = <int, ({String start, String end, bool enabled})>{};
+    for (int day = 1; day <= 7; day++) {
+      schedule[day] = (
+        start: _settingsRepository.getWorkScheduleStart(day),
+        end: _settingsRepository.getWorkScheduleEnd(day),
+        enabled: _settingsRepository.getWorkScheduleEnabled(day),
+      );
+    }
+    return schedule;
   }
 
   void _onLoadSettings(LoadSettings event, Emitter<SettingsState> emit) {
@@ -46,6 +59,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
         remindStop: _settingsRepository.getRemindStop(),
         remindBreak: _settingsRepository.getRemindBreak(),
         allowOverlapTimes: _settingsRepository.getAllowOverlapTimes(),
+        workSchedule: _loadWorkSchedule(),
       ),
     );
   }
@@ -128,5 +142,18 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   Future<void> _onToggleAllowOverlapTimes(ToggleAllowOverlapTimes event, Emitter<SettingsState> emit) async {
     await _settingsRepository.setAllowOverlapTimes(event.value);
     emit(state.copyWith(allowOverlapTimes: event.value));
+  }
+
+  Future<void> _onChangeWorkSchedule(ChangeWorkSchedule event, Emitter<SettingsState> emit) async {
+    if (event.start != null) {
+      await _settingsRepository.setWorkScheduleStart(event.weekday, event.start!);
+    }
+    if (event.end != null) {
+      await _settingsRepository.setWorkScheduleEnd(event.weekday, event.end!);
+    }
+    if (event.enabled != null) {
+      await _settingsRepository.setWorkScheduleEnabled(event.weekday, event.enabled!);
+    }
+    emit(state.copyWith(workSchedule: _loadWorkSchedule()));
   }
 }

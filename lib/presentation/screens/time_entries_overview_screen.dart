@@ -256,6 +256,8 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
   }
 
   Widget _buildTimelineBar(BuildContext context, List<TimeEntryModel> entries, ProjectRepository projectRepo) {
+    final settingsRepo = context.read<SettingsRepository>();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -282,12 +284,44 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                 final totalWidth = constraints.maxWidth;
                 const totalMinutes = 24 * 60;
 
+                // Determine work schedule for the day
+                int? dayWeekday;
+                if (entries.isNotEmpty) {
+                  dayWeekday = entries.first.startTime.weekday;
+                }
+
                 return Stack(
                   children: [
                     // Background
                     Container(
                       decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(4)),
                     ),
+                    // Work schedule overlay
+                    if (dayWeekday != null && settingsRepo.getWorkScheduleEnabled(dayWeekday)) ...[
+                      () {
+                        final startStr = settingsRepo.getWorkScheduleStart(dayWeekday!);
+                        final endStr = settingsRepo.getWorkScheduleEnd(dayWeekday);
+                        final startParts = startStr.split(':');
+                        final endParts = endStr.split(':');
+                        final workStart = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+                        final workEnd = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
+                        final left = (workStart / totalMinutes) * totalWidth;
+                        final width = ((workEnd - workStart) / totalMinutes) * totalWidth;
+                        return Positioned(
+                          left: left.clamp(0, totalWidth),
+                          width: width.clamp(0, totalWidth - left.clamp(0, totalWidth)),
+                          top: 0,
+                          bottom: 0,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15), width: 1),
+                            ),
+                          ),
+                        );
+                      }(),
+                    ],
                     // Entry segments
                     ...entries.map((entry) {
                       final project = projectRepo.getById(entry.projectId);

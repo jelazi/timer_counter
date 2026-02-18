@@ -23,6 +23,7 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
   late TextEditingController _hourlyRateController;
   late TextEditingController _plannedTimeController;
   late TextEditingController _plannedBudgetController;
+  late TextEditingController _monthlyRequiredHoursController;
   late TextEditingController _notesController;
   String? _selectedCategoryId;
   int _selectedColor = AppConstants.projectColors[0];
@@ -37,6 +38,7 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
     _hourlyRateController = TextEditingController(text: widget.project?.hourlyRate.toString() ?? '0');
     _plannedTimeController = TextEditingController(text: widget.project?.plannedTimeHours.toString() ?? '0');
     _plannedBudgetController = TextEditingController(text: widget.project?.plannedBudget.toString() ?? '0');
+    _monthlyRequiredHoursController = TextEditingController(text: widget.project?.monthlyRequiredHours.toString() ?? '0');
     _notesController = TextEditingController(text: widget.project?.notes ?? '');
 
     if (widget.project != null) {
@@ -54,6 +56,7 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
     _hourlyRateController.dispose();
     _plannedTimeController.dispose();
     _plannedBudgetController.dispose();
+    _monthlyRequiredHoursController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -172,6 +175,14 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
               ),
               const SizedBox(height: 16),
 
+              // Monthly Required Hours
+              TextField(
+                controller: _monthlyRequiredHoursController,
+                decoration: InputDecoration(labelText: tr('projects.monthly_required_hours'), suffixText: 'h'),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+
               // Dates
               Row(
                 children: [
@@ -234,6 +245,7 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
                 hourlyRate: double.tryParse(_hourlyRateController.text) ?? 0,
                 plannedTimeHours: double.tryParse(_plannedTimeController.text) ?? 0,
                 plannedBudget: double.tryParse(_plannedBudgetController.text) ?? 0,
+                monthlyRequiredHours: double.tryParse(_monthlyRequiredHoursController.text) ?? 0,
                 startDate: _startDate,
                 dueDate: _dueDate,
                 notes: _notesController.text,
