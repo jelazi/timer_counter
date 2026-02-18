@@ -1,5 +1,81 @@
 # Development Log
 
+## 2026-02-18 — Replace collapse animations with natural scrolling
+
+### What was done
+- Removed all `AnimatedSize` / `NotificationListener` / scroll-detection collapse logic from 3 screens
+- Cards that should "hide" are now part of the scrollable content — they scroll away naturally with the list
+
+#### 1. Time tracking screen (mobile)
+- Running timer card + Total Today card + "Today" header + entries are now all inside a single `ListView`
+- Project/task selector stays fixed above the scroll area
+- Removed `_showTotalCard`, `_scrollController`, `_lastScrollOffset` state variables
+
+#### 2. Time entries overview (mobile)
+- Month total card + monthly targets are now prepended as the first item in the `ListView.builder`
+- Removed `_showSummaryCards`, `_lastScrollOffset` state variables
+
+#### 3. Statistics screen (mobile)
+- Title, date range controls, project filter, summary cards, and charts are all inside a single `SingleChildScrollView`
+- Removed `_showFilters`, `_lastScrollOffset` state variables
+
+### What is the current state
+- All 3 screens: cards scroll away naturally on mobile, no animation/collapse
+- Desktop layouts unchanged
+- `flutter analyze` — no issues found
+- Delete confirmation dialog + undo SnackBar (10s) still in place
+- Settings: fixed title + time format Column layout still in place
+
+---
+
+## 2026-02-18 — Mobile UX: collapsible headers, delete confirm, time format fix
+
+### What was done
+
+#### 1. Delete confirmation restored + undo SnackBar (10s)
+- Re-added confirmation dialog before deleting time entries (was removed in previous session)
+- After confirmation + deletion, SnackBar with "Undo" appears for 10 seconds
+- Undo restores the entry + syncs to Firebase
+
+#### 2. Time tracking screen: collapsible "Total Today" card (mobile)
+- Added scroll detection on the today's entries ListView
+- When user scrolls down, the "Total Today" card and running timer card animate away (collapse)
+- When user scrolls back up, cards reappear
+- Uses `AnimatedSize` + `NotificationListener<ScrollNotification>` for smooth animation
+- Desktop layout unchanged
+
+#### 3. Time entries overview: collapsible month summary (mobile)
+- Month total card and monthly targets progress cards collapse when scrolling the day entries list
+- Same scroll detection pattern as time tracking screen
+- Desktop layout unchanged
+
+#### 4. Statistics: collapsible date picker + project filter (mobile)
+- Title "Statistics" stays fixed at top
+- Date range selector, custom range button, period navigator, and project filter collapse on scroll
+- Added `_buildHeaderControls` method for mobile-specific header without title
+- Desktop layout unchanged
+
+#### 5. Settings: fixed title on scroll
+- Extracted "Settings" title from `SingleChildScrollView` into a fixed `Column` header
+- All settings content scrolls below the fixed title using `Expanded > SingleChildScrollView`
+
+#### 6. Settings: time format — Column layout on mobile
+- Time format row (icon + label + SegmentedButton) was wrapping to multiple lines on mobile
+- On mobile: now uses a vertical Column layout — label on top, full-width SegmentedButton below
+- On desktop: keeps original ListTile with trailing SegmentedButton
+
+### Files modified
+- `lib/presentation/screens/time_entries_overview_screen.dart`
+- `lib/presentation/screens/time_tracking_screen.dart`
+- `lib/presentation/screens/statistics_screen.dart`
+- `lib/presentation/screens/settings_screen.dart`
+
+### Current state
+- `flutter analyze`: No issues found
+- All 6 changes implemented and verified
+
+---
+
 ## 2026-02-18 — 9-point fix: Firebase sync, mobile UI, backup, undo
 
 ### What was done
