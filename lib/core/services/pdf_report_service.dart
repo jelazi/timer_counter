@@ -371,181 +371,183 @@ class PdfReportService {
               ),
               pw.SizedBox(height: 1 * PdfPageFormat.mm),
 
-              // === Supplier + VS ===
-              pw.Table(
-                columnWidths: {0: pw.FixedColumnWidth(halfWidth), 1: pw.FixedColumnWidth(halfWidth)},
-                border: null,
+              // === Supplier (left) | VS + Buyer (right) — independent heights ===
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.TableRow(
-                    children: [
-                      // Left: Supplier
-                      pw.Container(
-                        height: 3.0 * PdfPageFormat.cm,
-                        decoration: const pw.BoxDecoration(
-                          border: pw.Border(top: pw.BorderSide(width: 0.5), left: pw.BorderSide(width: 0.5)),
-                        ),
-                        padding: const pw.EdgeInsets.all(3),
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                            pw.Text('Dodavatel:', style: pw.TextStyle(font: fonts.regular, fontSize: 8)),
-                            pw.Text(settings.supplier.name, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
-                            pw.Text(settings.supplier.addressLine1, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
-                            pw.Text(settings.supplier.addressLine2, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
-                            pw.SizedBox(height: 4),
-                            pw.Padding(
-                              padding: const pw.EdgeInsets.only(left: 12),
-                              child: pw.Column(
-                                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                                children: [
-                                  pw.Text('IČO: ${settings.supplier.ico}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                                  if (settings.supplier.phone.isNotEmpty) pw.Text('Mobil: ${settings.supplier.phone}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                                  if (settings.supplier.email.isNotEmpty) pw.Text('E-mail: ${settings.supplier.email}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                  // Left column: Supplier — auto height, no bottom border (continues until bank section)
+                  pw.SizedBox(
+                    width: halfWidth,
+                    child: pw.Container(
+                      height: 4.35 * PdfPageFormat.cm,
+                      decoration: const pw.BoxDecoration(
+                        border: pw.Border(top: pw.BorderSide(width: 0.5), left: pw.BorderSide(width: 0.5)),
                       ),
-                      // Right: VS
-                      pw.Container(
-                        height: 3.0 * PdfPageFormat.cm,
-                        decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.5)),
-                        padding: const pw.EdgeInsets.all(3),
-                        child: pw.Column(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
+                      padding: const pw.EdgeInsets.all(3),
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.only(left: 8),
+                            child: pw.Text('Dodavatel:', style: pw.TextStyle(font: fonts.regular, fontSize: 8)),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.only(left: 8),
+                            child: pw.Text(settings.supplier.name, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.only(left: 8),
+                            child: pw.Text(settings.supplier.addressLine1, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.only(left: 8),
+                            child: pw.Text(settings.supplier.addressLine2, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.only(left: 8),
+                            child: pw.Text('IČO: ${settings.supplier.ico}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                          ),
+                          if (settings.supplier.phone.isNotEmpty)
                             pw.Padding(
                               padding: const pw.EdgeInsets.only(left: 8),
-                              child: pw.Text('Variabilní symbol:            $vs', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                              child: pw.Text('Mobil: ${settings.supplier.phone}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
                             ),
-                          ],
-                        ),
+                          if (settings.supplier.email.isNotEmpty)
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.only(left: 8),
+                              child: pw.Text('E-mail: ${settings.supplier.email}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                            ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ],
-              ),
-
-              // === Empty left | Buyer right ===
-              pw.Table(
-                columnWidths: {0: pw.FixedColumnWidth(halfWidth), 1: pw.FixedColumnWidth(halfWidth)},
-                children: [
-                  pw.TableRow(
-                    children: [
-                      // Left: empty (just border continuation)
-                      pw.Container(
-                        height: 3.75 * PdfPageFormat.cm,
-                        decoration: const pw.BoxDecoration(border: pw.Border(left: pw.BorderSide(width: 0.5))),
-                      ),
-                      // Right: Buyer
-                      pw.Container(
-                        height: 3.75 * PdfPageFormat.cm,
-                        decoration: const pw.BoxDecoration(
-                          border: pw.Border(top: pw.BorderSide(width: 1), left: pw.BorderSide(width: 1), right: pw.BorderSide(width: 1)),
+                  // Right column: VS (small) + Buyer below
+                  pw.SizedBox(
+                    width: halfWidth,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        // VS box — small
+                        pw.Container(
+                          width: halfWidth,
+                          decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.5)),
+                          padding: const pw.EdgeInsets.all(3),
+                          child: pw.Padding(
+                            padding: const pw.EdgeInsets.only(left: 8),
+                            child: pw.Text('Variabilní symbol:            $vs', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                          ),
                         ),
-                        padding: const pw.EdgeInsets.all(3),
-                        child: pw.Row(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                            pw.Expanded(
-                              child: pw.Column(
-                                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                                children: [
-                                  pw.Padding(
-                                    padding: const pw.EdgeInsets.only(left: 8),
-                                    child: pw.Text('Odběratel:', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                                  ),
-                                  pw.SizedBox(height: 4),
-                                  pw.Padding(
-                                    padding: const pw.EdgeInsets.only(left: 8),
-                                    child: pw.Text(settings.customer.name, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
-                                  ),
-                                  pw.Padding(
-                                    padding: const pw.EdgeInsets.only(left: 8),
-                                    child: pw.Text(settings.customer.addressLine1, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
-                                  ),
-                                  pw.Padding(
-                                    padding: const pw.EdgeInsets.only(left: 8),
-                                    child: pw.Text(settings.customer.addressLine2, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            pw.Column(
-                              crossAxisAlignment: pw.CrossAxisAlignment.end,
-                              children: [
-                                pw.SizedBox(height: 8),
-                                pw.Padding(
-                                  padding: const pw.EdgeInsets.only(right: 8),
-                                  child: pw.Text('IČO: ${settings.customer.ico}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                        // Buyer box
+                        pw.Container(
+                          height: 3.75 * PdfPageFormat.cm,
+                          decoration: const pw.BoxDecoration(
+                            border: pw.Border(top: pw.BorderSide(width: 1), left: pw.BorderSide(width: 1), right: pw.BorderSide(width: 1)),
+                          ),
+                          padding: const pw.EdgeInsets.all(3),
+                          child: pw.Row(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Expanded(
+                                child: pw.Column(
+                                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                                  children: [
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.only(left: 8),
+                                      child: pw.Text('Odběratel:', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                    ),
+                                    pw.SizedBox(height: 4),
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.only(left: 8),
+                                      child: pw.Text(settings.customer.name, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                                    ),
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.only(left: 8),
+                                      child: pw.Text(settings.customer.addressLine1, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                                    ),
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.only(left: 8),
+                                      child: pw.Text(settings.customer.addressLine2, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
+                                    ),
+                                  ],
                                 ),
-                                if (settings.customer.dic.isNotEmpty)
+                              ),
+                              pw.Column(
+                                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                                children: [
+                                  pw.SizedBox(height: 8),
                                   pw.Padding(
                                     padding: const pw.EdgeInsets.only(right: 8),
-                                    child: pw.Text('DIČ: ${settings.customer.dic}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                    child: pw.Text('IČO: ${settings.customer.ico}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
                                   ),
-                              ],
-                            ),
-                          ],
+                                  if (settings.customer.dic.isNotEmpty)
+                                    pw.Padding(
+                                      padding: const pw.EdgeInsets.only(right: 8),
+                                      child: pw.Text('DIČ: ${settings.customer.dic}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
 
               // === Bank info left | empty right ===
-              pw.Table(
-                columnWidths: {0: pw.FixedColumnWidth(halfWidth), 1: pw.FixedColumnWidth(halfWidth)},
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.TableRow(
-                    children: [
-                      pw.Container(
-                        height: 2.2 * PdfPageFormat.cm,
-                        decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
-                        padding: const pw.EdgeInsets.all(3),
-                        child: pw.Padding(
-                          padding: const pw.EdgeInsets.only(left: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('Banka: ${settings.bankName}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                              pw.Text('SWIFT: ${settings.swift}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                              pw.Text('IBAN: ${settings.iban}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                              pw.RichText(
-                                text: pw.TextSpan(
-                                  children: [
-                                    pw.TextSpan(
-                                      text: 'Číslo účtu: ',
-                                      style: pw.TextStyle(font: fonts.regular, fontSize: 9),
-                                    ),
-                                    pw.TextSpan(
-                                      text: settings.accountNumber,
-                                      style: pw.TextStyle(font: fonts.bold, fontSize: 9),
-                                    ),
-                                    pw.TextSpan(
-                                      text: ' Kód banky: ',
-                                      style: pw.TextStyle(font: fonts.regular, fontSize: 9),
-                                    ),
-                                    pw.TextSpan(
-                                      text: settings.bankCode,
-                                      style: pw.TextStyle(font: fonts.bold, fontSize: 9),
-                                    ),
-                                  ],
-                                ),
+                  pw.SizedBox(
+                    width: halfWidth,
+                    child: pw.Container(
+                      height: 2.2 * PdfPageFormat.cm,
+                      decoration: pw.BoxDecoration(border: pw.Border.all(width: 1)),
+                      padding: const pw.EdgeInsets.all(3),
+                      child: pw.Padding(
+                        padding: const pw.EdgeInsets.only(left: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('Banka: ${settings.bankName}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                            pw.Text('SWIFT: ${settings.swift}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                            pw.Text('IBAN: ${settings.iban}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                            pw.RichText(
+                              text: pw.TextSpan(
+                                children: [
+                                  pw.TextSpan(
+                                    text: 'Číslo účtu: ',
+                                    style: pw.TextStyle(font: fonts.regular, fontSize: 9),
+                                  ),
+                                  pw.TextSpan(
+                                    text: settings.accountNumber,
+                                    style: pw.TextStyle(font: fonts.bold, fontSize: 9),
+                                  ),
+                                  pw.TextSpan(
+                                    text: ' Kód banky: ',
+                                    style: pw.TextStyle(font: fonts.regular, fontSize: 9),
+                                  ),
+                                  pw.TextSpan(
+                                    text: settings.bankCode,
+                                    style: pw.TextStyle(font: fonts.bold, fontSize: 9),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                      pw.Container(
-                        height: 2.2 * PdfPageFormat.cm,
-                        decoration: const pw.BoxDecoration(
-                          border: pw.Border(right: pw.BorderSide(width: 1), bottom: pw.BorderSide(width: 1.5)),
-                        ),
+                    ),
+                  ),
+                  pw.SizedBox(
+                    width: halfWidth,
+                    child: pw.Container(
+                      height: 2.2 * PdfPageFormat.cm,
+                      decoration: const pw.BoxDecoration(
+                        border: pw.Border(right: pw.BorderSide(width: 1), left: pw.BorderSide(width: 1), bottom: pw.BorderSide(width: 1)),
                       ),
-                    ],
+                    ),
                   ),
                 ],
               ),

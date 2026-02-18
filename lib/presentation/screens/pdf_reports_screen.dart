@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/services/pdf_report_service.dart';
 import '../../data/models/invoice_settings.dart';
@@ -151,6 +153,43 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
         _isGenerating = false;
         _errorMessage = e.toString();
       });
+    }
+  }
+
+  Future<void> _previewPdf(String type) async {
+    final invoiceSettings = _loadInvoiceSettings();
+    final service = PdfReportService(timeEntryRepo: context.read<TimeEntryRepository>(), projectRepo: context.read<ProjectRepository>(), taskRepo: context.read<TaskRepository>());
+
+    try {
+      Uint8List bytes;
+      String filename;
+      final monthName = _czechMonthsLower[_selectedMonth] ?? '$_selectedMonth';
+
+      switch (type) {
+        case 'report':
+          bytes = await service.generateReportPdf(_monthStart, _monthEnd, moveAnglictina: false);
+          filename = '${invoiceSettings.reportFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf';
+          break;
+        case 'rezijni':
+          bytes = await service.generateReportPdf(_monthStart, _monthEnd, moveAnglictina: true);
+          filename = '${invoiceSettings.reportRezijniFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf';
+          break;
+        case 'invoice':
+          bytes = await service.generateInvoicePdf(_monthStart, _monthEnd, invoiceSettings: invoiceSettings);
+          filename = '${invoiceSettings.invoiceFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf';
+          break;
+        default:
+          return;
+      }
+
+      final tempDir = Directory.systemTemp;
+      final tempFile = File('${tempDir.path}/$filename');
+      await tempFile.writeAsBytes(bytes);
+      await launchUrl(Uri.file(tempFile.path));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('pdf_reports.preview_error')}: $e'), backgroundColor: Colors.red));
+      }
     }
   }
 
@@ -391,18 +430,25 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                           children: [
                             Text(tr('pdf_reports.generated_files'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                             const SizedBox(height: 12),
-                            _FileInfoRow(icon: Icons.table_chart, filename: '${_resolveFilename(invoiceSettings.reportFilename)}.pdf', description: tr('pdf_reports.report_desc')),
+                            _FileInfoRow(
+                              icon: Icons.table_chart,
+                              filename: '${_resolveFilename(invoiceSettings.reportFilename)}.pdf',
+                              description: tr('pdf_reports.report_desc'),
+                              onPreview: entryCount > 0 ? () => _previewPdf('report') : null,
+                            ),
                             const SizedBox(height: 8),
                             _FileInfoRow(
                               icon: Icons.table_chart_outlined,
                               filename: '${_resolveFilename(invoiceSettings.reportRezijniFilename)}.pdf',
                               description: tr('pdf_reports.report_rezijni_desc'),
+                              onPreview: entryCount > 0 ? () => _previewPdf('rezijni') : null,
                             ),
                             const SizedBox(height: 8),
                             _FileInfoRow(
                               icon: Icons.receipt_long,
                               filename: '${_resolveFilename(invoiceSettings.invoiceFilename)}.pdf',
                               description: tr('pdf_reports.invoice_desc'),
+                              onPreview: entryCount > 0 ? () => _previewPdf('invoice') : null,
                             ),
                           ],
                         ),
@@ -974,8 +1020,9 @@ class _FileInfoRow extends StatelessWidget {
   final IconData icon;
   final String filename;
   final String description;
+  final VoidCallback? onPreview;
 
-  const _FileInfoRow({required this.icon, required this.filename, required this.description});
+  const _FileInfoRow({required this.icon, required this.filename, required this.description, this.onPreview});
 
   @override
   Widget build(BuildContext context) {
@@ -992,6 +1039,13 @@ class _FileInfoRow extends StatelessWidget {
             ],
           ),
         ),
+        if (onPreview != null)
+          IconButton(
+            onPressed: onPreview,
+            icon: const Icon(Icons.visibility),
+            tooltip: tr('pdf_reports.preview'),
+            style: IconButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.primary),
+          ),
       ],
     );
   }

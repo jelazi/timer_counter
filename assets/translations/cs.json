@@ -273,6 +273,8 @@
         "success": "PDF soubory úspěšně vygenerovány",
         "no_entries": "Žádné záznamy v tomto období",
         "preview_saved": "Náhled uložen",
+        "preview": "Náhled",
+        "preview_error": "Chyba při generování náhledu",
         "invoice_settings": "Nastavení faktury",
         "invoice_info": "Údaje na faktuře",
         "edit": "Upravit",
