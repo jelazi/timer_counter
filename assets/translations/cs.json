@@ -380,6 +380,7 @@
         "progress": "{current} / {target}h",
         "completed": "Splněno ✓",
         "remaining": "Zbývá {} h",
+        "daily_needed": "~{hours}h/den potřeba ({days} prac. dnů zbývá)",
         "description": "Seskupte projekty s měsíčním hodinovým cílem pro sledování pokroku"
     }
 }

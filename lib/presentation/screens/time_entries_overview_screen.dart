@@ -207,6 +207,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
 
   Widget _buildMonthlyTargetsProgress(BuildContext context, List<TimeEntryModel> monthEntries, ProjectRepository projectRepo) {
     final targetRepo = context.read<MonthlyHoursTargetRepository>();
+    final settingsRepo = context.read<SettingsRepository>();
     final targets = targetRepo.getAll();
     if (targets.isEmpty) return const SizedBox.shrink();
 
@@ -216,12 +217,26 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
       hoursPerProject.update(entry.projectId, (val) => val + entry.actualDurationSeconds / 3600.0, ifAbsent: () => entry.actualDurationSeconds / 3600.0);
     }
 
+    // Calculate remaining working days in current month (from tomorrow to end of month)
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+    int remainingWorkDays = 0;
+    // Include today if there's still working time, and all future days
+    for (DateTime d = today; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
+      if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
+        remainingWorkDays++;
+      }
+    }
+
     return Column(
       children: [
         ...targets.map((target) {
           final workedHours = target.projectIds.fold(0.0, (sum, pid) => sum + (hoursPerProject[pid] ?? 0));
           final progress = target.targetHours > 0 ? (workedHours / target.targetHours).clamp(0.0, 1.0) : 0.0;
           final isComplete = workedHours >= target.targetHours;
+          final remainingHours = (target.targetHours - workedHours).clamp(0.0, double.infinity);
+          final dailyNeeded = remainingWorkDays > 0 && !isComplete ? remainingHours / remainingWorkDays : 0.0;
           final projectNames = target.projectIds
               .map((id) {
                 final p = projectRepo.getById(id);
@@ -260,10 +275,21 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    projectNames,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          projectNames,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (!isComplete && remainingWorkDays > 0)
+                        Text(
+                          tr('monthly_targets.daily_needed', namedArgs: {'hours': dailyNeeded.toStringAsFixed(1), 'days': '$remainingWorkDays'}),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.tertiary, fontWeight: FontWeight.w500),
+                        ),
+                    ],
                   ),
                 ],
               ),

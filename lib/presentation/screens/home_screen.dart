@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/services/dock_service.dart';
@@ -70,35 +71,46 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
           child: const Icon(Icons.timer, color: Colors.white, size: 32),
         ),
         title: const Text('Timer Counter'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('${tr('settings.version')}: 1.0.0', style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.7))),
-            const SizedBox(height: 16),
-            Text(tr('app_about.description'), textAlign: TextAlign.center, style: Theme.of(ctx).textTheme.bodyMedium),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+        content: FutureBuilder<PackageInfo>(
+          future: PackageInfo.fromPlatform(),
+          builder: (ctx2, snapshot) {
+            final version = snapshot.hasData ? snapshot.data!.version : '...';
+            final buildNumber = snapshot.hasData ? snapshot.data!.buildNumber : '';
+            final versionText = '$version${buildNumber.isNotEmpty ? '+$buildNumber' : ''}';
+            return Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.code, size: 16, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
-                const SizedBox(width: 8),
-                Text('Flutter + Dart', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
+                Text(
+                  '${tr('settings.version')}: $versionText',
+                  style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.7)),
+                ),
+                const SizedBox(height: 16),
+                Text(tr('app_about.description'), textAlign: TextAlign.center, style: Theme.of(ctx).textTheme.bodyMedium),
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.code, size: 16, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
+                    const SizedBox(width: 8),
+                    Text('Flutter + Dart', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.person_outline, size: 16, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
+                    const SizedBox(width: 8),
+                    Text('jelazi', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text('© ${DateTime.now().year}', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.4))),
               ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.person_outline, size: 16, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
-                const SizedBox(width: 8),
-                Text('jelazi', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text('© ${DateTime.now().year}', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.4))),
-          ],
+            );
+          },
         ),
         actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('common.ok')))],
       ),

@@ -1,5 +1,45 @@
 # Development Log
 
+## 2026-02-18 (session 15) — Bug fixes: version, red line, period button, daily hours needed
+
+### What was done
+
+#### 1. Fix About dialog version (home_screen.dart)
+- Replaced hardcoded `'1.0.0'` with `PackageInfo.fromPlatform()` via `FutureBuilder`
+- Now shows the real version + build number from pubspec.yaml (same as Settings About section)
+
+#### 2. Fix statistics red line expected hours
+- The chart horizontal red line was using legacy `getDailyWorkingHours()` (defaulting to 8.0h)
+- Now uses `getExpectedHoursForDay()` from the per-weekday work schedule
+- For "today" view: uses the specific day's scheduled hours
+- For "week"/"month" views: uses the average of enabled working days' hours
+
+#### 3. Fix "Today" button label in statistics per view type
+- Added `_getCurrentPeriodLabel()` method
+- Button now shows: "Dnes/Today" (day), "Tento týden/This Week" (week), "Tento měsíc/This Month" (month), "Tento rok/This Year" (year)
+
+#### 4. Add daily hours needed to monthly target cards
+- Both time_entries_overview_screen.dart and statistics_screen.dart
+- Calculates remaining working days in the month (using work schedule settings)
+- Shows `~Xh/day needed (N work days left)` when target is not yet completed
+- Added `monthly_targets.daily_needed` translation key in both en.json and cs.json
+
+### Files modified
+- `lib/presentation/screens/home_screen.dart` — PackageInfo import, FutureBuilder for version
+- `lib/presentation/screens/statistics_screen.dart` — red line uses schedule, period button label, monthly targets daily needed
+- `lib/presentation/screens/time_entries_overview_screen.dart` — monthly targets daily needed calculation
+- `assets/translations/en.json` — added `monthly_targets.daily_needed`
+- `assets/translations/cs.json` — added `monthly_targets.daily_needed`
+
+### Current state
+- All 4 fixes implemented and build verified (macOS release)
+- About dialog shows correct version from pubspec.yaml
+- Statistics red line reflects per-day work schedule
+- Period navigation button label matches selected view type
+- Monthly target cards show daily hours needed to meet target
+
+---
+
 ## 2026-02-20 (session 14) — Refinements: sort fix, statistics navigation, monthly targets rework
 
 ### What was done

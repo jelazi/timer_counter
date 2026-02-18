@@ -78,6 +78,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
+  /// Get label for the "back to current period" button based on selected range
+  String _getCurrentPeriodLabel() {
+    switch (_selectedRange) {
+      case 'today':
+        return tr('time_tracking.today');
+      case 'week':
+        return tr('time_tracking.this_week');
+      case 'month':
+        return tr('time_tracking.this_month');
+      case 'year':
+        return tr('statistics.this_year');
+      default:
+        return tr('time_tracking.today');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<StatisticsBloc, StatisticsState>(
@@ -193,7 +209,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       _dispatchRange();
                     },
                     icon: const Icon(Icons.today, size: 18),
-                    label: Text(tr('time_tracking.today')),
+                    label: Text(_getCurrentPeriodLabel()),
                   ),
                 ],
               ],
@@ -471,6 +487,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
   Widget _buildMonthlyTargetsProgress(BuildContext context, StatisticsLoaded state) {
     final targetRepo = context.read<MonthlyHoursTargetRepository>();
+    final settingsRepo = context.read<SettingsRepository>();
     final targets = targetRepo.getAll();
     if (targets.isEmpty) return const SizedBox.shrink();
 
@@ -483,8 +500,22 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       hoursPerProject.update(entry.projectId, (val) => val + entry.actualDurationSeconds / 3600.0, ifAbsent: () => entry.actualDurationSeconds / 3600.0);
     }
 
+    // Calculate remaining working days in the viewed month
+    final monthStart = dates.$1;
+    final lastDayOfMonth = DateTime(monthStart.year, monthStart.month + 1, 0);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    // Start counting from today (or month start if viewing a future month)
+    final countFrom = today.isAfter(monthStart) ? today : monthStart;
+    int remainingWorkDays = 0;
+    for (DateTime d = countFrom; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
+      if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
+        remainingWorkDays++;
+      }
+    }
+
     return SizedBox(
-      height: 52,
+      height: 64,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: targets.length,
@@ -494,9 +525,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           final workedHours = target.projectIds.fold(0.0, (sum, pid) => sum + (hoursPerProject[pid] ?? 0));
           final progress = target.targetHours > 0 ? (workedHours / target.targetHours).clamp(0.0, 1.0) : 0.0;
           final isComplete = workedHours >= target.targetHours;
+          final remainingHours = (target.targetHours - workedHours).clamp(0.0, double.infinity);
+          final dailyNeeded = remainingWorkDays > 0 && !isComplete ? remainingHours / remainingWorkDays : 0.0;
 
           return Container(
-            width: 220,
+            width: 280,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
@@ -534,6 +567,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     color: isComplete ? Colors.green : Theme.of(context).colorScheme.primary,
                   ),
                 ),
+                if (!isComplete && remainingWorkDays > 0) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    tr('monthly_targets.daily_needed', namedArgs: {'hours': dailyNeeded.toStringAsFixed(1), 'days': '$remainingWorkDays'}),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 9, color: Theme.of(context).colorScheme.tertiary),
+                  ),
+                ],
               ],
             ),
           );
@@ -607,9 +647,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
 
     final maxY = bars.map((b) => b.hours).fold(0.0, (a, b) => a > b ? a : b);
-    // Get expected daily hours from settings
+    // Get expected daily hours from work schedule settings
     final settingsRepo = context.read<SettingsRepository>();
-    final expectedDailyHours = settingsRepo.getDailyWorkingHours();
+    double expectedDailyHours;
+    if (range == 'today') {
+      final dates = _getDateRange(range, _periodOffset);
+      expectedDailyHours = settingsRepo.getExpectedHoursForDay(dates.$1.weekday);
+    } else {
+      // Average of enabled working days
+      double totalHours = 0;
+      int enabledDays = 0;
+      for (int wd = 1; wd <= 7; wd++) {
+        final h = settingsRepo.getExpectedHoursForDay(wd);
+        if (h > 0) {
+          totalHours += h;
+          enabledDays++;
+        }
+      }
+      expectedDailyHours = enabledDays > 0 ? totalHours / enabledDays : 0;
+    }
     final chartMaxY = [maxY, expectedDailyHours].reduce((a, b) => a > b ? a : b) * 1.2;
 
     return Card(
