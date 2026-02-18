@@ -115,6 +115,8 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
+        height: 56,
         destinations: [
           NavigationDestination(icon: const Icon(Icons.access_time), selectedIcon: const Icon(Icons.access_time_filled), label: tr('nav.time_tracking')),
           NavigationDestination(icon: const Icon(Icons.list_alt_outlined), selectedIcon: const Icon(Icons.list_alt), label: tr('time_entries.title')),

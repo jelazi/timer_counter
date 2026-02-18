@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/services/firebase_sync_service_v2.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/task_model.dart';
@@ -190,11 +191,14 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
               children: [
                 Icon(Icons.schedule, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 12),
-                Text(
-                  '${tr('time_entries.month_total')}: ${TimeFormatter.formatDuration(totalSeconds, showSeconds: false)}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                Expanded(
+                  child: Text(
+                    '${tr('time_entries.month_total')}: ${TimeFormatter.formatDuration(totalSeconds, showSeconds: false)}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 Text('${entries.length} ${tr('time_entries.entries_count')}', style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
@@ -512,46 +516,73 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
         ],
       ),
       subtitle: entry.notes.isNotEmpty ? Text(entry.notes, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('$startStr - $endStr', style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(width: 16),
-          SizedBox(
-            width: 70,
-            child: Text(
-              duration,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-              textAlign: TextAlign.right,
+      trailing: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.55),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text('$startStr - $endStr', style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis),
             ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(icon: const Icon(Icons.edit_outlined, size: 18), onPressed: () => _editEntry(context, entry, settingsState), tooltip: tr('common.edit')),
-          IconButton(icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => _deleteEntry(context, entry), tooltip: tr('common.delete')),
-        ],
+            const SizedBox(width: 8),
+            Text(duration, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 16),
+                onPressed: () => _editEntry(context, entry, settingsState),
+                tooltip: tr('common.edit'),
+                padding: EdgeInsets.zero,
+                iconSize: 16,
+              ),
+            ),
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: IconButton(
+                icon: const Icon(Icons.delete_outline, size: 16),
+                onPressed: () => _deleteEntry(context, entry),
+                tooltip: tr('common.delete'),
+                padding: EdgeInsets.zero,
+                iconSize: 16,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _deleteEntry(BuildContext context, TimeEntryModel entry) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(tr('time_tracking.delete_entry')),
-        content: Text(tr('time_tracking.delete_confirm')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('common.delete'))),
-        ],
+    // Delete immediately
+    await context.read<TimeEntryRepository>().delete(entry.id);
+    if (!context.mounted) return;
+    context.read<FirebaseSyncService?>()?.deleteTimeEntry(entry.id);
+    context.read<TimerBloc>().add(const LoadRunningTimers());
+    setState(() {});
+
+    // Show SnackBar with undo
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(tr('time_tracking.entry_deleted')),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: tr('common.undo'),
+          onPressed: () async {
+            await context.read<TimeEntryRepository>().add(entry);
+            if (!context.mounted) return;
+            context.read<FirebaseSyncService?>()?.pushTimeEntry(entry);
+            context.read<TimerBloc>().add(const LoadRunningTimers());
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('time_tracking.entry_restored')), backgroundColor: Colors.green));
+            setState(() {});
+          },
+        ),
       ),
     );
-
-    if (confirmed == true && context.mounted) {
-      await context.read<TimeEntryRepository>().delete(entry.id);
-      if (!context.mounted) return;
-      context.read<TimerBloc>().add(const LoadRunningTimers());
-      setState(() {});
-    }
   }
 
   void _editEntry(BuildContext context, TimeEntryModel entry, SettingsState settingsState) {
@@ -568,6 +599,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
           final timeEntryRepo = context.read<TimeEntryRepository>();
           await timeEntryRepo.update(updatedEntry);
           if (context.mounted) {
+            context.read<FirebaseSyncService?>()?.pushTimeEntry(updatedEntry);
             context.read<TimerBloc>().add(const LoadRunningTimers());
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('time_entries.entry_updated'))));
             setState(() {});
@@ -594,6 +626,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
           final timeEntryRepo = context.read<TimeEntryRepository>();
           await timeEntryRepo.add(entry);
           if (context.mounted) {
+            context.read<FirebaseSyncService?>()?.pushTimeEntry(entry);
             context.read<TimerBloc>().add(const LoadRunningTimers());
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('time_entries.manual_entry_saved'))));
             setState(() {});

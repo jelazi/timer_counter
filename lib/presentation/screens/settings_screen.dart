@@ -5,6 +5,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/services/backup_service.dart';
@@ -12,6 +14,7 @@ import '../../core/services/firebase_sync_service_v2.dart';
 import '../../core/services/tyme_data_import_service.dart';
 import '../../core/services/tyme_export_service.dart';
 import '../../core/services/tyme_import_service.dart';
+import '../../core/utils/platform_utils.dart';
 import '../../data/models/monthly_hours_target_model.dart';
 import '../../data/repositories/category_repository.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
@@ -548,7 +551,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               );
                               if (confirm == true) {
                                 await targetRepo.delete(target.id);
-                                if (context.mounted) setState(() {});
+                                if (context.mounted) {
+                                  context.read<FirebaseSyncService?>()?.deleteMonthlyTarget(target.id);
+                                  setState(() {});
+
+                                  // Show SnackBar with undo
+                                  ScaffoldMessenger.of(context).clearSnackBars();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(tr('monthly_targets.target_deleted')),
+                                      duration: const Duration(seconds: 5),
+                                      action: SnackBarAction(
+                                        label: tr('common.undo'),
+                                        onPressed: () async {
+                                          await targetRepo.add(target);
+                                          if (context.mounted) {
+                                            context.read<FirebaseSyncService?>()?.pushMonthlyTarget(target);
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text(tr('monthly_targets.target_restored')), backgroundColor: Colors.green),
+                                            );
+                                            setState(() {});
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                }
                               }
                             },
                           ),
@@ -652,6 +680,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 } else {
                   await targetRepo.add(newTarget);
                 }
+                if (context.mounted) {
+                  context.read<FirebaseSyncService?>()?.pushMonthlyTarget(newTarget);
+                }
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
                 if (context.mounted) setState(() {});
               },
@@ -678,10 +709,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _createBackup(BuildContext context) async {
     try {
       final filename = 'timer_counter_backup_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.json';
-      final result = await FilePicker.platform.saveFile(dialogTitle: tr('settings.backup_create'), fileName: filename, type: FileType.custom, allowedExtensions: ['json']);
-      if (result == null || !context.mounted) return;
-
-      final outputPath = result.endsWith('.json') ? result : '$result.json';
 
       final backupService = BackupService(
         timeEntryRepository: context.read<TimeEntryRepository>(),
@@ -692,9 +719,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
         runningTimerRepository: context.read<RunningTimerRepository>(),
       );
 
-      final path = await backupService.exportBackup(outputPath: outputPath);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.success')}: $path'), duration: const Duration(seconds: 5)));
+      if (PlatformUtils.isMobile) {
+        // On mobile, write to temp dir then share
+        final tempDir = await getTemporaryDirectory();
+        final outputPath = '${tempDir.path}/$filename';
+        await backupService.exportBackup(outputPath: outputPath);
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(outputPath)],
+            subject: tr('settings.backup_create'),
+          ),
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('common.success'))));
+        }
+      } else {
+        // Desktop: use file picker save dialog
+        final result = await FilePicker.platform.saveFile(dialogTitle: tr('settings.backup_create'), fileName: filename, type: FileType.custom, allowedExtensions: ['json']);
+        if (result == null || !context.mounted) return;
+        final outputPath = result.endsWith('.json') ? result : '$result.json';
+        final path = await backupService.exportBackup(outputPath: outputPath);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.success')}: $path'), duration: const Duration(seconds: 5)));
+        }
       }
     } catch (e) {
       if (context.mounted) {
@@ -842,7 +889,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             } else {
               path = await exportService.exportToJson(outputPath: outputPath, startDate: startDate, endDate: endDate);
             }
-            if (context.mounted) {
+            if (PlatformUtils.isMobile) {
+              await SharePlus.instance.share(ShareParams(files: [XFile(path)], subject: tr('export.title')));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('common.success'))));
+              }
+            } else if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.success')}: $path'), duration: const Duration(seconds: 5)));
             }
           } catch (e) {
@@ -1010,12 +1062,21 @@ class _ExportDialogState extends State<_ExportDialog> {
           onPressed: () async {
             final filename = _generateFilename();
             final ext = _selectedFormat;
-            final result = await FilePicker.platform.saveFile(dialogTitle: tr('export.title'), fileName: filename, type: FileType.custom, allowedExtensions: [ext]);
-            if (result != null) {
-              final outputPath = result.endsWith('.$ext') ? result : '$result.$ext';
-              final endOfDay = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
+            final endOfDay = DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59);
+
+            if (PlatformUtils.isMobile) {
+              // On mobile, write to temp dir then share
+              final tempDir = await getTemporaryDirectory();
+              final outputPath = '${tempDir.path}/$filename';
               if (context.mounted) Navigator.pop(context);
               widget.onExport(outputPath, _startDate, endOfDay, _selectedFormat);
+            } else {
+              final result = await FilePicker.platform.saveFile(dialogTitle: tr('export.title'), fileName: filename, type: FileType.custom, allowedExtensions: [ext]);
+              if (result != null) {
+                final outputPath = result.endsWith('.$ext') ? result : '$result.$ext';
+                if (context.mounted) Navigator.pop(context);
+                widget.onExport(outputPath, _startDate, endOfDay, _selectedFormat);
+              }
             }
           },
           icon: const Icon(Icons.file_download),

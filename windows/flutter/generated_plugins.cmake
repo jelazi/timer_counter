@@ -8,6 +8,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_core
   printing
   screen_retriever_windows
+  share_plus
   system_tray
   url_launcher_windows
   window_manager
