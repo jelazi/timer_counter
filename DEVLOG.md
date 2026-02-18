@@ -1,5 +1,57 @@
 # Development Log
 
+## 2026-02-18 — Major package upgrade + iOS build fix + analysis cleanup
+
+### What was done
+
+#### Package upgrades
+- Ran `flutter pub upgrade --major-versions` — 10 packages upgraded:
+  - `firebase_core`: 3.x → 4.4.0
+  - `firebase_auth`: 5.x → 6.1.4
+  - `cloud_firestore`: 5.x → 6.1.2 (Firebase SDK 12.8.0)
+  - `fl_chart`: → 1.1.1
+  - `google_fonts`: → 8.0.2
+  - `window_manager`: → 0.5.1
+  - `launch_at_startup`: → 0.5.1
+  - `file_picker`: → 10.3.10
+  - `csv`: → 7.1.0 (breaking: `CsvToListConverter` → `CsvDecoder`, `ListToCsvConverter` → `CsvEncoder`)
+  - `package_info_plus`: → 9.0.0
+- Regenerated `firebase_options.dart` via `flutterfire configure`
+
+#### iOS build fix
+- Created `ios/Runner/Runner.entitlements` with `keychain-access-groups`
+- Updated iOS deployment target from 13.0 to 15.0 (required by cloud_firestore 6.x):
+  - `ios/Podfile`: `platform :ios, '15.0'`
+  - `ios/Runner.xcodeproj/project.pbxproj`: 3x `IPHONEOS_DEPLOYMENT_TARGET = 15.0`
+- Cleaned and reinstalled iOS pods
+
+#### macOS Podfile fix
+- Added post_install hook to enforce minimum deployment target 10.15 on all pods (fixes abseil/BoringSSL-GRPC warnings)
+
+#### Dart analysis cleanup (22 issues → 0)
+- Replaced deprecated `value:` → `initialValue:` on 11 `DropdownButtonFormField` widgets
+- Wrapped `RadioListTile` in `RadioGroup<ImportMode>` (Flutter 3.33+ API change)
+- Fixed 5 `use_build_context_synchronously` issues with `if (!context.mounted) return;` / pre-capturing scaffoldMessenger
+- Fixed `unnecessary_underscores` and `unnecessary_string_interpolations` in statistics_screen
+- Fixed CSV v7 breaking changes: `CsvDecoder`/`CsvEncoder` API
+
+### Current state
+- `flutter analyze` → **No issues found!**
+- iOS build: ✅ (`flutter build ios --debug --no-codesign`)
+- macOS build: ✅ (`flutter build macos --debug`)
+- Firebase Auth on macOS still works (keychain fix from previous session intact)
+
+### Remaining upstream warnings (cannot fix)
+- Firebase Auth plugin ObjC warnings (deprecated methods, unused variables) — upstream issue
+- gRPC/abseil/BoringSSL "Run script build phase" warnings — upstream CocoaPods issue
+
+### What is pending
+- Test iOS build on physical device
+- Test macOS app launch with new packages
+- Verify Firebase sync still works end-to-end
+
+---
+
 ## 2026-02-18 — Fix Firebase Auth keychain-error on macOS
 
 ### What was done
