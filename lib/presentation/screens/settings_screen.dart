@@ -38,10 +38,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, state) {
+        final isMobile = MediaQuery.of(context).size.width < 600;
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.surface,
           body: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(isMobile ? 16 : 24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -193,11 +194,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         onChanged: (v) => context.read<SettingsBloc>().add(ChangeWorkSchedule(weekday: weekday, enabled: v ?? false)),
                                       ),
                                     ),
-                                    SizedBox(
-                                      width: 80,
-                                      child: Text(dayNames[i], style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
+                                    Expanded(
+                                      child: Text(
+                                        dayNames[i],
+                                        style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                    const SizedBox(width: 8),
+                                    const SizedBox(width: 4),
                                     _WorkTimeButton(
                                       time: schedule.start,
                                       enabled: schedule.enabled,
@@ -215,7 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       },
                                     ),
                                     Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      padding: const EdgeInsets.symmetric(horizontal: 4),
                                       child: Text('—', style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
                                     ),
                                     _WorkTimeButton(
@@ -234,7 +238,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         }
                                       },
                                     ),
-                                    const SizedBox(width: 12),
+                                    const SizedBox(width: 8),
                                     if (schedule.enabled)
                                       Text(
                                         _calculateDayHours(schedule.start, schedule.end),
@@ -1361,18 +1365,34 @@ class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Auth & Status row
-            ListTile(
-              leading: Icon(signedIn ? Icons.person : Icons.person_off, color: signedIn ? Colors.green : theme.colorScheme.onSurfaceVariant),
-              title: Text(signedIn ? _userEmail ?? '' : tr('sync.not_signed_in')),
-              subtitle: Row(children: [_buildStatusChip()]),
-              trailing: signedIn
-                  ? TextButton.icon(
-                      onPressed: _signOut,
-                      icon: const Icon(Icons.logout, size: 18),
-                      label: Text(tr('sync.sign_out')),
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    )
-                  : FilledButton.icon(onPressed: _openAuthDialog, icon: const Icon(Icons.login, size: 18), label: Text(tr('sync.sign_in'))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(signedIn ? Icons.person : Icons.person_off, color: signedIn ? Colors.green : theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(signedIn ? _userEmail ?? '' : tr('sync.not_signed_in'), overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge),
+                        const SizedBox(height: 4),
+                        _buildStatusChip(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  signedIn
+                      ? TextButton.icon(
+                          onPressed: _signOut,
+                          icon: const Icon(Icons.logout, size: 18),
+                          label: Text(tr('sync.sign_out')),
+                          style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        )
+                      : FilledButton.icon(onPressed: _openAuthDialog, icon: const Icon(Icons.login, size: 18), label: Text(tr('sync.sign_in'))),
+                ],
+              ),
             ),
 
             if (signedIn) ...[
@@ -1599,7 +1619,7 @@ class _WorkTimeButton extends StatelessWidget {
       onTap: enabled ? onTap : null,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           border: Border.all(color: enabled ? Theme.of(context).colorScheme.outline : Theme.of(context).colorScheme.outline.withValues(alpha: 0.3)),
           borderRadius: BorderRadius.circular(8),

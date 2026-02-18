@@ -127,89 +127,153 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     final buttonMode = _getButtonMode(timerState);
     final isRunning = timerState.runningTimers.isNotEmpty;
 
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(tr('time_tracking.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(
-                      DateFormat('EEEE, d MMMM yyyy').format(DateTime.now()),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                    ),
-                  ],
-                ),
-                if (isRunning) ...[_buildRunningBadge(context, timerState, settingsState)],
-              ],
-            ),
+            // Header
+            if (isMobile) ...[
+              Text(tr('time_tracking.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(
+                DateFormat('EEEE, d MMMM yyyy', context.locale.languageCode).format(DateTime.now()),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+              ),
+              if (isRunning) ...[const SizedBox(height: 8), _buildRunningBadge(context, timerState, settingsState)],
+            ] else ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(tr('time_tracking.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(
+                        DateFormat('EEEE, d MMMM yyyy', context.locale.languageCode).format(DateTime.now()),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                      ),
+                    ],
+                  ),
+                  if (isRunning) ...[_buildRunningBadge(context, timerState, settingsState)],
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
+            // Project/Task selector card
             Card(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: DropdownButtonFormField<ProjectModel>(
-                        decoration: InputDecoration(
-                          labelText: tr('time_tracking.select_project'),
-                          prefixIcon: const Icon(Icons.folder_outlined),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                        isExpanded: true,
-                        initialValue: _selectedProject,
-                        items: projects.map((project) {
-                          return DropdownMenuItem(
-                            value: project,
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 10,
-                                  height: 10,
-                                  decoration: BoxDecoration(color: Color(project.colorValue), shape: BoxShape.circle),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(project.name, overflow: TextOverflow.ellipsis)),
-                              ],
+                padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 12),
+                child: isMobile
+                    ? Column(
+                        children: [
+                          DropdownButtonFormField<ProjectModel>(
+                            decoration: InputDecoration(
+                              labelText: tr('time_tracking.select_project'),
+                              prefixIcon: const Icon(Icons.folder_outlined),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             ),
-                          );
-                        }).toList(),
-                        onChanged: (project) {
-                          setState(() => _selectedProject = project);
-                          if (project != null) _loadTasks(project.id);
-                        },
+                            isExpanded: true,
+                            initialValue: _selectedProject,
+                            items: projects.map((project) {
+                              return DropdownMenuItem(
+                                value: project,
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(color: Color(project.colorValue), shape: BoxShape.circle),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: Text(project.name, overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (project) {
+                              setState(() => _selectedProject = project);
+                              if (project != null) _loadTasks(project.id);
+                            },
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<TaskModel>(
+                            decoration: InputDecoration(
+                              labelText: tr('time_tracking.select_task'),
+                              prefixIcon: const Icon(Icons.task_outlined),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            isExpanded: true,
+                            initialValue: _selectedTask,
+                            items: _tasks.map((task) => DropdownMenuItem(value: task, child: Text(task.name))).toList(),
+                            onChanged: (task) => setState(() => _selectedTask = task),
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(width: double.infinity, height: 48, child: _buildActionButton(buttonMode, timerState)),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: DropdownButtonFormField<ProjectModel>(
+                              decoration: InputDecoration(
+                                labelText: tr('time_tracking.select_project'),
+                                prefixIcon: const Icon(Icons.folder_outlined),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                              isExpanded: true,
+                              initialValue: _selectedProject,
+                              items: projects.map((project) {
+                                return DropdownMenuItem(
+                                  value: project,
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(color: Color(project.colorValue), shape: BoxShape.circle),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: Text(project.name, overflow: TextOverflow.ellipsis)),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (project) {
+                                setState(() => _selectedProject = project);
+                                if (project != null) _loadTasks(project.id);
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 3,
+                            child: DropdownButtonFormField<TaskModel>(
+                              decoration: InputDecoration(
+                                labelText: tr('time_tracking.select_task'),
+                                prefixIcon: const Icon(Icons.task_outlined),
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                              isExpanded: true,
+                              initialValue: _selectedTask,
+                              items: _tasks.map((task) => DropdownMenuItem(value: task, child: Text(task.name))).toList(),
+                              onChanged: (task) => setState(() => _selectedTask = task),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          SizedBox(height: 48, child: _buildActionButton(buttonMode, timerState)),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      flex: 3,
-                      child: DropdownButtonFormField<TaskModel>(
-                        decoration: InputDecoration(
-                          labelText: tr('time_tracking.select_task'),
-                          prefixIcon: const Icon(Icons.task_outlined),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        ),
-                        isExpanded: true,
-                        initialValue: _selectedTask,
-                        items: _tasks.map((task) => DropdownMenuItem(value: task, child: Text(task.name))).toList(),
-                        onChanged: (task) => setState(() => _selectedTask = task),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    SizedBox(height: 48, child: _buildActionButton(buttonMode, timerState)),
-                  ],
-                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -266,8 +330,10 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     final task = taskRepo.getById(timer.taskId);
     final projectColor = project != null ? Color(project.colorValue) : Colors.grey;
 
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 16, vertical: 8),
       decoration: BoxDecoration(
         color: projectColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(24),
@@ -286,16 +352,23 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                project?.name ?? 'Unknown',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: projectColor),
-              ),
-              Text(task?.name ?? '', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
-            ],
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  project?.name ?? 'Unknown',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: projectColor),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  task?.name ?? '',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
           const SizedBox(width: 12),
           Text(
@@ -401,76 +474,117 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     final remainingSeconds = expectedSeconds - workedSeconds;
     final isOvertime = remainingSeconds < 0;
 
+    final iconWidget = Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+      child: Icon(Icons.today, color: Theme.of(context).colorScheme.primary, size: 24),
+    );
+
+    final totalTodayColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(tr('time_tracking.total_today'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+        const SizedBox(height: 4),
+        Text(
+          TimeFormatter.formatDuration(timerState.totalTodaySeconds, showSeconds: settingsState.showSeconds),
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+
+    final remainingColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          isOvertime ? tr('time_tracking.overtime') : tr('time_tracking.remaining_today'),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          TimeFormatter.formatDuration(remainingSeconds.abs(), showSeconds: false),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: isOvertime ? Colors.orange : (remainingSeconds < 3600 ? Colors.green : null)),
+        ),
+      ],
+    );
+
+    final expectedColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(tr('time_tracking.expected_today'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+        const SizedBox(height: 4),
+        Text('${expectedHours.toStringAsFixed(1)}h', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
+      ],
+    );
+
+    final progressWidget = SizedBox(
+      width: 50,
+      height: 50,
+      child: CircularProgressIndicator(
+        value: expectedSeconds > 0 ? (workedSeconds / expectedSeconds).clamp(0.0, 1.0) : 0,
+        strokeWidth: 5,
+        backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+        color: isOvertime ? Colors.orange : Theme.of(context).colorScheme.primary,
+      ),
+    );
+
+    final divider = Container(width: 1, height: 40, color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2));
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-              child: Icon(Icons.today, color: Theme.of(context).colorScheme.primary, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 500;
+
+            if (isCompact) {
+              // Compact 2-row layout for narrow screens (phones)
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      iconWidget,
+                      const SizedBox(width: 16),
+                      Expanded(child: totalTodayColumn),
+                      if (expectedHours > 0) ...[const SizedBox(width: 12), progressWidget],
+                    ],
+                  ),
+                  if (expectedHours > 0) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const SizedBox(width: 64),
+                        Expanded(child: remainingColumn),
+                        const SizedBox(width: 16),
+                        Expanded(child: expectedColumn),
+                      ],
+                    ),
+                  ],
+                ],
+              );
+            }
+
+            // Wide layout (tablets / desktop) — original design
+            return Row(
               children: [
-                Text(
-                  tr('time_tracking.total_today'),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  TimeFormatter.formatDuration(timerState.totalTodaySeconds, showSeconds: settingsState.showSeconds),
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                ),
+                iconWidget,
+                const SizedBox(width: 16),
+                totalTodayColumn,
+                if (expectedHours > 0) ...[
+                  const SizedBox(width: 24),
+                  divider,
+                  const SizedBox(width: 24),
+                  remainingColumn,
+                  const SizedBox(width: 24),
+                  expectedColumn,
+                  const Spacer(),
+                  progressWidget,
+                ],
               ],
-            ),
-            if (expectedHours > 0) ...[
-              const SizedBox(width: 24),
-              Container(width: 1, height: 40, color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2)),
-              const SizedBox(width: 24),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isOvertime ? tr('time_tracking.overtime') : tr('time_tracking.remaining_today'),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    TimeFormatter.formatDuration(remainingSeconds.abs(), showSeconds: false),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: isOvertime ? Colors.orange : (remainingSeconds < 3600 ? Colors.green : null)),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 24),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    tr('time_tracking.expected_today'),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                  ),
-                  const SizedBox(height: 4),
-                  Text('${expectedHours.toStringAsFixed(1)}h', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
-                ],
-              ),
-              const Spacer(),
-              SizedBox(
-                width: 50,
-                height: 50,
-                child: CircularProgressIndicator(
-                  value: expectedSeconds > 0 ? (workedSeconds / expectedSeconds).clamp(0.0, 1.0) : 0,
-                  strokeWidth: 5,
-                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                  color: isOvertime ? Colors.orange : Theme.of(context).colorScheme.primary,
-                ),
-              ),
-            ],
-          ],
+            );
+          },
         ),
       ),
     );

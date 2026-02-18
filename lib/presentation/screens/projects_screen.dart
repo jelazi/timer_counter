@@ -27,10 +27,11 @@ class ProjectsScreen extends StatelessWidget {
       builder: (context, projectState) {
         return BlocBuilder<CategoryBloc, CategoryState>(
           builder: (context, categoryState) {
+            final isMobile = MediaQuery.of(context).size.width < 600;
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.surface,
               body: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.all(isMobile ? 16 : 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -55,45 +56,77 @@ class ProjectsScreen extends StatelessWidget {
       showArchived = projectState.showArchived;
     }
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(tr('projects.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-        Row(
-          children: [
-            // Search
-            SizedBox(
-              width: 200,
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: tr('common.search'),
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                ),
-                onChanged: (query) {
-                  context.read<ProjectBloc>().add(FilterProjects(searchQuery: query, showArchived: showArchived));
-                },
+    final titleWidget = Text(tr('projects.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold));
+
+    final searchField = TextField(
+      decoration: InputDecoration(
+        hintText: tr('common.search'),
+        prefixIcon: const Icon(Icons.search, size: 20),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      ),
+      onChanged: (query) {
+        context.read<ProjectBloc>().add(FilterProjects(searchQuery: query, showArchived: showArchived));
+      },
+    );
+
+    final filterChip = FilterChip(
+      label: Text(tr('projects.archived_projects')),
+      selected: showArchived,
+      onSelected: (selected) {
+        context.read<ProjectBloc>().add(FilterProjects(showArchived: selected));
+      },
+    );
+
+    final addCategoryButton = OutlinedButton.icon(
+      onPressed: () => _showAddCategoryDialog(context),
+      icon: const Icon(Icons.category, size: 18),
+      label: Text(tr('categories.add_category')),
+    );
+
+    final addProjectButton = FilledButton.icon(onPressed: () => _showAddProjectDialog(context), icon: const Icon(Icons.add), label: Text(tr('projects.add_project')));
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 600) {
+          // Narrow / mobile layout
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(child: titleWidget),
+                  addProjectButton,
+                ],
               ),
+              const SizedBox(height: 12),
+              searchField,
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: [filterChip, addCategoryButton]),
+            ],
+          );
+        }
+
+        // Wide / desktop layout
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            titleWidget,
+            Row(
+              children: [
+                SizedBox(width: 200, child: searchField),
+                const SizedBox(width: 12),
+                filterChip,
+                const SizedBox(width: 12),
+                addCategoryButton,
+                const SizedBox(width: 8),
+                addProjectButton,
+              ],
             ),
-            const SizedBox(width: 12),
-            // Toggle archived
-            FilterChip(
-              label: Text(tr('projects.archived_projects')),
-              selected: showArchived,
-              onSelected: (selected) {
-                context.read<ProjectBloc>().add(FilterProjects(showArchived: selected));
-              },
-            ),
-            const SizedBox(width: 12),
-            // Add Category
-            OutlinedButton.icon(onPressed: () => _showAddCategoryDialog(context), icon: const Icon(Icons.category, size: 18), label: Text(tr('categories.add_category'))),
-            const SizedBox(width: 8),
-            // Add Project
-            FilledButton.icon(onPressed: () => _showAddProjectDialog(context), icon: const Icon(Icons.add), label: Text(tr('projects.add_project'))),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 
