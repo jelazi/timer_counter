@@ -380,7 +380,7 @@ class PdfReportService {
                     children: [
                       // Left: Supplier
                       pw.Container(
-                        height: 2.02 * PdfPageFormat.cm,
+                        height: 3.0 * PdfPageFormat.cm,
                         decoration: const pw.BoxDecoration(
                           border: pw.Border(top: pw.BorderSide(width: 0.5), left: pw.BorderSide(width: 0.5)),
                         ),
@@ -400,7 +400,7 @@ class PdfReportService {
                                 children: [
                                   pw.Text('IČO: ${settings.supplier.ico}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
                                   if (settings.supplier.phone.isNotEmpty) pw.Text('Mobil: ${settings.supplier.phone}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                                  pw.Text('E-mail: ${settings.supplier.email}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+                                  if (settings.supplier.email.isNotEmpty) pw.Text('E-mail: ${settings.supplier.email}', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
                                 ],
                               ),
                             ),
@@ -409,7 +409,7 @@ class PdfReportService {
                       ),
                       // Right: VS
                       pw.Container(
-                        height: 2.02 * PdfPageFormat.cm,
+                        height: 3.0 * PdfPageFormat.cm,
                         decoration: pw.BoxDecoration(border: pw.Border.all(width: 0.5)),
                         padding: const pw.EdgeInsets.all(3),
                         child: pw.Column(
@@ -418,10 +418,6 @@ class PdfReportService {
                             pw.Padding(
                               padding: const pw.EdgeInsets.only(left: 8),
                               child: pw.Text('Variabilní symbol:            $vs', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                            ),
-                            pw.Padding(
-                              padding: const pw.EdgeInsets.only(left: 8),
-                              child: pw.Text('Označení obj. zákazníka:', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
                             ),
                           ],
                         ),
@@ -554,7 +550,7 @@ class PdfReportService {
                 ],
               ),
 
-              // === Dates left | Delivery address right ===
+              // === Dates ===
               pw.Table(
                 columnWidths: {0: pw.FixedColumnWidth(halfWidth), 1: pw.FixedColumnWidth(halfWidth)},
                 border: pw.TableBorder.all(width: 0.5),
@@ -576,14 +572,7 @@ class PdfReportService {
                           ),
                         ),
                       ),
-                      pw.Container(
-                        height: 2.06 * PdfPageFormat.cm,
-                        padding: const pw.EdgeInsets.all(3),
-                        child: pw.Padding(
-                          padding: const pw.EdgeInsets.only(left: 8),
-                          child: pw.Text('Dodací adresa:', style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
-                        ),
-                      ),
+                      pw.Container(height: 2.06 * PdfPageFormat.cm),
                     ],
                   ),
                 ],
