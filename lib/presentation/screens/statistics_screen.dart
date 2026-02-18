@@ -103,52 +103,75 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           backgroundColor: Theme.of(context).colorScheme.surface,
           body: Padding(
             padding: EdgeInsets.all(isMobile ? 16 : 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(context, state),
-                const SizedBox(height: 8),
-                _buildProjectFilter(context, state),
-                const SizedBox(height: 24),
-                if (state is StatisticsLoaded) ...[
-                  _buildSummaryCards(context, state),
-                  if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state)],
-                  const SizedBox(height: 24),
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        if (constraints.maxWidth < 600) {
-                          return SingleChildScrollView(
-                            child: Column(
-                              children: [
-                                SizedBox(height: 350, child: _buildDailyChart(context, state)),
-                                const SizedBox(height: 16),
-                                SizedBox(height: 400, child: _buildProjectDistribution(context, state)),
-                              ],
-                            ),
-                          );
-                        }
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(flex: 2, child: _buildDailyChart(context, state)),
-                            const SizedBox(width: 16),
-                            Expanded(child: _buildProjectDistribution(context, state)),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ] else if (state is StatisticsLoading) ...[
-                  const Expanded(child: Center(child: CircularProgressIndicator())),
-                ] else ...[
-                  Expanded(child: Center(child: Text(tr('statistics.no_data')))),
-                ],
-              ],
-            ),
+            child: isMobile ? _buildMobileStatistics(context, state, isMobile) : _buildDesktopStatistics(context, state, isMobile),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildDesktopStatistics(BuildContext context, StatisticsState state, bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader(context, state),
+        const SizedBox(height: 8),
+        _buildProjectFilter(context, state),
+        const SizedBox(height: 24),
+        if (state is StatisticsLoaded) ...[
+          _buildSummaryCards(context, state),
+          if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state)],
+          const SizedBox(height: 24),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: _buildDailyChart(context, state)),
+                const SizedBox(width: 16),
+                Expanded(child: _buildProjectDistribution(context, state)),
+              ],
+            ),
+          ),
+        ] else if (state is StatisticsLoading) ...[
+          const Expanded(child: Center(child: CircularProgressIndicator())),
+        ] else ...[
+          Expanded(child: Center(child: Text(tr('statistics.no_data')))),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMobileStatistics(BuildContext context, StatisticsState state, bool isMobile) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader(context, state),
+        const SizedBox(height: 8),
+        _buildProjectFilter(context, state),
+        const SizedBox(height: 16),
+        if (state is StatisticsLoaded) ...[
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSummaryCards(context, state),
+                  if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state)],
+                  const SizedBox(height: 16),
+                  SizedBox(height: 300, child: _buildDailyChart(context, state)),
+                  const SizedBox(height: 16),
+                  SizedBox(height: 350, child: _buildProjectDistribution(context, state)),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ),
+        ] else if (state is StatisticsLoading) ...[
+          const Expanded(child: Center(child: CircularProgressIndicator())),
+        ] else ...[
+          Expanded(child: Center(child: Text(tr('statistics.no_data')))),
+        ],
+      ],
     );
   }
 

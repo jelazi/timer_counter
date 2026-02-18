@@ -163,6 +163,24 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     return;
                   }
                   context.read<TaskBloc>().add(DeleteTask(taskId: task.id, projectId: widget.project.id));
+
+                  // Show SnackBar with undo
+                  ScaffoldMessenger.of(context).clearSnackBars();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(tr('projects.task_deleted')),
+                      duration: const Duration(seconds: 5),
+                      action: SnackBarAction(
+                        label: tr('common.undo'),
+                        onPressed: () async {
+                          context.read<TaskBloc>().add(AddTask(task));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('projects.task_restored')), backgroundColor: Colors.green));
+                          }
+                        },
+                      ),
+                    ),
+                  );
                 },
               );
             },

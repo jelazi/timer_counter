@@ -69,12 +69,19 @@ class TymeApp extends StatelessWidget {
       ],
       child: MultiBlocProvider(
         providers: [
-          BlocProvider<CategoryBloc>(create: (context) => CategoryBloc(categoryRepository: categoryRepository)..add(LoadCategories())),
+          BlocProvider<CategoryBloc>(
+            create: (context) => CategoryBloc(categoryRepository: categoryRepository, firebaseSyncService: firebaseSyncService)..add(LoadCategories()),
+          ),
           BlocProvider<ProjectBloc>(
-            create: (context) => ProjectBloc(projectRepository: projectRepository, taskRepository: taskRepository, timeEntryRepository: timeEntryRepository)..add(LoadProjects()),
+            create: (context) => ProjectBloc(
+              projectRepository: projectRepository,
+              taskRepository: taskRepository,
+              timeEntryRepository: timeEntryRepository,
+              firebaseSyncService: firebaseSyncService,
+            )..add(LoadProjects()),
           ),
           BlocProvider<TaskBloc>(
-            create: (context) => TaskBloc(taskRepository: taskRepository, timeEntryRepository: timeEntryRepository)..add(LoadAllTasks()),
+            create: (context) => TaskBloc(taskRepository: taskRepository, timeEntryRepository: timeEntryRepository, firebaseSyncService: firebaseSyncService)..add(LoadAllTasks()),
           ),
           BlocProvider<TimerBloc>(
             create: (context) => TimerBloc(

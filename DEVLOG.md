@@ -1,5 +1,75 @@
 # Development Log
 
+## 2026-02-18 — 9-point fix: Firebase sync, mobile UI, backup, undo
+
+### What was done
+
+#### 1. Deleted old unused firebase_sync_service.dart
+- `firebase_sync_service.dart` (REST API-based) was never imported — fully replaced by `firebase_sync_service_v2.dart` (Cloud Firestore SDK). Deleted the old file.
+
+#### 2. Firebase sync on edit/delete across all BLoCs and screens
+- **ProjectBloc**: Added `FirebaseSyncService?` field. Sync on add, update, archive, unarchive, delete (cascade: entries + tasks + project).
+- **TaskBloc**: Added `FirebaseSyncService?` field. Sync on add, update, delete (cascade: entries + task).
+- **CategoryBloc**: Added `FirebaseSyncService?` field. Sync on add, update, delete.
+- **app.dart**: All three BLoCs now receive `firebaseSyncService` in their `BlocProvider` creation.
+- **time_entries_overview_screen.dart**: `_deleteEntry`, edit callback, add manual entry — all call appropriate Firebase sync methods.
+- **settings_screen.dart**: Monthly target add/update/delete — all call Firebase sync methods.
+
+#### 3. Mobile UI overflow fixes
+- **Entry tile trailing Row**: Wrapped in `ConstrainedBox(maxWidth: screenWidth * 0.55)`, made time text `Flexible` with `ellipsis`, reduced IconButton sizes to 32x32 with 16px icons.
+- **Month total Row**: Wrapped text in `Expanded` with ellipsis, replaced `Spacer` with `SizedBox(width: 8)`.
+
+#### 4. Mobile bottom tabs — icons only
+- `NavigationBar` in `home_screen.dart`: Added `labelBehavior: NavigationDestinationLabelBehavior.alwaysHide` and `height: 56`.
+
+#### 5. Statistics screen scroll fix
+- Split into `_buildMobileStatistics` (everything in `SingleChildScrollView`) and `_buildDesktopStatistics` (original Row layout). Mobile now scrolls summary cards + charts together.
+
+#### 6. Mobile backup/restore via share_plus
+- Added `share_plus: ^12.0.1` dependency.
+- **_createBackup**: On mobile, writes to temp dir then shares via `SharePlus.instance.share()`. Desktop keeps `FilePicker.saveFile`.
+- **_ExportDialog**: On mobile, writes to temp dir. Desktop keeps file picker.
+- **_exportData callback**: On mobile, shares file via SharePlus after export.
+- `_restoreBackup`: `FilePicker.pickFiles()` already works on mobile — no change needed.
+
+#### 7. Delete undo history (SnackBar with Undo action)
+- **Time entry**: Removed confirmation dialog, deletes immediately, shows SnackBar with 5s undo window. Undo re-adds entry + syncs to Firebase.
+- **Project**: Keeps confirmation dialog (cascade delete). After confirming, collects all tasks + entries, deletes, then shows SnackBar with 8s undo window. Undo restores project + all tasks + all entries + syncs all to Firebase.
+- **Task**: After deletion, shows SnackBar with 5s undo window. Undo re-adds task via BLoC.
+- **Category**: Keeps confirmation dialog. After deletion, shows SnackBar with 5s undo window. Undo restores category + syncs to Firebase.
+- **Monthly target**: Keeps confirmation dialog. After deletion, shows SnackBar with 5s undo window. Undo restores target + syncs to Firebase.
+- Added translation keys: `entry_deleted`, `entry_restored`, `project_deleted`, `project_restored`, `task_deleted`, `task_restored`, `category_deleted`, `category_restored`, `target_deleted`, `target_restored` (both EN and CS).
+
+### Files modified
+- DELETED: `lib/core/services/firebase_sync_service.dart`
+- `lib/presentation/blocs/project/project_bloc.dart`
+- `lib/presentation/blocs/task/task_bloc.dart`
+- `lib/presentation/blocs/category/category_bloc.dart`
+- `lib/app/app.dart`
+- `lib/presentation/screens/home_screen.dart`
+- `lib/presentation/screens/time_entries_overview_screen.dart`
+- `lib/presentation/screens/statistics_screen.dart`
+- `lib/presentation/screens/settings_screen.dart`
+- `lib/presentation/screens/projects_screen.dart`
+- `lib/presentation/screens/project_detail_screen.dart`
+- `assets/translations/en.json`
+- `assets/translations/cs.json`
+- `pubspec.yaml` (share_plus)
+
+### Current state
+- `flutter analyze`: No issues found
+- All 9 reported issues addressed
+- Firebase sync is now complete across all CRUD operations
+- Mobile backup/export works via system share sheet
+- All deletions have undo capability via SnackBar
+
+### What is pending
+- Real device testing to confirm all changes work on iPhone
+- Consider building iOS release to verify
+- Project delete undo with very large datasets (many tasks/entries) may be slow
+
+---
+
 ## 2026-02-18 — Fix entry tile title overflow & DateFormat locale
 
 ### What was done

@@ -2,9 +2,11 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/services/firebase_sync_service_v2.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/project_model.dart';
+import '../../data/repositories/category_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
@@ -251,8 +253,50 @@ class ProjectsScreen extends StatelessWidget {
           TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('common.cancel'))),
           FilledButton(
             onPressed: () {
+              // Collect data for undo before deleting
+              final tasks = context.read<TaskRepository>().getByProject(project.id);
+              final entries = context.read<TimeEntryRepository>().getByProject(project.id);
+
               context.read<ProjectBloc>().add(DeleteProject(project.id));
               Navigator.pop(context);
+
+              // Show SnackBar with undo
+              ScaffoldMessenger.of(context).clearSnackBars();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(tr('projects.project_deleted')),
+                  duration: const Duration(seconds: 8),
+                  action: SnackBarAction(
+                    label: tr('common.undo'),
+                    onPressed: () async {
+                      if (!context.mounted) return;
+                      final projectRepo = context.read<ProjectRepository>();
+                      final firebaseSync = context.read<FirebaseSyncService?>();
+                      final taskRepo = context.read<TaskRepository>();
+                      final entryRepo = context.read<TimeEntryRepository>();
+                      final projectBloc = context.read<ProjectBloc>();
+
+                      // Restore project
+                      await projectRepo.add(project);
+                      firebaseSync?.pushProject(project);
+                      // Restore tasks
+                      for (final task in tasks) {
+                        await taskRepo.add(task);
+                        firebaseSync?.pushTask(task);
+                      }
+                      // Restore time entries
+                      for (final entry in entries) {
+                        await entryRepo.add(entry);
+                        firebaseSync?.pushTimeEntry(entry);
+                      }
+                      projectBloc.add(const LoadProjects());
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('projects.project_restored')), backgroundColor: Colors.green));
+                      }
+                    },
+                  ),
+                ),
+              );
             },
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: Text(tr('common.delete')),
@@ -300,6 +344,31 @@ class ProjectsScreen extends StatelessWidget {
             onPressed: () {
               context.read<CategoryBloc>().add(DeleteCategory(category.id));
               Navigator.pop(context);
+
+              // Show SnackBar with undo
+              ScaffoldMessenger.of(context).clearSnackBars();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(tr('categories.category_deleted')),
+                  duration: const Duration(seconds: 5),
+                  action: SnackBarAction(
+                    label: tr('common.undo'),
+                    onPressed: () async {
+                      if (!context.mounted) return;
+                      final categoryRepo = context.read<CategoryRepository>();
+                      final firebaseSync = context.read<FirebaseSyncService?>();
+                      final categoryBloc = context.read<CategoryBloc>();
+
+                      await categoryRepo.add(category);
+                      firebaseSync?.pushCategory(category);
+                      categoryBloc.add(const LoadCategories());
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('categories.category_restored')), backgroundColor: Colors.green));
+                      }
+                    },
+                  ),
+                ),
+              );
             },
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: Text(tr('common.delete')),
