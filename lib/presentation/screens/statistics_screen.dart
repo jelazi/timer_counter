@@ -682,7 +682,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   barTouchData: BarTouchData(enabled: false),
                   extraLinesData: ExtraLinesData(
                     horizontalLines: [
-                      if (expectedDailyHours > 0 && range != 'year')
+                      if (expectedDailyHours > 0 && range != 'year' && range != 'today')
                         HorizontalLine(
                           y: expectedDailyHours,
                           color: Colors.red.withValues(alpha: 0.5),
