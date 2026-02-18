@@ -1,5 +1,58 @@
 # Development Log
 
+## 2026-02-18 (session 11) — Full backup/restore, delete all data, Tyme .data import
+
+### What was done
+1. **Full Backup Service** — Created `lib/core/services/backup_service.dart` that exports/imports a complete backup of all application data:
+   - All categories (id, name, colorValue, createdAt)
+   - All projects (id, name, categoryId, colorValue, hourlyRate, plannedTimeHours, plannedBudget, startDate, dueDate, notes, isArchived, isBillable, createdAt)
+   - All tasks (id, projectId, name, hourlyRate, isBillable, notes, isArchived, createdAt, colorValue)
+   - All time entries (id, projectId, taskId, startTime, endTime, durationSeconds, notes, createdAt, isBillable)
+   - All settings: appearance (theme, language), timer (simultaneous, showSeconds, round), working hours, general (timeFormat, currency), system (launchAtStartup, minimizeToTray, allowOverlap), reminders, invoice settings (suppliers list, customers list, bank info, description, issuer, filenames), Firebase config
+
+2. **Delete All Data** — Button in settings that permanently deletes all categories, projects, tasks, time entries, and running timers. Double confirmation dialog for safety. Settings are preserved.
+
+3. **Tyme .data Import** — Created `lib/core/services/tyme_data_import_service.dart` that imports from Tyme app's native SQLite/Core Data backup format:
+   - Reads `ZADATA` table for categories (Z_ENT=9), projects (Z_ENT=8), and tasks (Z_ENT=6)
+   - Reads `ZATASKRECORD` table for time entries (Z_ENT=14) with proper Core Data timestamp conversion (seconds since 2001-01-01 → Unix → DateTime)
+   - Preserves entity relationships (category→project→task→time entry) via PK→FK mapping
+   - Imports hourly rates, billable status, notes, colors
+   - Supports all 3 import modes: merge, append, overwrite
+   - Uses `sqlite3` Dart FFI package for native SQLite read access
+
+4. **Settings Screen Updates** — Added:
+   - "Backup & Restore" section with Create Backup, Restore from Backup, Delete All Data buttons
+   - Import dialog now accepts `.data` files alongside `.json` and `.csv`
+   - Import subtitle shows "JSON / CSV / Tyme .data"
+   - Import result shows category count too
+
+5. **Export verification** — Confirmed existing JSON/CSV export already includes `start_time`, `stop_time`, `start_datetime`, `stop_datetime`, project names, task names, category names, category_id, project_id, task_id — all essential data
+
+### New/modified files
+- `lib/core/services/backup_service.dart` (NEW) — Full backup/restore service
+- `lib/core/services/tyme_data_import_service.dart` (NEW) — Tyme .data SQLite import
+- `lib/presentation/screens/settings_screen.dart` — Added backup/restore/delete sections, tyme.data import support
+- `assets/translations/cs.json` — ~15 new backup/restore/delete keys + tyme_data_format
+- `assets/translations/en.json` — ~15 new backup/restore/delete keys + tyme_data_format
+- `pubspec.yaml` — added `sqlite3: ^3.1.6` dependency
+
+### New translation keys
+- `settings.backup_restore`, `settings.backup_create`, `settings.backup_create_desc`
+- `settings.backup_restore_action`, `settings.backup_restore_desc`, `settings.backup_restore_confirm`, `settings.backup_restored`
+- `settings.delete_all_data`, `settings.delete_all_data_desc`, `settings.delete_all_data_confirm`
+- `settings.delete_all_data_final`, `settings.delete_all_data_final_confirm`, `settings.delete_all_data_success`
+- `import.tyme_data_format`
+
+### Current state
+- Full backup/restore with all data and settings implemented
+- Delete all data with double confirmation implemented
+- Tyme .data import from native SQLite backup implemented
+- `flutter analyze` passes with 0 errors, 0 warnings (21 info-level — pre-existing deprecations)
+
+### Known issues / pending
+- Pre-existing deprecation warnings (`DropdownButtonFormField.value`, `RadioListTile.groupValue`)
+- Tyme .data import maps Z_ENT entity types based on the specific Tyme version used; different versions may use different entity type IDs
+
 ## 2026-02-17 (session 10) — Firebase Cloud Sync
 
 ### What was done

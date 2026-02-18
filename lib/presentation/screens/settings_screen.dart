@@ -3,11 +3,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/services/backup_service.dart';
 import '../../core/services/firebase_sync_service.dart';
+import '../../core/services/tyme_data_import_service.dart';
 import '../../core/services/tyme_export_service.dart';
 import '../../core/services/tyme_import_service.dart';
 import '../../data/repositories/category_repository.dart';
 import '../../data/repositories/project_repository.dart';
+import '../../data/repositories/running_timer_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
@@ -282,9 +285,42 @@ class SettingsScreen extends StatelessWidget {
                       ListTile(
                         leading: const Icon(Icons.file_upload_outlined),
                         title: Text(tr('settings.import_data')),
-                        subtitle: const Text('JSON / CSV'),
+                        subtitle: const Text('JSON / CSV / Tyme .data'),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => _showImportDialog(context),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Backup & Restore
+                _buildSectionTitle(context, tr('settings.backup_restore')),
+                Card(
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.backup_outlined),
+                        title: Text(tr('settings.backup_create')),
+                        subtitle: Text(tr('settings.backup_create_desc')),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _createBackup(context),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.restore),
+                        title: Text(tr('settings.backup_restore_action')),
+                        subtitle: Text(tr('settings.backup_restore_desc')),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _restoreBackup(context),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: Icon(Icons.delete_forever, color: Theme.of(context).colorScheme.error),
+                        title: Text(tr('settings.delete_all_data'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                        subtitle: Text(tr('settings.delete_all_data_desc')),
+                        trailing: Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.error),
+                        onTap: () => _deleteAllData(context),
                       ),
                     ],
                   ),
@@ -356,6 +392,154 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _createBackup(BuildContext context) async {
+    try {
+      final filename = 'timer_counter_backup_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.json';
+      final result = await FilePicker.platform.saveFile(dialogTitle: tr('settings.backup_create'), fileName: filename, type: FileType.custom, allowedExtensions: ['json']);
+      if (result == null || !context.mounted) return;
+
+      final outputPath = result.endsWith('.json') ? result : '$result.json';
+
+      final backupService = BackupService(
+        timeEntryRepository: context.read<TimeEntryRepository>(),
+        projectRepository: context.read<ProjectRepository>(),
+        taskRepository: context.read<TaskRepository>(),
+        categoryRepository: context.read<CategoryRepository>(),
+        settingsRepository: context.read<SettingsRepository>(),
+        runningTimerRepository: context.read<RunningTimerRepository>(),
+      );
+
+      final path = await backupService.exportBackup(outputPath: outputPath);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.success')}: $path'), duration: const Duration(seconds: 5)));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.error')}: $e')));
+      }
+    }
+  }
+
+  Future<void> _restoreBackup(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(tr('settings.backup_restore_action')),
+        content: Text(tr('settings.backup_restore_confirm')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            child: Text(tr('settings.restore')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json'], dialogTitle: tr('settings.backup_restore_action'));
+    if (result == null || result.files.single.path == null || !context.mounted) return;
+
+    try {
+      final backupService = BackupService(
+        timeEntryRepository: context.read<TimeEntryRepository>(),
+        projectRepository: context.read<ProjectRepository>(),
+        taskRepository: context.read<TaskRepository>(),
+        categoryRepository: context.read<CategoryRepository>(),
+        settingsRepository: context.read<SettingsRepository>(),
+        runningTimerRepository: context.read<RunningTimerRepository>(),
+      );
+
+      final restoreResult = await backupService.restoreBackup(result.files.single.path!);
+      if (!context.mounted) return;
+
+      if (restoreResult.hasError) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.error')}: ${restoreResult.error}'), backgroundColor: Colors.red));
+      } else {
+        context.read<TimerBloc>().add(const LoadRunningTimers());
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${tr('settings.backup_restored')}: '
+              '${restoreResult.categoriesRestored} ${tr('sync.categories')}, '
+              '${restoreResult.projectsRestored} ${tr('sync.projects')}, '
+              '${restoreResult.tasksRestored} ${tr('sync.tasks')}, '
+              '${restoreResult.entriesRestored} ${tr('sync.time_entries')}'
+              '${restoreResult.settingsRestored ? ', + ${tr("settings.title")}' : ''}',
+            ),
+            duration: const Duration(seconds: 5),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.error')}: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _deleteAllData(BuildContext context) async {
+    // First confirmation
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: Icon(Icons.warning_amber, size: 48, color: Theme.of(context).colorScheme.error),
+        title: Text(tr('settings.delete_all_data')),
+        content: Text(tr('settings.delete_all_data_confirm')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(tr('common.delete')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    // Second confirmation
+    final confirmedAgain = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(tr('settings.delete_all_data_final')),
+        content: Text(tr('settings.delete_all_data_final_confirm')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(tr('settings.delete_all_data')),
+          ),
+        ],
+      ),
+    );
+    if (confirmedAgain != true || !context.mounted) return;
+
+    try {
+      final backupService = BackupService(
+        timeEntryRepository: context.read<TimeEntryRepository>(),
+        projectRepository: context.read<ProjectRepository>(),
+        taskRepository: context.read<TaskRepository>(),
+        categoryRepository: context.read<CategoryRepository>(),
+        settingsRepository: context.read<SettingsRepository>(),
+        runningTimerRepository: context.read<RunningTimerRepository>(),
+      );
+
+      await backupService.deleteAllData();
+      if (context.mounted) {
+        context.read<TimerBloc>().add(const LoadRunningTimers());
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('settings.delete_all_data_success')), backgroundColor: Colors.green));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.error')}: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
   Future<void> _exportData(BuildContext context) async {
     showDialog(
       context: context,
@@ -393,18 +577,31 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (_) => _ImportDialog(
         onImport: (filePath, mode) async {
-          final importService = TymeImportService(
-            timeEntryRepository: context.read<TimeEntryRepository>(),
-            projectRepository: context.read<ProjectRepository>(),
-            taskRepository: context.read<TaskRepository>(),
-            categoryRepository: context.read<CategoryRepository>(),
-          );
           ImportResult result;
-          if (filePath.toLowerCase().endsWith('.csv')) {
-            result = await importService.importFromCsv(filePath, mode);
+
+          if (filePath.toLowerCase().endsWith('.data')) {
+            // Tyme native SQLite format
+            final tymeDataService = TymeDataImportService(
+              timeEntryRepository: context.read<TimeEntryRepository>(),
+              projectRepository: context.read<ProjectRepository>(),
+              taskRepository: context.read<TaskRepository>(),
+              categoryRepository: context.read<CategoryRepository>(),
+            );
+            result = await tymeDataService.importFromTymeData(filePath, mode);
           } else {
-            result = await importService.importFromJson(filePath, mode);
+            final importService = TymeImportService(
+              timeEntryRepository: context.read<TimeEntryRepository>(),
+              projectRepository: context.read<ProjectRepository>(),
+              taskRepository: context.read<TaskRepository>(),
+              categoryRepository: context.read<CategoryRepository>(),
+            );
+            if (filePath.toLowerCase().endsWith('.csv')) {
+              result = await importService.importFromCsv(filePath, mode);
+            } else {
+              result = await importService.importFromJson(filePath, mode);
+            }
           }
+
           if (context.mounted) {
             if (result.hasError) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('import.error')}: ${result.error}'), backgroundColor: Colors.red));
@@ -415,7 +612,8 @@ class SettingsScreen extends StatelessWidget {
                   content: Text(
                     '${tr('import.success')}: ${result.entriesImported} entries, '
                     '${result.projectsImported} projects, '
-                    '${result.tasksImported} tasks',
+                    '${result.tasksImported} tasks, '
+                    '${result.categoriesImported} categories',
                   ),
                   duration: const Duration(seconds: 5),
                 ),
@@ -604,7 +802,7 @@ class _ImportDialogState extends State<_ImportDialog> {
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json', 'csv'], dialogTitle: tr('import.select_file'));
+    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json', 'csv', 'data'], dialogTitle: tr('import.select_file'));
     if (result != null && result.files.single.path != null) {
       setState(() => _selectedFilePath = result.files.single.path);
     }
