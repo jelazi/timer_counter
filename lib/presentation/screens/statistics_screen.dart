@@ -387,6 +387,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             Expanded(
               child: BarChart(
                 BarChartData(
+                  barTouchData: BarTouchData(enabled: false),
                   alignment: BarChartAlignment.spaceAround,
                   maxY: chartMaxY,
                   titlesData: FlTitlesData(

@@ -1,5 +1,26 @@
 # Development Log
 
+## 2026-02-18 (session 12) — Invoice PDF fixes, bar chart RangeError fix
+
+### What was done
+1. **Invoice supplier box enlarged** — Increased the supplier container height from 2.02cm to 3.0cm to properly accommodate IČO, Mobil, and Email lines. The fields were already present in the code but the box was too tight. Also made Email conditional (`if isNotEmpty`) like Mobil.
+
+2. **Removed "Dodací adresa"** — Removed the "Dodací adresa:" label from the right column of the dates section on the invoice. The cell is now empty since delivery address is not used.
+
+3. **Removed "Označení obj. zákazníka"** — Removed the "Označení obj. zákazníka:" line from the VS (variabilní symbol) box on the invoice. Only the VS line remains.
+
+4. **Fixed bar chart RangeError** — The error `RangeError (length): Invalid value: Not in inclusive range 0..36: 37` was caused by `fl_chart`'s `BarChartPainter.handleTouch` trying to access a bar index outside the list bounds when the mouse hovered over the chart edge. Fixed by disabling touch events on the bar chart (`BarTouchData(enabled: false)`), since touch interaction is not needed for the statistics chart.
+
+### Files modified
+- `lib/core/services/pdf_report_service.dart` — invoice layout: supplier box 2.02cm→3.0cm, removed "Označení obj. zákazníka", removed "Dodací adresa"
+- `lib/presentation/screens/statistics_screen.dart` — added `barTouchData: BarTouchData(enabled: false)` to prevent RangeError
+
+### Current state
+- `flutter analyze` passes with 0 errors, 0 warnings (21 info-level — pre-existing deprecations)
+
+### Known issues / pending
+- Pre-existing deprecation warnings
+
 ## 2026-02-18 (session 11) — Full backup/restore, delete all data, Tyme .data import
 
 ### What was done
