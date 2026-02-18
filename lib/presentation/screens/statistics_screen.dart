@@ -142,19 +142,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildMobileStatistics(BuildContext context, StatisticsState state, bool isMobile) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeader(context, state),
-        const SizedBox(height: 8),
-        _buildProjectFilter(context, state),
-        const SizedBox(height: 16),
-        if (state is StatisticsLoaded) ...[
+    final title = Text(tr('statistics.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold));
+
+    if (state is StatisticsLoaded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          title,
+          const SizedBox(height: 8),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _buildHeaderControls(context, state),
+                  const SizedBox(height: 8),
+                  _buildProjectFilter(context, state),
+                  const SizedBox(height: 16),
                   _buildSummaryCards(context, state),
                   if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state)],
                   const SizedBox(height: 16),
@@ -166,13 +170,33 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               ),
             ),
           ),
-        ] else if (state is StatisticsLoading) ...[
+        ],
+      );
+    } else if (state is StatisticsLoading) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          title,
+          const SizedBox(height: 8),
+          _buildHeaderControls(context, state),
+          const SizedBox(height: 8),
+          _buildProjectFilter(context, state),
           const Expanded(child: Center(child: CircularProgressIndicator())),
-        ] else ...[
+        ],
+      );
+    } else {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          title,
+          const SizedBox(height: 8),
+          _buildHeaderControls(context, state),
+          const SizedBox(height: 8),
+          _buildProjectFilter(context, state),
           Expanded(child: Center(child: Text(tr('statistics.no_data')))),
         ],
-      ],
-    );
+      );
+    }
   }
 
   Widget _buildHeader(BuildContext context, StatisticsState state) {
@@ -253,6 +277,98 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     _dispatchRange();
                   },
                   tooltip: tr('pdf_reports.next_month'),
+                ),
+                if (_periodOffset != 0) ...[
+                  const SizedBox(width: 8),
+                  FilledButton.tonalIcon(
+                    onPressed: () {
+                      setState(() => _periodOffset = 0);
+                      _dispatchRange();
+                    },
+                    icon: const Icon(Icons.today, size: 18),
+                    label: Text(_getCurrentPeriodLabel()),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        if (_selectedRange == 'custom' && state is StatisticsLoaded)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '${DateFormat('d.M.yyyy', locale).format(state.startDate)} — ${DateFormat('d.M.yyyy', locale).format(state.endDate)}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Header controls without title — used on mobile where title is shown separately
+  Widget _buildHeaderControls(BuildContext context, StatisticsState state) {
+    final locale = context.locale.languageCode;
+
+    final segmentedButton = SegmentedButton<String>(
+      segments: [
+        ButtonSegment(value: 'today', label: Text(tr('statistics.select_day'))),
+        ButtonSegment(value: 'week', label: Text(tr('statistics.select_week'))),
+        ButtonSegment(value: 'month', label: Text(tr('statistics.select_month'))),
+        ButtonSegment(value: 'year', label: Text(tr('statistics.select_year'))),
+      ],
+      selected: _selectedRange != 'custom' ? {_selectedRange} : {},
+      emptySelectionAllowed: true,
+      onSelectionChanged: (selected) {
+        if (selected.isNotEmpty) {
+          setState(() {
+            _selectedRange = selected.first;
+            _periodOffset = 0;
+          });
+          _dispatchRange();
+        }
+      },
+    );
+    final customRangeButton = FilledButton.tonal(
+      onPressed: () => _showCustomRangePicker(context),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.date_range, size: 18), const SizedBox(width: 4), Text(tr('statistics.custom_range'))]),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: double.infinity, child: segmentedButton),
+        const SizedBox(height: 8),
+        customRangeButton,
+        if (_selectedRange != 'custom')
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () {
+                    setState(() => _periodOffset--);
+                    _dispatchRange();
+                  },
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _formatRangeLabel(_selectedRange, _periodOffset, locale),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: () {
+                    setState(() => _periodOffset++);
+                    _dispatchRange();
+                  },
                 ),
                 if (_periodOffset != 0) ...[
                   const SizedBox(width: 8),

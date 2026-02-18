@@ -277,45 +277,91 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
-            _buildTotalTodayCard(context, timerState, settingsState),
-            const SizedBox(height: 24),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(tr('time_tracking.today'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: timerState.todayEntries.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.timer_off_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
-                                const SizedBox(height: 16),
-                                Text(
-                                  tr('time_tracking.no_entries_today'),
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
-                                ),
-                              ],
+            if (isMobile) ...[
+              // Cards scroll with entries on mobile
+              Expanded(
+                child: timerState.todayEntries.isEmpty
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
+                          _buildTotalTodayCard(context, timerState, settingsState),
+                          const SizedBox(height: 16),
+                          Expanded(
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.timer_off_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    tr('time_tracking.no_entries_today'),
+                                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                                  ),
+                                ],
+                              ),
                             ),
-                          )
-                        : ListView.builder(
-                            itemCount: timerState.todayEntries.length,
-                            itemBuilder: (context, index) {
-                              final entry = timerState.todayEntries[index];
-                              final projectRepo = context.read<ProjectRepository>();
-                              final taskRepo = context.read<TaskRepository>();
-                              final project = projectRepo.getById(entry.projectId);
-                              final task = taskRepo.getById(entry.taskId);
-                              return TimeEntryListItem(entry: entry, project: project, task: task, showSeconds: settingsState.showSeconds);
-                            },
                           ),
-                  ),
-                ],
+                        ],
+                      )
+                    : ListView(
+                        children: [
+                          if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
+                          _buildTotalTodayCard(context, timerState, settingsState),
+                          const SizedBox(height: 16),
+                          Text(tr('time_tracking.today'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 12),
+                          ...timerState.todayEntries.map((entry) {
+                            final projectRepo = context.read<ProjectRepository>();
+                            final taskRepo = context.read<TaskRepository>();
+                            final project = projectRepo.getById(entry.projectId);
+                            final task = taskRepo.getById(entry.taskId);
+                            return TimeEntryListItem(entry: entry, project: project, task: task, showSeconds: settingsState.showSeconds);
+                          }),
+                        ],
+                      ),
               ),
-            ),
+            ] else ...[
+              if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
+              _buildTotalTodayCard(context, timerState, settingsState),
+              const SizedBox(height: 24),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(tr('time_tracking.today'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: timerState.todayEntries.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.timer_off_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    tr('time_tracking.no_entries_today'),
+                                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: timerState.todayEntries.length,
+                              itemBuilder: (context, index) {
+                                final entry = timerState.todayEntries[index];
+                                final projectRepo = context.read<ProjectRepository>();
+                                final taskRepo = context.read<TaskRepository>();
+                                final project = projectRepo.getById(entry.projectId);
+                                final task = taskRepo.getById(entry.taskId);
+                                return TimeEntryListItem(entry: entry, project: project, task: task, showSeconds: settingsState.showSeconds);
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

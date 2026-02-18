@@ -148,6 +148,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     final timeEntryRepo = context.read<TimeEntryRepository>();
     final projectRepo = context.read<ProjectRepository>();
     final taskRepo = context.read<TaskRepository>();
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     final entries = timeEntryRepo.getByDateRange(_monthStart, _monthEnd.add(const Duration(seconds: 1)));
 
@@ -180,7 +181,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     // Month total
     final totalSeconds = entries.fold(0, (sum, e) => sum + e.actualDurationSeconds);
 
-    return Column(
+    final summaryWidgets = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Month total card
@@ -208,8 +209,27 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
 
         // Monthly targets progress
         _buildMonthlyTargetsProgress(context, entries, projectRepo),
+      ],
+    );
 
-        // Day sections
+    if (isMobile) {
+      // On mobile, summary cards scroll with the day sections
+      return ListView.builder(
+        itemCount: sortedDays.length + 1, // +1 for summary header
+        itemBuilder: (context, index) {
+          if (index == 0) return summaryWidgets;
+          final dayIndex = index - 1;
+          final day = sortedDays[dayIndex];
+          final dayEntries = grouped[day]!..sort((a, b) => b.startTime.compareTo(a.startTime));
+          return _buildDaySection(context, day, dayEntries, projectRepo, taskRepo, settingsState);
+        },
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        summaryWidgets,
         Expanded(
           child: ListView.builder(
             itemCount: sortedDays.length,
@@ -556,7 +576,20 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
   }
 
   void _deleteEntry(BuildContext context, TimeEntryModel entry) async {
-    // Delete immediately
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(tr('time_tracking.delete_entry')),
+        content: Text(tr('time_tracking.delete_confirm')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('common.delete'))),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
     await context.read<TimeEntryRepository>().delete(entry.id);
     if (!context.mounted) return;
     context.read<FirebaseSyncService?>()?.deleteTimeEntry(entry.id);
@@ -569,7 +602,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(tr('time_tracking.entry_deleted')),
-        duration: const Duration(seconds: 5),
+        duration: const Duration(seconds: 10),
         action: SnackBarAction(
           label: tr('common.undo'),
           onPressed: () async {
