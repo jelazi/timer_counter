@@ -167,7 +167,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
                         isExpanded: true,
-                        value: _selectedProject,
+                        initialValue: _selectedProject,
                         items: projects.map((project) {
                           return DropdownMenuItem(
                             value: project,
@@ -201,7 +201,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
                         isExpanded: true,
-                        value: _selectedTask,
+                        initialValue: _selectedTask,
                         items: _tasks.map((task) => DropdownMenuItem(value: task, child: Text(task.name))).toList(),
                         onChanged: (task) => setState(() => _selectedTask = task),
                       ),

@@ -264,7 +264,7 @@ class TymeImportService {
       }
 
       final content = await file.readAsString();
-      final rows = const CsvToListConverter(fieldDelimiter: ';', eol: '\n').convert(content);
+      final rows = const CsvDecoder(fieldDelimiter: ';').convert(content);
 
       if (rows.length < 2) {
         return const ImportResult(error: 'CSV file is empty or has no data rows');

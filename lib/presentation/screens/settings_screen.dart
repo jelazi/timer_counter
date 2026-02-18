@@ -1056,9 +1056,19 @@ class _ImportDialogState extends State<_ImportDialog> {
             const SizedBox(height: 16),
             Text(tr('import.import_mode'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            _buildModeOption(ImportMode.merge, tr('import.merge'), tr('import.merge_desc'), Icons.merge),
-            _buildModeOption(ImportMode.append, tr('import.append'), tr('import.append_desc'), Icons.add_circle_outline),
-            _buildModeOption(ImportMode.overwrite, tr('import.overwrite'), tr('import.overwrite_desc'), Icons.warning_amber),
+            RadioGroup<ImportMode>(
+              groupValue: _selectedMode,
+              onChanged: (v) {
+                if (v != null) setState(() => _selectedMode = v);
+              },
+              child: Column(
+                children: [
+                  _buildModeOption(ImportMode.merge, tr('import.merge'), tr('import.merge_desc'), Icons.merge),
+                  _buildModeOption(ImportMode.append, tr('import.append'), tr('import.append_desc'), Icons.add_circle_outline),
+                  _buildModeOption(ImportMode.overwrite, tr('import.overwrite'), tr('import.overwrite_desc'), Icons.warning_amber),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -1073,8 +1083,6 @@ class _ImportDialogState extends State<_ImportDialog> {
     return RadioListTile<ImportMode>(
       contentPadding: EdgeInsets.zero,
       value: mode,
-      groupValue: _selectedMode,
-      onChanged: (v) => setState(() => _selectedMode = v!),
       title: Row(children: [Icon(icon, size: 18), const SizedBox(width: 8), Text(title)]),
       subtitle: Text(description, style: Theme.of(context).textTheme.bodySmall),
     );
@@ -1107,6 +1115,7 @@ class _ImportDialogState extends State<_ImportDialog> {
       if (confirmed != true) return;
     }
 
+    if (!context.mounted) return;
     Navigator.pop(context);
     widget.onImport(_selectedFilePath!, _selectedMode);
   }

@@ -519,6 +519,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
 
     if (confirmed == true && context.mounted) {
       await context.read<TimeEntryRepository>().delete(entry.id);
+      if (!context.mounted) return;
       context.read<TimerBloc>().add(const LoadRunningTimers());
       setState(() {});
     }
@@ -673,7 +674,7 @@ class _AddManualEntryDialogState extends State<_AddManualEntryDialog> {
             DropdownButtonFormField<ProjectModel>(
               decoration: InputDecoration(labelText: tr('time_tracking.select_project'), prefixIcon: const Icon(Icons.folder_outlined)),
               isExpanded: true,
-              value: _selectedProject,
+              initialValue: _selectedProject,
               items: widget.projects.map((project) {
                 return DropdownMenuItem(
                   value: project,
@@ -701,7 +702,7 @@ class _AddManualEntryDialogState extends State<_AddManualEntryDialog> {
             DropdownButtonFormField<TaskModel>(
               decoration: InputDecoration(labelText: tr('time_tracking.select_task'), prefixIcon: const Icon(Icons.task_outlined)),
               isExpanded: true,
-              value: _selectedTask,
+              initialValue: _selectedTask,
               items: _tasks.map((task) => DropdownMenuItem(value: task, child: Text(task.name))).toList(),
               onChanged: (task) => setState(() => _selectedTask = task),
             ),
@@ -996,7 +997,7 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
             DropdownButtonFormField<ProjectModel>(
               decoration: InputDecoration(labelText: tr('time_tracking.select_project'), prefixIcon: const Icon(Icons.folder_outlined)),
               isExpanded: true,
-              value: _selectedProject,
+              initialValue: _selectedProject,
               items: widget.projects.map((project) {
                 return DropdownMenuItem(
                   value: project,
@@ -1024,7 +1025,7 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
             DropdownButtonFormField<TaskModel>(
               decoration: InputDecoration(labelText: tr('time_tracking.select_task'), prefixIcon: const Icon(Icons.task_outlined)),
               isExpanded: true,
-              value: _selectedTask,
+              initialValue: _selectedTask,
               items: _tasks.map((task) => DropdownMenuItem(value: task, child: Text(task.name))).toList(),
               onChanged: (task) => setState(() => _selectedTask = task),
             ),

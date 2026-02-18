@@ -350,7 +350,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         Expanded(
                           child: DropdownButtonFormField<int>(
                             decoration: InputDecoration(labelText: tr('statistics.select_year')),
-                            value: selectedYear,
+                            initialValue: selectedYear,
                             items: List.generate(now.year - 2019, (i) => 2020 + i).map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
                             onChanged: (v) {
                               if (v != null) setDialogState(() => selectedYear = v);
@@ -361,7 +361,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         Expanded(
                           child: DropdownButtonFormField<int>(
                             decoration: InputDecoration(labelText: tr('statistics.select_month')),
-                            value: selectedMonth,
+                            initialValue: selectedMonth,
                             items: List.generate(
                               12,
                               (i) => i + 1,
@@ -379,7 +379,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: DropdownButtonFormField<int>(
                       decoration: InputDecoration(labelText: tr('statistics.select_year')),
-                      value: selectedYear,
+                      initialValue: selectedYear,
                       isExpanded: true,
                       items: List.generate(now.year - 2019, (i) => 2020 + i).map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
                       onChanged: (v) {
@@ -519,7 +519,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: targets.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final target = targets[index];
           final workedHours = target.projectIds.fold(0.0, (sum, pid) => sum + (hoursPerProject[pid] ?? 0));
@@ -598,7 +598,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         final hour = entry.startTime.hour;
         hourlySeconds[hour] += entry.actualDurationSeconds;
       }
-      bars = List.generate(24, (i) => _ChartBar(label: '${i.toString().padLeft(2, '0')}', hours: hourlySeconds[i] / 3600));
+      bars = List.generate(24, (i) => _ChartBar(label: i.toString().padLeft(2, '0'), hours: hourlySeconds[i] / 3600));
     } else if (range == 'week') {
       // Show all 7 days of the week (Mon-Sun)
       final weekStart = state.startDate;

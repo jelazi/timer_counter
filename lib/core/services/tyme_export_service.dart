@@ -242,7 +242,7 @@ class TymeExportService {
       ]);
     }
 
-    final csvOutput = const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
+    final csvOutput = const CsvEncoder(fieldDelimiter: ';').convert(rows);
 
     final filePath = outputPath ?? await _getDefaultExportPath(extension: 'csv');
     final file = File(filePath);

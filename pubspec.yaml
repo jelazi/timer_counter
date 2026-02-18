@@ -24,37 +24,37 @@ dependencies:
   # UI
   cupertino_icons: ^1.0.8
   flutter_svg: ^2.0.17
-  google_fonts: ^6.2.1
-  fl_chart: ^0.70.2
+  google_fonts: ^8.0.2
+  fl_chart: ^1.1.1
   intl: ^0.20.2
 
   # System Tray
   system_tray: ^2.0.3
-  window_manager: ^0.4.3
-  launch_at_startup: ^0.3.1
+  window_manager: ^0.5.1
+  launch_at_startup: ^0.5.1
 
   # Utils
   uuid: ^3.0.6
   path_provider: ^2.1.5
   url_launcher: ^6.3.1
   collection: ^1.19.1
-  file_picker: ^8.0.0
+  file_picker: ^10.3.10
 
   # PDF/CSV Export
   pdf: ^3.11.2
   printing: ^5.13.5
-  csv: ^6.0.0
+  csv: ^7.1.0
 
   # Provider for dependency injection
   provider: ^6.1.2
   http: ^1.6.0
   sqlite3: ^3.1.6
-  package_info_plus: ^8.3.0
+  package_info_plus: ^9.0.0
 
   # Firebase
-  firebase_core: ^3.9.0
-  firebase_auth: ^5.4.0
-  cloud_firestore: ^5.6.0
+  firebase_core: ^4.4.0
+  firebase_auth: ^6.1.4
+  cloud_firestore: ^6.1.2
 
 dev_dependencies:
   flutter_test:

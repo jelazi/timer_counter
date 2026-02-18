@@ -131,6 +131,8 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
       if (overwrite != true) return;
     }
 
+    if (!mounted) return;
+
     setState(() {
       _isGenerating = true;
       _generatedFiles = null;
@@ -272,7 +274,7 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                                   width: 200,
                                   child: DropdownButtonFormField<int>(
                                     decoration: InputDecoration(labelText: tr('pdf_reports.month'), prefixIcon: const Icon(Icons.calendar_month), isDense: true),
-                                    value: _selectedMonth,
+                                    initialValue: _selectedMonth,
                                     items: List.generate(12, (i) {
                                       final m = i + 1;
                                       return DropdownMenuItem(value: m, child: Text(_czechMonths[m]!));
@@ -285,7 +287,7 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                                   width: 140,
                                   child: DropdownButtonFormField<int>(
                                     decoration: InputDecoration(labelText: tr('pdf_reports.year'), prefixIcon: const Icon(Icons.date_range), isDense: true),
-                                    value: _selectedYear,
+                                    initialValue: _selectedYear,
                                     items: List.generate(7, (i) {
                                       final y = DateTime.now().year - 3 + i;
                                       return DropdownMenuItem(value: y, child: Text('$y'));
@@ -928,8 +930,9 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> with Sin
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
               await _saveSupplierToList();
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('pdf_reports.supplier_saved'))));
+              messenger.showSnackBar(SnackBar(content: Text(tr('pdf_reports.supplier_saved'))));
             },
             icon: const Icon(Icons.save, size: 16),
             label: Text(tr('pdf_reports.save_to_list')),
@@ -988,8 +991,9 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> with Sin
           const SizedBox(height: 8),
           OutlinedButton.icon(
             onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
               await _saveCustomerToList();
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('pdf_reports.customer_saved'))));
+              messenger.showSnackBar(SnackBar(content: Text(tr('pdf_reports.customer_saved'))));
             },
             icon: const Icon(Icons.save, size: 16),
             label: Text(tr('pdf_reports.save_to_list')),
