@@ -17,6 +17,7 @@ class SettingsState extends Equatable {
   final bool remindStop;
   final bool remindBreak;
   final bool allowOverlapTimes;
+  final Map<int, ({String start, String end, bool enabled})> workSchedule;
 
   const SettingsState({
     this.themeMode = 'system',
@@ -35,6 +36,7 @@ class SettingsState extends Equatable {
     this.remindStop = false,
     this.remindBreak = false,
     this.allowOverlapTimes = false,
+    this.workSchedule = const {},
   });
 
   SettingsState copyWith({
@@ -54,6 +56,7 @@ class SettingsState extends Equatable {
     bool? remindStop,
     bool? remindBreak,
     bool? allowOverlapTimes,
+    Map<int, ({String start, String end, bool enabled})>? workSchedule,
   }) {
     return SettingsState(
       themeMode: themeMode ?? this.themeMode,
@@ -72,6 +75,7 @@ class SettingsState extends Equatable {
       remindStop: remindStop ?? this.remindStop,
       remindBreak: remindBreak ?? this.remindBreak,
       allowOverlapTimes: allowOverlapTimes ?? this.allowOverlapTimes,
+      workSchedule: workSchedule ?? this.workSchedule,
     );
   }
 
@@ -93,5 +97,6 @@ class SettingsState extends Equatable {
     remindStop,
     remindBreak,
     allowOverlapTimes,
+    workSchedule,
   ];
 }

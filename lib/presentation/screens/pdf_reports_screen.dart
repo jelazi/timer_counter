@@ -27,6 +27,7 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
   bool _isGenerating = false;
   List<String>? _generatedFiles;
   String? _errorMessage;
+  List<String> _selectedProjectIds = [];
 
   @override
   void initState() {
@@ -34,6 +35,7 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
     final now = DateTime.now();
     _selectedYear = now.year;
     _selectedMonth = now.month;
+    _selectedProjectIds = context.read<SettingsRepository>().getPdfReportProjectIds();
   }
 
   static const Map<int, String> _czechMonths = {
@@ -142,7 +144,13 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
         taskRepo: context.read<TaskRepository>(),
       );
 
-      final paths = await service.generateAllReports(_monthStart, _monthEnd, outputDir, invoiceSettings: invoiceSettings);
+      final paths = await service.generateAllReports(
+        _monthStart,
+        _monthEnd,
+        outputDir,
+        invoiceSettings: invoiceSettings,
+        projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds,
+      );
 
       setState(() {
         _isGenerating = false;
@@ -167,15 +175,15 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
 
       switch (type) {
         case 'report':
-          bytes = await service.generateReportPdf(_monthStart, _monthEnd, moveAnglictina: false);
+          bytes = await service.generateReportPdf(_monthStart, _monthEnd, moveAnglictina: false, projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds);
           filename = '${invoiceSettings.reportFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf';
           break;
         case 'rezijni':
-          bytes = await service.generateReportPdf(_monthStart, _monthEnd, moveAnglictina: true);
+          bytes = await service.generateReportPdf(_monthStart, _monthEnd, moveAnglictina: true, projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds);
           filename = '${invoiceSettings.reportRezijniFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf';
           break;
         case 'invoice':
-          bytes = await service.generateInvoicePdf(_monthStart, _monthEnd, invoiceSettings: invoiceSettings);
+          bytes = await service.generateInvoicePdf(_monthStart, _monthEnd, invoiceSettings: invoiceSettings, projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds);
           filename = '${invoiceSettings.invoiceFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf';
           break;
         default:
@@ -204,7 +212,12 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
   @override
   Widget build(BuildContext context) {
     final timeEntryRepo = context.read<TimeEntryRepository>();
-    final entries = timeEntryRepo.getByDateRange(_monthStart, _monthEnd);
+    final projectRepo = context.read<ProjectRepository>();
+    final allProjects = projectRepo.getAll().where((p) => !p.isArchived).toList();
+    var entries = timeEntryRepo.getByDateRange(_monthStart, _monthEnd);
+    if (_selectedProjectIds.isNotEmpty) {
+      entries = entries.where((e) => _selectedProjectIds.contains(e.projectId)).toList();
+    }
     final totalSeconds = entries.fold<int>(0, (sum, e) => sum + e.actualDurationSeconds);
     final totalHours = totalSeconds / 3600;
     final entryCount = entries.length;
@@ -344,6 +357,62 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                                   color: Theme.of(context).colorScheme.tertiary,
                                 ),
                               ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Project filter
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(tr('pdf_reports.project_filter'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                const Spacer(),
+                                if (_selectedProjectIds.isNotEmpty)
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() => _selectedProjectIds = []);
+                                      context.read<SettingsRepository>().setPdfReportProjectIds([]);
+                                    },
+                                    child: Text(tr('common.clear')),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _selectedProjectIds.isEmpty ? tr('pdf_reports.all_projects') : tr('pdf_reports.filtered_projects', args: ['${_selectedProjectIds.length}']),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: allProjects.map((project) {
+                                final isSelected = _selectedProjectIds.contains(project.id);
+                                return FilterChip(
+                                  label: Text(project.name),
+                                  selected: isSelected,
+                                  selectedColor: Color(project.colorValue).withValues(alpha: 0.3),
+                                  avatar: CircleAvatar(backgroundColor: Color(project.colorValue), radius: 8),
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      if (selected) {
+                                        _selectedProjectIds.add(project.id);
+                                      } else {
+                                        _selectedProjectIds.remove(project.id);
+                                      }
+                                    });
+                                    context.read<SettingsRepository>().setPdfReportProjectIds(_selectedProjectIds);
+                                  },
+                                );
+                              }).toList(),
                             ),
                           ],
                         ),

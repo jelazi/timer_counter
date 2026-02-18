@@ -1,5 +1,68 @@
 # Development Log
 
+## 2026-02-19 (session 13) — Three major features: project filter, work schedule, monthly hours
+
+### What was done
+
+#### Feature 1: PDF Reports & Statistics Project Filter
+- Added `pdfReportProjectIds` setting in Hive (persisted list of project IDs)
+- `SettingsRepository`: `getPdfReportProjectIds()` / `setPdfReportProjectIds()` methods
+- `PdfReportService`: Added `projectIds` parameter to `_processEntries()`, `generateReportPdf()`, `generateInvoicePdf()`, `generateAllReports()` — filters entries before processing
+- `StatisticsBloc`: Added `FilterStatisticsProjects` event, `filteredProjectIds` in state, filters entries in `_loadStats()`, saves/loads filter from settings
+- `StatisticsBloc` constructor now takes `SettingsRepository` (updated in `app.dart`)
+- **PDF Reports Screen**: Project filter card with FilterChip per project, saved to Hive, applied to preview and generate
+- **Statistics Screen**: Horizontal scrollable project filter chips below header, with clear button
+
+#### Feature 2: Per-Weekday Work Schedule
+- Added `workSchedulePrefix` constant for Hive keys
+- `SettingsRepository`: Per-weekday `getWorkScheduleStart/End/Enabled()`, `setWorkScheduleStart/End/Enabled()`, `getTodayExpectedHours()`, `getExpectedHoursForDay()` — defaults Mon-Fri 08:00-16:30 enabled, Sat-Sun disabled
+- `SettingsState`: Added `workSchedule` map (weekday → start, end, enabled record)
+- `SettingsBloc`: `ChangeWorkSchedule` event, `_loadWorkSchedule()` helper, loads schedule on `LoadSettings`
+- **Settings Screen**: Per-day schedule editor with checkbox (enabled), time picker buttons (start/end), calculated hours display
+- **Time Tracking Screen**: `_buildTotalTodayCard()` now shows remaining work today, overtime indicator, expected hours, circular progress
+- **Time Entries Overview Screen**: `_buildTimelineBar()` now shows work schedule period as a subtle background overlay
+- **Statistics Screen**: Added expected daily hours dashed red line on bar chart via `ExtraLinesData`
+
+#### Feature 3: Monthly Required Hours Per Project
+- `ProjectModel`: Added `@HiveField(13) monthlyRequiredHours` (default 0.0), updated `copyWith`, `props`
+- `project_model.g.dart`: Updated adapter to read/write field 13
+- **ProjectFormDialog**: Added `monthlyRequiredHours` text field
+- **Project Detail Screen**: Monthly target section with progress bar, worked/remaining hours, completion status
+- **Projects Screen** (`_ProjectCard`): Monthly progress bar with worked/required hours display
+
+#### Translations
+- Added keys to both EN and CS: `remaining_today`, `overtime`, `expected_today`, `monthly_required_hours`, `monthly_target`, `monthly_worked`, `monthly_remaining`, `monthly_completed`, `monthly_short`, `work_schedule`, `work_schedule_desc`, day names (Mon-Sun), `clear`, `project_filter`, `all_projects`, `filtered_projects`
+
+### Files modified
+- `lib/core/constants/app_constants.dart` — new Hive keys
+- `lib/data/models/project_model.dart` — monthlyRequiredHours field
+- `lib/data/models/project_model.g.dart` — updated adapter
+- `lib/data/repositories/settings_repository.dart` — project filter + work schedule methods
+- `lib/core/services/pdf_report_service.dart` — projectIds filter
+- `lib/app/app.dart` — StatisticsBloc settingsRepository param
+- `lib/presentation/blocs/settings/settings_state.dart` — workSchedule field
+- `lib/presentation/blocs/settings/settings_event.dart` — ChangeWorkSchedule event
+- `lib/presentation/blocs/settings/settings_bloc.dart` — work schedule handler
+- `lib/presentation/blocs/statistics/statistics_event.dart` — FilterStatisticsProjects
+- `lib/presentation/blocs/statistics/statistics_state.dart` — filteredProjectIds
+- `lib/presentation/blocs/statistics/statistics_bloc.dart` — project filter logic
+- `lib/presentation/screens/pdf_reports_screen.dart` — project filter UI
+- `lib/presentation/screens/statistics_screen.dart` — project filter + expected hours line
+- `lib/presentation/screens/settings_screen.dart` — work schedule editor + _WorkTimeButton
+- `lib/presentation/screens/time_tracking_screen.dart` — remaining work today
+- `lib/presentation/screens/time_entries_overview_screen.dart` — work period overlay
+- `lib/presentation/screens/project_detail_screen.dart` — monthly hours info
+- `lib/presentation/screens/projects_screen.dart` — monthly hours in card
+- `lib/presentation/widgets/project_form_dialog.dart` — monthlyRequiredHours field
+- `assets/translations/en.json` — new keys
+- `assets/translations/cs.json` — new keys
+
+### Current state
+- `flutter analyze` passes with 0 errors, 0 warnings (info-level deprecations only)
+
+### Known issues / pending
+- Pre-existing deprecation warnings (Flutter 3.33+ deprecated DropdownButtonFormField.value → initialValue, Radio.groupValue, etc.)
+
 ## 2026-02-18 (session 12) — Invoice PDF fixes, bar chart RangeError fix
 
 ### What was done

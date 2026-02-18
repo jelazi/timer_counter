@@ -374,6 +374,33 @@ class _ProjectCard extends StatelessWidget {
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
                       ),
                     ],
+                    if (project.monthlyRequiredHours > 0) ...[
+                      const SizedBox(height: 4),
+                      () {
+                        final now = DateTime.now();
+                        final monthStart = DateTime(now.year, now.month, 1);
+                        final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+                        final monthEntries = timeEntryRepo.getByDateRange(monthStart, monthEnd);
+                        final monthSeconds = monthEntries.where((e) => e.projectId == project.id).fold<int>(0, (sum, e) => sum + e.actualDurationSeconds);
+                        final monthHours = monthSeconds / 3600;
+                        final progress = monthHours / project.monthlyRequiredHours;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            LinearProgressIndicator(
+                              value: progress.clamp(0.0, 1.0),
+                              backgroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
+                              valueColor: AlwaysStoppedAnimation(progress >= 1.0 ? Colors.green : Colors.orange),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${monthHours.toStringAsFixed(1)} / ${project.monthlyRequiredHours.toStringAsFixed(0)}h ${tr('projects.monthly_short')}',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: progress >= 1.0 ? Colors.green : Colors.orange, fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        );
+                      }(),
+                    ],
                   ],
                 ),
               ),

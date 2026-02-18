@@ -394,6 +394,13 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
   }
 
   Widget _buildTotalTodayCard(BuildContext context, TimerRunning timerState, SettingsState settingsState) {
+    final settingsRepo = context.read<SettingsRepository>();
+    final expectedHours = settingsRepo.getTodayExpectedHours();
+    final workedSeconds = timerState.totalTodaySeconds;
+    final expectedSeconds = (expectedHours * 3600).round();
+    final remainingSeconds = expectedSeconds - workedSeconds;
+    final isOvertime = remainingSeconds < 0;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -419,6 +426,50 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                 ),
               ],
             ),
+            if (expectedHours > 0) ...[
+              const SizedBox(width: 24),
+              Container(width: 1, height: 40, color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2)),
+              const SizedBox(width: 24),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isOvertime ? tr('time_tracking.overtime') : tr('time_tracking.remaining_today'),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    TimeFormatter.formatDuration(remainingSeconds.abs(), showSeconds: false),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: isOvertime ? Colors.orange : (remainingSeconds < 3600 ? Colors.green : null)),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 24),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('time_tracking.expected_today'),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('${expectedHours.toStringAsFixed(1)}h', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
+                ],
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 50,
+                height: 50,
+                child: CircularProgressIndicator(
+                  value: expectedSeconds > 0 ? (workedSeconds / expectedSeconds).clamp(0.0, 1.0) : 0,
+                  strokeWidth: 5,
+                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                  color: isOvertime ? Colors.orange : Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
           ],
         ),
       ),

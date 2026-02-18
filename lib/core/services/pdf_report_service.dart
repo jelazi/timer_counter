@@ -64,8 +64,11 @@ class PdfReportService {
 
   /// Process time entries for a given month and return structured data.
   /// If [moveAnglictina] is true, entries with task name "Angličtina" are merged into "Režijní čas".
-  _ReportData _processEntries(DateTime monthStart, DateTime monthEnd, {bool moveAnglictina = false}) {
-    final entries = timeEntryRepo.getByDateRange(monthStart, monthEnd);
+  _ReportData _processEntries(DateTime monthStart, DateTime monthEnd, {bool moveAnglictina = false, List<String>? projectIds}) {
+    var entries = timeEntryRepo.getByDateRange(monthStart, monthEnd);
+    if (projectIds != null && projectIds.isNotEmpty) {
+      entries = entries.where((e) => projectIds.contains(e.projectId)).toList();
+    }
     final year = monthStart.year;
     final month = monthStart.month;
 
@@ -110,9 +113,9 @@ class PdfReportService {
   }
 
   /// Generate the monthly report PDF (table with days x tasks).
-  Future<Uint8List> generateReportPdf(DateTime monthStart, DateTime monthEnd, {bool moveAnglictina = false}) async {
+  Future<Uint8List> generateReportPdf(DateTime monthStart, DateTime monthEnd, {bool moveAnglictina = false, List<String>? projectIds}) async {
     final fonts = await _loadFonts();
-    final data = _processEntries(monthStart, monthEnd, moveAnglictina: moveAnglictina);
+    final data = _processEntries(monthStart, monthEnd, moveAnglictina: moveAnglictina, projectIds: projectIds);
     final numDays = DateTime(data.year, data.month + 1, 0).day;
     final monthName = _czechMonths[data.month] ?? '${data.month}';
 
@@ -292,10 +295,10 @@ class PdfReportService {
   }
 
   /// Generate invoice PDF matching the Python script layout.
-  Future<Uint8List> generateInvoicePdf(DateTime monthStart, DateTime monthEnd, {InvoiceSettings? invoiceSettings}) async {
+  Future<Uint8List> generateInvoicePdf(DateTime monthStart, DateTime monthEnd, {InvoiceSettings? invoiceSettings, List<String>? projectIds}) async {
     final settings = invoiceSettings ?? const InvoiceSettings();
     final fonts = await _loadFonts();
-    final data = _processEntries(monthStart, monthEnd);
+    final data = _processEntries(monthStart, monthEnd, projectIds: projectIds);
 
     // Calculate totals from processed data
     int grandTotalMinutes = 0;
@@ -771,7 +774,7 @@ class PdfReportService {
 
   /// Generate all 3 PDFs and save them to [outputDir].
   /// Returns the list of generated file paths.
-  Future<List<String>> generateAllReports(DateTime monthStart, DateTime monthEnd, String outputDir, {InvoiceSettings? invoiceSettings}) async {
+  Future<List<String>> generateAllReports(DateTime monthStart, DateTime monthEnd, String outputDir, {InvoiceSettings? invoiceSettings, List<String>? projectIds}) async {
     final settings = invoiceSettings ?? const InvoiceSettings();
     final month = monthStart.month;
     final year = monthStart.year;
@@ -784,19 +787,19 @@ class PdfReportService {
     final paths = <String>[];
 
     // 1. Report (original)
-    final reportBytes = await generateReportPdf(monthStart, monthEnd, moveAnglictina: false);
+    final reportBytes = await generateReportPdf(monthStart, monthEnd, moveAnglictina: false, projectIds: projectIds);
     final reportPath = '$outputDir/${resolveFilename(settings.reportFilename)}.pdf';
     await File(reportPath).writeAsBytes(reportBytes);
     paths.add(reportPath);
 
     // 2. Report (režijní variant)
-    final rezijniBytes = await generateReportPdf(monthStart, monthEnd, moveAnglictina: true);
+    final rezijniBytes = await generateReportPdf(monthStart, monthEnd, moveAnglictina: true, projectIds: projectIds);
     final rezijniPath = '$outputDir/${resolveFilename(settings.reportRezijniFilename)}.pdf';
     await File(rezijniPath).writeAsBytes(rezijniBytes);
     paths.add(rezijniPath);
 
     // 3. Invoice
-    final invoiceBytes = await generateInvoicePdf(monthStart, monthEnd, invoiceSettings: settings);
+    final invoiceBytes = await generateInvoicePdf(monthStart, monthEnd, invoiceSettings: settings, projectIds: projectIds);
     final invoicePath = '$outputDir/${resolveFilename(settings.invoiceFilename)}.pdf';
     await File(invoicePath).writeAsBytes(invoiceBytes);
     paths.add(invoicePath);

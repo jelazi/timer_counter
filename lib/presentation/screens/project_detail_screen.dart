@@ -104,6 +104,43 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 value: TimeFormatter.formatCurrency(widget.project.plannedBudget - TimeFormatter.calculateRevenue(totalSeconds, widget.project.hourlyRate), 'CZK'),
               ),
             ],
+            if (widget.project.monthlyRequiredHours > 0) ...[
+              const Divider(height: 24),
+              Text(tr('projects.monthly_target'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              () {
+                final now = DateTime.now();
+                final monthStart = DateTime(now.year, now.month, 1);
+                final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+                final monthEntries = timeEntryRepo.getByDateRange(monthStart, monthEnd);
+                final monthSeconds = monthEntries.where((e) => e.projectId == widget.project.id).fold<int>(0, (sum, e) => sum + e.actualDurationSeconds);
+                final monthHours = monthSeconds / 3600;
+                final progress = monthHours / widget.project.monthlyRequiredHours;
+                final remaining = widget.project.monthlyRequiredHours - monthHours;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _InfoRow(label: tr('projects.monthly_required_hours'), value: '${widget.project.monthlyRequiredHours.toStringAsFixed(1)}h'),
+                    const SizedBox(height: 4),
+                    _InfoRow(label: tr('projects.monthly_worked'), value: '${monthHours.toStringAsFixed(1)}h'),
+                    const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: progress.clamp(0.0, 1.0),
+                      backgroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
+                      valueColor: AlwaysStoppedAnimation(progress >= 1.0 ? Colors.green : Color(widget.project.colorValue)),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      remaining > 0 ? tr('projects.monthly_remaining', args: ['${remaining.toStringAsFixed(1)}']) : tr('projects.monthly_completed'),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: remaining > 0 ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6) : Colors.green,
+                        fontWeight: remaining <= 0 ? FontWeight.w600 : null,
+                      ),
+                    ),
+                  ],
+                );
+              }(),
+            ],
             if (widget.project.startDate != null) ...[
               const SizedBox(height: 12),
               _InfoRow(label: tr('projects.start_date'), value: DateFormat('d.M.yyyy').format(widget.project.startDate!)),

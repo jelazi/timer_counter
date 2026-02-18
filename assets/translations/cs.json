@@ -34,7 +34,10 @@
         "select_project": "Vybrat projekt",
         "select_task": "Vybrat úkol",
         "no_project_selected": "Žádný projekt nevybrán",
-        "no_task_selected": "Žádný úkol nevybrán"
+        "no_task_selected": "Žádný úkol nevybrán",
+        "remaining_today": "Zbývá dnes",
+        "overtime": "Přesčas",
+        "expected_today": "Očekáváno dnes"
     },
     "projects": {
         "title": "Projekty",
@@ -69,7 +72,13 @@
         "tracked_time": "Sledovaný čas",
         "budget_remaining": "Zbývající rozpočet",
         "progress": "Průběh",
-        "no_tasks": "Zatím žádné úkoly"
+        "no_tasks": "Zatím žádné úkoly",
+        "monthly_required_hours": "Požadované měsíční hodiny",
+        "monthly_target": "Měsíční cíl",
+        "monthly_worked": "Odpracováno tento měsíc",
+        "monthly_remaining": "Zbývá {} hodin",
+        "monthly_completed": "Měsíční cíl splněn ✓",
+        "monthly_short": "měsíčně"
     },
     "categories": {
         "title": "Kategorie",
@@ -162,7 +171,16 @@
         "delete_all_data_final_confirm": "Toto je poslední potvrzení. Po smazání nelze data obnovit bez zálohy.",
         "delete_all_data_success": "Všechna data byla smazána",
         "allow_overlap_times": "Povolit překrývání časů",
-        "allow_overlap_times_desc": "Povolit překrývání časových záznamů"
+        "allow_overlap_times_desc": "Povolit překrývání časových záznamů",
+        "work_schedule": "Pracovní rozvrh",
+        "work_schedule_desc": "Nastavte začátek a konec práce pro každý den v týdnu",
+        "monday": "Pondělí",
+        "tuesday": "Úterý",
+        "wednesday": "Středa",
+        "thursday": "Čtvrtek",
+        "friday": "Pátek",
+        "saturday": "Sobota",
+        "sunday": "Neděle"
     },
     "common": {
         "save": "Uložit",
@@ -189,7 +207,8 @@
         "loading": "Načítání...",
         "confirm": "Potvrdit",
         "undo": "Zpět",
-        "redo": "Znovu"
+        "redo": "Znovu",
+        "clear": "Vymazat"
     },
     "tray": {
         "show": "Zobrazit Timer Counter",
@@ -310,7 +329,10 @@
         "filenames_hint": "Použijte {month} a {year} jako proměnné. Přípona .pdf se přidá automaticky.",
         "files_exist_title": "Soubory již existují",
         "files_exist_desc": "V cílovém adresáři již existují následující soubory:",
-        "overwrite_files": "Přepsat"
+        "overwrite_files": "Přepsat",
+        "project_filter": "Filtr projektů",
+        "all_projects": "Všechny projekty zahrnuty",
+        "filtered_projects": "{} projektů vybráno"
     },
     "sync": {
         "title": "Cloudová synchronizace",

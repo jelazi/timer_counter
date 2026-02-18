@@ -181,6 +181,64 @@ class SettingsRepository {
 
   bool get isFirebaseConfigured => getFirebaseProjectId().isNotEmpty && getFirebaseApiKey().isNotEmpty;
 
+  // === PDF Report Project Filter ===
+
+  List<String> getPdfReportProjectIds() {
+    final raw = _box.get(AppConstants.pdfReportProjectIds);
+    if (raw == null) return [];
+    return (raw as List).cast<String>();
+  }
+
+  Future<void> setPdfReportProjectIds(List<String> ids) => _box.put(AppConstants.pdfReportProjectIds, ids);
+
+  // === Work Schedule (per weekday) ===
+  // Day: 1=Monday .. 7=Sunday
+  // Store: work_schedule_<day>_start, work_schedule_<day>_end, work_schedule_<day>_enabled
+
+  static const _defaultSchedule = {
+    1: ('08:00', '16:30', true), // Monday
+    2: ('08:00', '16:30', true), // Tuesday
+    3: ('08:00', '16:30', true), // Wednesday
+    4: ('08:00', '16:30', true), // Thursday
+    5: ('08:00', '16:30', true), // Friday
+    6: ('08:00', '12:00', false), // Saturday
+    7: ('08:00', '12:00', false), // Sunday
+  };
+
+  String getWorkScheduleStart(int weekday) => _box.get('${AppConstants.workSchedulePrefix}_${weekday}_start', defaultValue: _defaultSchedule[weekday]!.$1) as String;
+  Future<void> setWorkScheduleStart(int weekday, String time) => _box.put('${AppConstants.workSchedulePrefix}_${weekday}_start', time);
+
+  String getWorkScheduleEnd(int weekday) => _box.get('${AppConstants.workSchedulePrefix}_${weekday}_end', defaultValue: _defaultSchedule[weekday]!.$2) as String;
+  Future<void> setWorkScheduleEnd(int weekday, String time) => _box.put('${AppConstants.workSchedulePrefix}_${weekday}_end', time);
+
+  bool getWorkScheduleEnabled(int weekday) => _box.get('${AppConstants.workSchedulePrefix}_${weekday}_enabled', defaultValue: _defaultSchedule[weekday]!.$3) as bool;
+  Future<void> setWorkScheduleEnabled(int weekday, bool enabled) => _box.put('${AppConstants.workSchedulePrefix}_${weekday}_enabled', enabled);
+
+  /// Get today's expected working hours (0 if not a work day)
+  double getTodayExpectedHours() {
+    final weekday = DateTime.now().weekday; // 1=Monday
+    if (!getWorkScheduleEnabled(weekday)) return 0;
+    final start = getWorkScheduleStart(weekday);
+    final end = getWorkScheduleEnd(weekday);
+    final startParts = start.split(':');
+    final endParts = end.split(':');
+    final startMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+    final endMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
+    return (endMinutes - startMinutes) / 60.0;
+  }
+
+  /// Get expected working hours for a specific weekday
+  double getExpectedHoursForDay(int weekday) {
+    if (!getWorkScheduleEnabled(weekday)) return 0;
+    final start = getWorkScheduleStart(weekday);
+    final end = getWorkScheduleEnd(weekday);
+    final startParts = start.split(':');
+    final endParts = end.split(':');
+    final startMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+    final endMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
+    return (endMinutes - startMinutes) / 60.0;
+  }
+
   /// Load complete invoice settings from Hive
   InvoiceSettings getInvoiceSettings() {
     final suppliers = getSuppliers();

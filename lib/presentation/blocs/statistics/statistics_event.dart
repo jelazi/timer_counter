@@ -25,3 +25,12 @@ class ChangeStatisticsRange extends StatisticsEvent {
   @override
   List<Object?> get props => [range];
 }
+
+class FilterStatisticsProjects extends StatisticsEvent {
+  final List<String> projectIds;
+
+  const FilterStatisticsProjects(this.projectIds);
+
+  @override
+  List<Object?> get props => [projectIds];
+}

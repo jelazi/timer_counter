@@ -18,8 +18,7 @@ class ProjectStatistic extends Equatable {
   });
 
   @override
-  List<Object?> get props =>
-      [projectId, projectName, colorValue, totalSeconds, revenue, isBillable];
+  List<Object?> get props => [projectId, projectName, colorValue, totalSeconds, revenue, isBillable];
 }
 
 class DailyStatistic extends Equatable {
@@ -27,11 +26,7 @@ class DailyStatistic extends Equatable {
   final int totalSeconds;
   final double revenue;
 
-  const DailyStatistic({
-    required this.date,
-    required this.totalSeconds,
-    required this.revenue,
-  });
+  const DailyStatistic({required this.date, required this.totalSeconds, required this.revenue});
 
   @override
   List<Object?> get props => [date, totalSeconds, revenue];
@@ -63,6 +58,7 @@ class StatisticsLoaded extends StatisticsState {
   final double averageDailySeconds;
   final List<ProjectStatistic> projectStatistics;
   final List<DailyStatistic> dailyStatistics;
+  final List<String> filteredProjectIds;
 
   const StatisticsLoaded({
     required this.startDate,
@@ -75,21 +71,23 @@ class StatisticsLoaded extends StatisticsState {
     required this.averageDailySeconds,
     required this.projectStatistics,
     required this.dailyStatistics,
+    this.filteredProjectIds = const [],
   });
 
   @override
   List<Object?> get props => [
-        startDate,
-        endDate,
-        range,
-        totalSeconds,
-        billableSeconds,
-        nonBillableSeconds,
-        totalRevenue,
-        averageDailySeconds,
-        projectStatistics,
-        dailyStatistics,
-      ];
+    startDate,
+    endDate,
+    range,
+    totalSeconds,
+    billableSeconds,
+    nonBillableSeconds,
+    totalRevenue,
+    averageDailySeconds,
+    projectStatistics,
+    dailyStatistics,
+    filteredProjectIds,
+  ];
 }
 
 class StatisticsError extends StatisticsState {
