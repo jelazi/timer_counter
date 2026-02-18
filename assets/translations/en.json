@@ -273,6 +273,8 @@
         "success": "PDF files generated successfully",
         "no_entries": "No entries in this period",
         "preview_saved": "Preview saved",
+        "preview": "Preview",
+        "preview_error": "Error generating preview",
         "invoice_settings": "Invoice Settings",
         "invoice_info": "Invoice Details",
         "edit": "Edit",
