@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/services/firebase_sync_service_v2.dart';
 import '../../../data/models/running_timer_model.dart';
 import '../../../data/models/time_entry_model.dart';
 import '../../../data/repositories/running_timer_repository.dart';
@@ -15,28 +17,47 @@ class TimerBloc extends Bloc<TimerEvent, TimerState> {
   final RunningTimerRepository _runningTimerRepository;
   final TimeEntryRepository _timeEntryRepository;
   final SettingsRepository _settingsRepository;
+  final FirebaseSyncService? _firebaseSyncService;
   Timer? _ticker;
+  StreamSubscription? _syncSubscription;
   final _uuid = const Uuid();
 
-  TimerBloc({required RunningTimerRepository runningTimerRepository, required TimeEntryRepository timeEntryRepository, required SettingsRepository settingsRepository})
-    : _runningTimerRepository = runningTimerRepository,
-      _timeEntryRepository = timeEntryRepository,
-      _settingsRepository = settingsRepository,
-      super(const TimerInitial()) {
+  TimerBloc({
+    required RunningTimerRepository runningTimerRepository,
+    required TimeEntryRepository timeEntryRepository,
+    required SettingsRepository settingsRepository,
+    FirebaseSyncService? firebaseSyncService,
+  }) : _runningTimerRepository = runningTimerRepository,
+       _timeEntryRepository = timeEntryRepository,
+       _settingsRepository = settingsRepository,
+       _firebaseSyncService = firebaseSyncService,
+       super(const TimerInitial()) {
     on<LoadRunningTimers>(_onLoadRunningTimers);
     on<StartTimer>(_onStartTimer);
     on<StopTimer>(_onStopTimer);
     on<StopAllTimers>(_onStopAllTimers);
     on<TickTimers>(_onTickTimers);
     on<UpdateTimerNotes>(_onUpdateTimerNotes);
+    on<SyncTimersChanged>(_onSyncTimersChanged);
 
     _startTicker();
+    _startSyncListener();
   }
 
   void _startTicker() {
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       add(const TickTimers());
+    });
+  }
+
+  /// Listen to Firestore sync events for running timers and time entries.
+  void _startSyncListener() {
+    if (_firebaseSyncService == null) return;
+    _syncSubscription = _firebaseSyncService.onCollectionChanged.listen((col) {
+      if (col == SyncCollection.runningTimers || col == SyncCollection.timeEntries) {
+        add(const SyncTimersChanged());
+      }
     });
   }
 
@@ -59,6 +80,8 @@ class TimerBloc extends Bloc<TimerEvent, TimerState> {
       final timer = RunningTimerModel(id: _uuid.v4(), projectId: event.projectId, taskId: event.taskId, startTime: DateTime.now(), notes: event.notes);
 
       await _runningTimerRepository.start(timer);
+      // Push to Firebase
+      _firebaseSyncService?.pushRunningTimer(timer).catchError((e) => debugPrint('[TimerBloc] sync push error: $e'));
       _emitCurrentState(emit);
     } catch (e) {
       emit(TimerError(e.toString()));
@@ -93,6 +116,11 @@ class TimerBloc extends Bloc<TimerEvent, TimerState> {
     _emitCurrentState(emit);
   }
 
+  /// Handle sync event: remote running timers or time entries changed.
+  void _onSyncTimersChanged(SyncTimersChanged event, Emitter<TimerState> emit) {
+    _emitCurrentState(emit);
+  }
+
   Future<void> _onUpdateTimerNotes(UpdateTimerNotes event, Emitter<TimerState> emit) async {
     try {
       await _runningTimerRepository.updateNotes(event.timerId, event.notes);
@@ -117,6 +145,10 @@ class TimerBloc extends Bloc<TimerEvent, TimerState> {
 
     await _timeEntryRepository.add(entry);
     await _runningTimerRepository.stop(timer.id);
+
+    // Push to Firebase
+    _firebaseSyncService?.pushTimeEntry(entry).catchError((e) => debugPrint('[TimerBloc] sync push error: $e'));
+    _firebaseSyncService?.deleteRunningTimer(timer.id).catchError((e) => debugPrint('[TimerBloc] sync delete error: $e'));
   }
 
   void _emitCurrentState(Emitter<TimerState> emit) {
@@ -131,6 +163,7 @@ class TimerBloc extends Bloc<TimerEvent, TimerState> {
   @override
   Future<void> close() {
     _ticker?.cancel();
+    _syncSubscription?.cancel();
     return super.close();
   }
 }

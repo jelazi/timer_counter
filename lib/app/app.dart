@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 
+import '../core/services/firebase_sync_service_v2.dart';
 import '../core/theme/app_theme.dart';
+import '../core/utils/platform_utils.dart';
 import '../core/utils/time_formatter.dart';
 import '../data/repositories/category_repository.dart';
 import '../data/repositories/monthly_hours_target_repository.dart';
@@ -35,7 +37,8 @@ class TymeApp extends StatelessWidget {
   final RunningTimerRepository runningTimerRepository;
   final SettingsRepository settingsRepository;
   final MonthlyHoursTargetRepository monthlyHoursTargetRepository;
-  final SystemTrayService systemTrayService;
+  final SystemTrayService? systemTrayService;
+  final FirebaseSyncService? firebaseSyncService;
 
   const TymeApp({
     super.key,
@@ -46,7 +49,8 @@ class TymeApp extends StatelessWidget {
     required this.runningTimerRepository,
     required this.settingsRepository,
     required this.monthlyHoursTargetRepository,
-    required this.systemTrayService,
+    this.systemTrayService,
+    this.firebaseSyncService,
   });
 
   @override
@@ -60,7 +64,8 @@ class TymeApp extends StatelessWidget {
         Provider<RunningTimerRepository>.value(value: runningTimerRepository),
         Provider<SettingsRepository>.value(value: settingsRepository),
         Provider<MonthlyHoursTargetRepository>.value(value: monthlyHoursTargetRepository),
-        Provider<SystemTrayService>.value(value: systemTrayService),
+        if (systemTrayService != null) Provider<SystemTrayService>.value(value: systemTrayService!),
+        Provider<FirebaseSyncService?>.value(value: firebaseSyncService),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -72,16 +77,19 @@ class TymeApp extends StatelessWidget {
             create: (context) => TaskBloc(taskRepository: taskRepository, timeEntryRepository: timeEntryRepository)..add(LoadAllTasks()),
           ),
           BlocProvider<TimerBloc>(
-            create: (context) =>
-                TimerBloc(runningTimerRepository: runningTimerRepository, timeEntryRepository: timeEntryRepository, settingsRepository: settingsRepository)
-                  ..add(LoadRunningTimers()),
+            create: (context) => TimerBloc(
+              runningTimerRepository: runningTimerRepository,
+              timeEntryRepository: timeEntryRepository,
+              settingsRepository: settingsRepository,
+              firebaseSyncService: firebaseSyncService,
+            )..add(LoadRunningTimers()),
           ),
           BlocProvider<StatisticsBloc>(
             create: (context) => StatisticsBloc(timeEntryRepository: timeEntryRepository, projectRepository: projectRepository, settingsRepository: settingsRepository),
           ),
           BlocProvider<SettingsBloc>(create: (context) => SettingsBloc(settingsRepository: settingsRepository)..add(LoadSettings())),
         ],
-        child: _AppWithTheme(settingsRepository: settingsRepository),
+        child: _AppWithTheme(settingsRepository: settingsRepository, systemTrayService: systemTrayService),
       ),
     );
   }
@@ -89,8 +97,9 @@ class TymeApp extends StatelessWidget {
 
 class _AppWithTheme extends StatelessWidget {
   final SettingsRepository settingsRepository;
+  final SystemTrayService? systemTrayService;
 
-  const _AppWithTheme({required this.settingsRepository});
+  const _AppWithTheme({required this.settingsRepository, this.systemTrayService});
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +129,9 @@ class _AppWithTheme extends StatelessWidget {
           locale: context.locale,
           home: BlocListener<TimerBloc, TimerState>(
             listener: (context, timerState) {
-              _updateSystemTray(context, timerState);
+              if (PlatformUtils.isDesktop && systemTrayService != null) {
+                _updateSystemTray(context, timerState);
+              }
             },
             child: const HomeScreen(),
           ),
@@ -130,7 +141,8 @@ class _AppWithTheme extends StatelessWidget {
   }
 
   void _updateSystemTray(BuildContext context, TimerState timerState) {
-    final trayService = context.read<SystemTrayService>();
+    if (systemTrayService == null) return;
+    final trayService = systemTrayService!;
     final projectRepo = context.read<ProjectRepository>();
     final taskRepo = context.read<TaskRepository>();
 

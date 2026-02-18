@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -6,7 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/services/backup_service.dart';
-import '../../core/services/firebase_sync_service.dart';
+import '../../core/services/firebase_sync_service_v2.dart';
 import '../../core/services/tyme_data_import_service.dart';
 import '../../core/services/tyme_export_service.dart';
 import '../../core/services/tyme_import_service.dart';
@@ -1126,21 +1128,38 @@ class _FirebaseSyncSection extends StatefulWidget {
 class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
   bool _isSyncing = false;
   String? _syncMessage;
+  StreamSubscription<SyncStatus>? _statusSub;
+  SyncStatus _status = SyncStatus.disabled;
 
-  bool get _isConfigured => widget.settingsRepo.isFirebaseConfigured;
+  FirebaseSyncService? get _service => context.read<FirebaseSyncService?>();
 
-  FirebaseSyncService _createService() {
-    return FirebaseSyncService(
-      projectId: widget.settingsRepo.getFirebaseProjectId(),
-      apiKey: widget.settingsRepo.getFirebaseApiKey(),
-      projectRepo: context.read<ProjectRepository>(),
-      taskRepo: context.read<TaskRepository>(),
-      timeEntryRepo: context.read<TimeEntryRepository>(),
-      categoryRepo: context.read<CategoryRepository>(),
-    );
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final svc = _service;
+      if (svc != null) {
+        _status = svc.currentStatus;
+        _statusSub = svc.statusStream.listen((s) {
+          if (mounted) setState(() => _status = s);
+        });
+        setState(() {});
+      }
+    });
   }
 
+  @override
+  void dispose() {
+    _statusSub?.cancel();
+    super.dispose();
+  }
+
+  bool get _isSignedIn => _service?.isSignedIn ?? false;
+  String? get _userEmail => _service?.currentUser?.email;
+
   Future<void> _doUpload() async {
+    final svc = _service;
+    if (svc == null || !svc.isSignedIn) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -1153,10 +1172,12 @@ class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await _runSync(() => _createService().uploadAll(onProgress: _onProgress), tr('sync.upload_success'));
+    await _runSync(() => svc.uploadAll(onProgress: _onProgress), tr('sync.upload_success'));
   }
 
   Future<void> _doDownload() async {
+    final svc = _service;
+    if (svc == null || !svc.isSignedIn) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -1173,11 +1194,7 @@ class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await _runSync(() => _createService().downloadAll(onProgress: _onProgress), tr('sync.download_success'));
-  }
-
-  Future<void> _doMergeSync() async {
-    await _runSync(() => _createService().syncAll(onProgress: _onProgress), tr('sync.sync_success'));
+    await _runSync(() => svc.downloadAll(onProgress: _onProgress), tr('sync.download_success'));
   }
 
   void _onProgress(String message, double progress) {
@@ -1240,20 +1257,93 @@ class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
     return '${dt.day}.${dt.month}.${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _openConfig() async {
+  Future<void> _openAuthDialog() async {
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => _FirebaseConfigDialog(settingsRepo: widget.settingsRepo),
+      builder: (_) => _FirebaseAuthDialog(syncService: _service),
     );
     if (result == true && mounted) {
       setState(() {});
+      // Start listeners after successful sign in
+      final svc = _service;
+      if (svc != null && svc.isSignedIn) {
+        svc.startListeners();
+      }
     }
+  }
+
+  Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(tr('sync.sign_out')),
+        content: Text(tr('sync.confirm_sign_out')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: Text(tr('sync.sign_out')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _service?.signOut();
+    if (mounted) setState(() {});
+  }
+
+  Widget _buildStatusChip() {
+    final IconData icon;
+    final Color color;
+    final String label;
+
+    switch (_status) {
+      case SyncStatus.disabled:
+        icon = Icons.cloud_off;
+        color = Colors.grey;
+        label = tr('sync.status_disabled');
+      case SyncStatus.connecting:
+        icon = Icons.cloud_sync;
+        color = Colors.orange;
+        label = tr('sync.status_connecting');
+      case SyncStatus.connected:
+        icon = Icons.cloud_done;
+        color = Colors.green;
+        label = tr('sync.status_connected');
+      case SyncStatus.error:
+        icon = Icons.cloud_off;
+        color = Colors.red;
+        label = tr('sync.status_error');
+    }
+
+    return Chip(
+      avatar: Icon(icon, size: 18, color: color),
+      label: Text(label, style: TextStyle(fontSize: 12, color: color)),
+      backgroundColor: color.withValues(alpha: 0.1),
+      side: BorderSide(color: color.withValues(alpha: 0.3)),
+      padding: EdgeInsets.zero,
+      visualDensity: VisualDensity.compact,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final configured = _isConfigured;
+    final signedIn = _isSignedIn;
+
+    if (_service == null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: ListTile(
+            leading: const Icon(Icons.cloud_off, color: Colors.grey),
+            title: Text(tr('sync.firebase_not_available')),
+            subtitle: Text(tr('sync.firebase_not_configured_hint'), style: theme.textTheme.bodySmall),
+          ),
+        ),
+      );
+    }
 
     return Card(
       child: Padding(
@@ -1261,19 +1351,22 @@ class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Config row
+            // Auth & Status row
             ListTile(
-              leading: Icon(configured ? Icons.cloud_done : Icons.cloud_off, color: configured ? Colors.green : theme.colorScheme.onSurfaceVariant),
-              title: Text(tr('sync.firebase_config')),
-              subtitle: Text(
-                configured ? tr('sync.configured') : tr('sync.not_configured'),
-                style: TextStyle(color: configured ? Colors.green : theme.colorScheme.onSurfaceVariant),
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _openConfig,
+              leading: Icon(signedIn ? Icons.person : Icons.person_off, color: signedIn ? Colors.green : theme.colorScheme.onSurfaceVariant),
+              title: Text(signedIn ? _userEmail ?? '' : tr('sync.not_signed_in')),
+              subtitle: Row(children: [_buildStatusChip()]),
+              trailing: signedIn
+                  ? TextButton.icon(
+                      onPressed: _signOut,
+                      icon: const Icon(Icons.logout, size: 18),
+                      label: Text(tr('sync.sign_out')),
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    )
+                  : FilledButton.icon(onPressed: _openAuthDialog, icon: const Icon(Icons.login, size: 18), label: Text(tr('sync.sign_in'))),
             ),
 
-            if (configured) ...[
+            if (signedIn) ...[
               const Divider(),
 
               // Last sync
@@ -1324,14 +1417,6 @@ class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
                         label: Text(tr('sync.download'), style: const TextStyle(fontSize: 12)),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _isSyncing ? null : _doMergeSync,
-                        icon: const Icon(Icons.sync, size: 18),
-                        label: Text(tr('sync.sync_merge'), style: const TextStyle(fontSize: 12)),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -1340,7 +1425,7 @@ class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
               // Hint
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Text(tr('sync.firestore_hint'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
+                child: Text(tr('sync.real_time_hint'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
               ),
             ],
           ],
@@ -1351,131 +1436,143 @@ class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Firebase Configuration Dialog
+// Firebase Auth Dialog
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _FirebaseConfigDialog extends StatefulWidget {
-  final SettingsRepository settingsRepo;
+class _FirebaseAuthDialog extends StatefulWidget {
+  final FirebaseSyncService? syncService;
 
-  const _FirebaseConfigDialog({required this.settingsRepo});
+  const _FirebaseAuthDialog({required this.syncService});
 
   @override
-  State<_FirebaseConfigDialog> createState() => _FirebaseConfigDialogState();
+  State<_FirebaseAuthDialog> createState() => _FirebaseAuthDialogState();
 }
 
-class _FirebaseConfigDialogState extends State<_FirebaseConfigDialog> {
-  late final TextEditingController _projectIdCtrl;
-  late final TextEditingController _apiKeyCtrl;
-  bool _testing = false;
-  bool? _connectionOk;
-
-  @override
-  void initState() {
-    super.initState();
-    _projectIdCtrl = TextEditingController(text: widget.settingsRepo.getFirebaseProjectId());
-    _apiKeyCtrl = TextEditingController(text: widget.settingsRepo.getFirebaseApiKey());
-  }
+class _FirebaseAuthDialogState extends State<_FirebaseAuthDialog> {
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  bool _isLoading = false;
+  String? _errorMessage;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _projectIdCtrl.dispose();
-    _apiKeyCtrl.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _testConnection() async {
-    if (_projectIdCtrl.text.trim().isEmpty || _apiKeyCtrl.text.trim().isEmpty) return;
+  Future<void> _signIn() async {
+    if (!_validate()) return;
     setState(() {
-      _testing = true;
-      _connectionOk = null;
+      _isLoading = true;
+      _errorMessage = null;
     });
-    final service = FirebaseSyncService(
-      projectId: _projectIdCtrl.text.trim(),
-      apiKey: _apiKeyCtrl.text.trim(),
-      projectRepo: context.read<ProjectRepository>(),
-      taskRepo: context.read<TaskRepository>(),
-      timeEntryRepo: context.read<TimeEntryRepository>(),
-      categoryRepo: context.read<CategoryRepository>(),
-    );
-    final ok = await service.testConnection();
+    final error = await widget.syncService?.signIn(_emailCtrl.text.trim(), _passwordCtrl.text);
     if (!mounted) return;
+    if (error != null) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error;
+      });
+    } else {
+      Navigator.pop(context, true);
+    }
+  }
+
+  Future<void> _signUp() async {
+    if (!_validate()) return;
     setState(() {
-      _testing = false;
-      _connectionOk = ok;
+      _isLoading = true;
+      _errorMessage = null;
     });
+    final error = await widget.syncService?.signUp(_emailCtrl.text.trim(), _passwordCtrl.text);
+    if (!mounted) return;
+    if (error != null) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error;
+      });
+    } else {
+      Navigator.pop(context, true);
+    }
   }
 
-  void _save() {
-    widget.settingsRepo.setFirebaseProjectId(_projectIdCtrl.text.trim());
-    widget.settingsRepo.setFirebaseApiKey(_apiKeyCtrl.text.trim());
-    Navigator.pop(context, true);
-  }
-
-  void _clear() {
-    widget.settingsRepo.setFirebaseProjectId('');
-    widget.settingsRepo.setFirebaseApiKey('');
-    Navigator.pop(context, true);
+  bool _validate() {
+    if (_emailCtrl.text.trim().isEmpty || _passwordCtrl.text.isEmpty) {
+      setState(() => _errorMessage = tr('sync.fill_all_fields'));
+      return false;
+    }
+    return true;
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(tr('sync.firebase_config')),
+      title: Text(tr('sync.firebase_auth')),
       content: SizedBox(
-        width: 420,
+        width: 380,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: _projectIdCtrl,
-              decoration: InputDecoration(labelText: tr('sync.project_id'), hintText: 'my-project-id', border: const OutlineInputBorder()),
+              controller: _emailCtrl,
+              decoration: InputDecoration(
+                labelText: tr('sync.email'),
+                hintText: 'user@example.com',
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.email_outlined),
+              ),
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              enabled: !_isLoading,
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: _apiKeyCtrl,
-              decoration: InputDecoration(labelText: tr('sync.api_key'), hintText: 'AIza...', border: const OutlineInputBorder()),
-              obscureText: true,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _testing ? null : _testConnection,
-                  icon: _testing ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.wifi_find, size: 18),
-                  label: Text(tr('sync.test_connection')),
+              controller: _passwordCtrl,
+              decoration: InputDecoration(
+                labelText: tr('sync.password'),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                 ),
-                const SizedBox(width: 12),
-                if (_connectionOk == true)
-                  Row(
-                    children: [
-                      const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                      const SizedBox(width: 4),
-                      Text(tr('sync.connection_ok'), style: const TextStyle(color: Colors.green)),
-                    ],
-                  ),
-                if (_connectionOk == false)
-                  Row(
-                    children: [
-                      const Icon(Icons.error, color: Colors.red, size: 20),
-                      const SizedBox(width: 4),
-                      Text(tr('sync.connection_failed'), style: const TextStyle(color: Colors.red)),
-                    ],
-                  ),
-              ],
+              ),
+              obscureText: _obscurePassword,
+              textInputAction: TextInputAction.done,
+              enabled: !_isLoading,
+              onSubmitted: (_) => _signIn(),
             ),
+            if (_errorMessage != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SelectableText(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (_isLoading) ...[const SizedBox(height: 16), const LinearProgressIndicator()],
           ],
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: _clear,
-          child: Text(tr('sync.clear_config'), style: const TextStyle(color: Colors.red)),
-        ),
-        const Spacer(),
-        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
-        FilledButton(onPressed: _save, child: Text(tr('common.save'))),
+        TextButton(onPressed: _isLoading ? null : () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+        OutlinedButton(onPressed: _isLoading ? null : _signUp, child: Text(tr('sync.sign_up'))),
+        FilledButton(onPressed: _isLoading ? null : _signIn, child: Text(tr('sync.sign_in'))),
       ],
-      actionsAlignment: MainAxisAlignment.start,
     );
   }
 }

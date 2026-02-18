@@ -10,6 +10,14 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>6TM56V7DG8.com.example.timerCounter</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.example.timerCounter</string>
+	</array>
 	<key>com.apple.security.files.user-selected.read-write</key>
 	<true/>
 </dict>
