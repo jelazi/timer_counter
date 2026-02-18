@@ -2,13 +2,17 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/services/backup_service.dart';
 import '../../core/services/firebase_sync_service.dart';
 import '../../core/services/tyme_data_import_service.dart';
 import '../../core/services/tyme_export_service.dart';
 import '../../core/services/tyme_import_service.dart';
+import '../../data/models/monthly_hours_target_model.dart';
 import '../../data/repositories/category_repository.dart';
+import '../../data/repositories/monthly_hours_target_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/running_timer_repository.dart';
 import '../../data/repositories/settings_repository.dart';
@@ -20,9 +24,14 @@ import '../blocs/settings/settings_state.dart';
 import '../blocs/timer/timer_bloc.dart';
 import '../blocs/timer/timer_event.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<SettingsBloc, SettingsState>(
@@ -146,139 +155,103 @@ class SettingsScreen extends StatelessWidget {
                 Card(
                   child: Column(
                     children: [
-                      ListTile(
-                        leading: const Icon(Icons.work_outline),
-                        title: Text(tr('settings.daily_working_hours')),
-                        trailing: SizedBox(
-                          width: 100,
-                          child: DropdownButton<double>(
-                            value: state.dailyWorkingHours,
-                            isExpanded: true,
-                            underline: const SizedBox(),
-                            items: List.generate(17, (i) => DropdownMenuItem(value: (i + 1).toDouble(), child: Text('${i + 1}h'))),
-                            onChanged: (v) {
-                              if (v != null) {
-                                context.read<SettingsBloc>().add(ChangeDailyWorkingHours(v));
-                              }
-                            },
-                          ),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(tr('settings.work_schedule'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 4),
+                            Text(
+                              tr('settings.work_schedule_desc'),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                            ),
+                            const SizedBox(height: 12),
+                            ...List.generate(7, (i) {
+                              final weekday = i + 1;
+                              final dayNames = [
+                                tr('settings.monday'),
+                                tr('settings.tuesday'),
+                                tr('settings.wednesday'),
+                                tr('settings.thursday'),
+                                tr('settings.friday'),
+                                tr('settings.saturday'),
+                                tr('settings.sunday'),
+                              ];
+                              final schedule = state.workSchedule[weekday];
+                              if (schedule == null) return const SizedBox();
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 28,
+                                      child: Checkbox(
+                                        value: schedule.enabled,
+                                        onChanged: (v) => context.read<SettingsBloc>().add(ChangeWorkSchedule(weekday: weekday, enabled: v ?? false)),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 80,
+                                      child: Text(dayNames[i], style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    _WorkTimeButton(
+                                      time: schedule.start,
+                                      enabled: schedule.enabled,
+                                      onTap: () async {
+                                        final parts = schedule.start.split(':');
+                                        final picked = await showTimePicker(
+                                          context: context,
+                                          initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
+                                        );
+                                        if (picked != null && context.mounted) {
+                                          context.read<SettingsBloc>().add(
+                                            ChangeWorkSchedule(weekday: weekday, start: '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}'),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      child: Text('—', style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
+                                    ),
+                                    _WorkTimeButton(
+                                      time: schedule.end,
+                                      enabled: schedule.enabled,
+                                      onTap: () async {
+                                        final parts = schedule.end.split(':');
+                                        final picked = await showTimePicker(
+                                          context: context,
+                                          initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
+                                        );
+                                        if (picked != null && context.mounted) {
+                                          context.read<SettingsBloc>().add(
+                                            ChangeWorkSchedule(weekday: weekday, end: '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}'),
+                                          );
+                                        }
+                                      },
+                                    ),
+                                    const SizedBox(width: 12),
+                                    if (schedule.enabled)
+                                      Text(
+                                        _calculateDayHours(schedule.start, schedule.end),
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w500),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
                         ),
                       ),
-                      const Divider(height: 1),
-                      ListTile(
-                        leading: const Icon(Icons.calendar_today),
-                        title: Text(tr('settings.weekly_working_days')),
-                        trailing: SizedBox(
-                          width: 100,
-                          child: DropdownButton<int>(
-                            value: state.weeklyWorkingDays,
-                            isExpanded: true,
-                            underline: const SizedBox(),
-                            items: List.generate(7, (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}'))),
-                            onChanged: (v) {
-                              if (v != null) {
-                                context.read<SettingsBloc>().add(ChangeWeeklyWorkingDays(v));
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                      if (state.workSchedule.isNotEmpty) ...[
-                        const Divider(height: 1),
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(tr('settings.work_schedule'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 4),
-                              Text(
-                                tr('settings.work_schedule_desc'),
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                              ),
-                              const SizedBox(height: 12),
-                              ...List.generate(7, (i) {
-                                final weekday = i + 1;
-                                final dayNames = [
-                                  tr('settings.monday'),
-                                  tr('settings.tuesday'),
-                                  tr('settings.wednesday'),
-                                  tr('settings.thursday'),
-                                  tr('settings.friday'),
-                                  tr('settings.saturday'),
-                                  tr('settings.sunday'),
-                                ];
-                                final schedule = state.workSchedule[weekday];
-                                if (schedule == null) return const SizedBox();
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 28,
-                                        child: Checkbox(
-                                          value: schedule.enabled,
-                                          onChanged: (v) => context.read<SettingsBloc>().add(ChangeWorkSchedule(weekday: weekday, enabled: v ?? false)),
-                                        ),
-                                      ),
-                                      SizedBox(
-                                        width: 80,
-                                        child: Text(dayNames[i], style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      _WorkTimeButton(
-                                        time: schedule.start,
-                                        enabled: schedule.enabled,
-                                        onTap: () async {
-                                          final parts = schedule.start.split(':');
-                                          final picked = await showTimePicker(
-                                            context: context,
-                                            initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
-                                          );
-                                          if (picked != null && context.mounted) {
-                                            context.read<SettingsBloc>().add(
-                                              ChangeWorkSchedule(weekday: weekday, start: '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}'),
-                                            );
-                                          }
-                                        },
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                                        child: Text('—', style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
-                                      ),
-                                      _WorkTimeButton(
-                                        time: schedule.end,
-                                        enabled: schedule.enabled,
-                                        onTap: () async {
-                                          final parts = schedule.end.split(':');
-                                          final picked = await showTimePicker(
-                                            context: context,
-                                            initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
-                                          );
-                                          if (picked != null && context.mounted) {
-                                            context.read<SettingsBloc>().add(
-                                              ChangeWorkSchedule(weekday: weekday, end: '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}'),
-                                            );
-                                          }
-                                        },
-                                      ),
-                                      const SizedBox(width: 12),
-                                      if (schedule.enabled)
-                                        Text(
-                                          _calculateDayHours(schedule.start, schedule.end),
-                                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w500),
-                                        ),
-                                    ],
-                                  ),
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
+                const SizedBox(height: 20),
+
+                // Monthly Hours Targets
+                _buildMonthlyTargetsSection(context),
                 const SizedBox(height: 20),
 
                 // Format & Currency
@@ -464,7 +437,18 @@ class SettingsScreen extends StatelessWidget {
                 // About
                 _buildSectionTitle(context, tr('settings.about')),
                 Card(
-                  child: ListTile(leading: const Icon(Icons.info_outline), title: Text(tr('app_name')), subtitle: Text('${tr('settings.version')}: 1.0.0')),
+                  child: FutureBuilder<PackageInfo>(
+                    future: PackageInfo.fromPlatform(),
+                    builder: (context, snapshot) {
+                      final version = snapshot.hasData ? snapshot.data!.version : '...';
+                      final buildNumber = snapshot.hasData ? snapshot.data!.buildNumber : '';
+                      return ListTile(
+                        leading: const Icon(Icons.info_outline),
+                        title: Text(tr('app_name')),
+                        subtitle: Text('${tr('settings.version')}: $version${buildNumber.isNotEmpty ? '+$buildNumber' : ''}'),
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 40),
               ],
@@ -481,6 +465,194 @@ class SettingsScreen extends StatelessWidget {
       child: Text(
         title,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary),
+      ),
+    );
+  }
+
+  Widget _buildMonthlyTargetsSection(BuildContext context) {
+    final targetRepo = context.read<MonthlyHoursTargetRepository>();
+    final projectRepo = context.read<ProjectRepository>();
+    final targets = targetRepo.getAll();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, tr('monthly_targets.title')),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr('monthly_targets.description'),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                ),
+                const SizedBox(height: 12),
+                if (targets.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: Text(
+                        tr('monthly_targets.no_targets'),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)),
+                      ),
+                    ),
+                  )
+                else
+                  ...targets.map((target) {
+                    final projectNames = target.projectIds
+                        .map((id) {
+                          final p = projectRepo.getById(id);
+                          return p?.name ?? id;
+                        })
+                        .join(', ');
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                        child: Icon(Icons.track_changes, color: Theme.of(context).colorScheme.onPrimaryContainer, size: 20),
+                      ),
+                      title: Text(target.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text('${target.targetHours.toStringAsFixed(0)}h — $projectNames', overflow: TextOverflow.ellipsis),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit, size: 18),
+                            onPressed: () => _showTargetDialog(context, target: target),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (_) => AlertDialog(
+                                  title: Text(tr('monthly_targets.delete_target')),
+                                  content: Text(tr('monthly_targets.delete_confirm')),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+                                    FilledButton(
+                                      onPressed: () => Navigator.pop(context, true),
+                                      style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                                      child: Text(tr('common.delete')),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await targetRepo.delete(target.id);
+                                if (context.mounted) setState(() {});
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                const SizedBox(height: 8),
+                Center(
+                  child: OutlinedButton.icon(onPressed: () => _showTargetDialog(context), icon: const Icon(Icons.add, size: 18), label: Text(tr('monthly_targets.add_target'))),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showTargetDialog(BuildContext context, {MonthlyHoursTargetModel? target}) {
+    final targetRepo = context.read<MonthlyHoursTargetRepository>();
+    final projectRepo = context.read<ProjectRepository>();
+    final allProjects = projectRepo.getActive();
+
+    final nameController = TextEditingController(text: target?.name ?? '');
+    final hoursController = TextEditingController(text: target?.targetHours.toString() ?? '');
+    List<String> selectedProjectIds = List<String>.from(target?.projectIds ?? []);
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text(target != null ? tr('monthly_targets.edit_target') : tr('monthly_targets.add_target')),
+          content: SizedBox(
+            width: 450,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(labelText: tr('monthly_targets.target_name')),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: hoursController,
+                  decoration: InputDecoration(labelText: tr('monthly_targets.target_hours'), suffixText: 'h'),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                Text(tr('monthly_targets.select_projects'), style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: SingleChildScrollView(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: allProjects.map((project) {
+                        final isSelected = selectedProjectIds.contains(project.id);
+                        return FilterChip(
+                          label: Text(project.name),
+                          selected: isSelected,
+                          selectedColor: Color(project.colorValue).withValues(alpha: 0.3),
+                          avatar: CircleAvatar(backgroundColor: Color(project.colorValue), radius: 6),
+                          onSelected: (selected) {
+                            setDialogState(() {
+                              if (selected) {
+                                selectedProjectIds.add(project.id);
+                              } else {
+                                selectedProjectIds.remove(project.id);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text(tr('common.cancel'))),
+            FilledButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final hours = double.tryParse(hoursController.text) ?? 0;
+                if (name.isEmpty || hours <= 0 || selectedProjectIds.isEmpty) return;
+
+                final newTarget = MonthlyHoursTargetModel(
+                  id: target?.id ?? const Uuid().v4(),
+                  name: name,
+                  targetHours: hours,
+                  projectIds: selectedProjectIds,
+                  createdAt: target?.createdAt ?? DateTime.now(),
+                );
+                if (target != null) {
+                  await targetRepo.update(newTarget);
+                } else {
+                  await targetRepo.add(newTarget);
+                }
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (context.mounted) setState(() {});
+              },
+              child: Text(tr('common.save')),
+            ),
+          ],
+        ),
       ),
     );
   }

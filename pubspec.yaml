@@ -1,7 +1,7 @@
 name: timer_counter
 description: "Time tracking app for desktop and mobile."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.10.8
@@ -49,6 +49,7 @@ dependencies:
   provider: ^6.1.2
   http: ^1.6.0
   sqlite3: ^3.1.6
+  package_info_plus: ^8.3.0
 
 dev_dependencies:
   flutter_test:

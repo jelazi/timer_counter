@@ -24,14 +24,14 @@ class ProjectModelAdapter extends TypeAdapter<ProjectModel> {
       isArchived: fields[10] as bool? ?? false,
       isBillable: fields[11] as bool? ?? true,
       createdAt: fields[12] as DateTime,
-      monthlyRequiredHours: (fields[13] as num?)?.toDouble() ?? 0.0,
+      // field 13 (monthlyRequiredHours) ignored for backward compat
     );
   }
 
   @override
   void write(BinaryWriter writer, ProjectModel obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -57,9 +57,7 @@ class ProjectModelAdapter extends TypeAdapter<ProjectModel> {
       ..writeByte(11)
       ..write(obj.isBillable)
       ..writeByte(12)
-      ..write(obj.createdAt)
-      ..writeByte(13)
-      ..write(obj.monthlyRequiredHours);
+      ..write(obj.createdAt);
   }
 
   @override

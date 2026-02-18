@@ -10,11 +10,12 @@ abstract class StatisticsEvent extends Equatable {
 class LoadStatistics extends StatisticsEvent {
   final DateTime startDate;
   final DateTime endDate;
+  final String range;
 
-  const LoadStatistics({required this.startDate, required this.endDate});
+  const LoadStatistics({required this.startDate, required this.endDate, this.range = 'custom'});
 
   @override
-  List<Object?> get props => [startDate, endDate];
+  List<Object?> get props => [startDate, endDate, range];
 }
 
 class ChangeStatisticsRange extends StatisticsEvent {

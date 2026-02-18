@@ -11,6 +11,7 @@ class AppConstants {
   static const String timeEntriesBox = 'time_entries';
   static const String settingsBox = 'settings';
   static const String runningTimersBox = 'running_timers';
+  static const String monthlyHoursTargetsBox = 'monthly_hours_targets';
 
   // Settings Keys
   static const String themeMode = 'theme_mode';

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/utils/time_formatter.dart';
+import '../../data/repositories/monthly_hours_target_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
@@ -20,11 +21,61 @@ class StatisticsScreen extends StatefulWidget {
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
   String _selectedRange = 'week';
+  int _periodOffset = 0; // 0 = current period, -1 = previous, etc.
 
   @override
   void initState() {
     super.initState();
-    context.read<StatisticsBloc>().add(ChangeStatisticsRange(_selectedRange));
+    _dispatchRange();
+  }
+
+  void _dispatchRange() {
+    final dates = _getDateRange(_selectedRange, _periodOffset);
+    context.read<StatisticsBloc>().add(LoadStatistics(startDate: dates.$1, endDate: dates.$2, range: _selectedRange));
+  }
+
+  /// Calculate start/end date for a given range and offset
+  (DateTime, DateTime) _getDateRange(String range, int offset) {
+    final now = DateTime.now();
+    switch (range) {
+      case 'today':
+        final day = DateTime(now.year, now.month, now.day).add(Duration(days: offset));
+        return (day, day.add(const Duration(days: 1)));
+      case 'week':
+        final currentWeekStart = DateTime(now.year, now.month, now.day - (now.weekday - 1));
+        final weekStart = currentWeekStart.add(Duration(days: offset * 7));
+        return (weekStart, weekStart.add(const Duration(days: 7)));
+      case 'month':
+        final targetMonth = DateTime(now.year, now.month + offset, 1);
+        final endOfMonth = DateTime(targetMonth.year, targetMonth.month + 1, 0, 23, 59, 59);
+        return (targetMonth, endOfMonth);
+      case 'year':
+        final targetYear = DateTime(now.year + offset, 1, 1);
+        final endOfYear = DateTime(targetYear.year, 12, 31, 23, 59, 59);
+        return (targetYear, endOfYear);
+      default:
+        return (DateTime(now.year, now.month, now.day), DateTime(now.year, now.month, now.day + 1));
+    }
+  }
+
+  /// Format date range label based on selected range
+  String _formatRangeLabel(String range, int offset, String locale) {
+    final dates = _getDateRange(range, offset);
+    final start = dates.$1;
+    final end = dates.$2;
+    switch (range) {
+      case 'today':
+        return DateFormat('EEEE, d. MMMM yyyy', locale).format(start);
+      case 'week':
+        final weekEnd = end.subtract(const Duration(days: 1));
+        return '${DateFormat('d.M.', locale).format(start)} — ${DateFormat('d.M.yyyy', locale).format(weekEnd)}';
+      case 'month':
+        return DateFormat('MMMM yyyy', locale).format(start);
+      case 'year':
+        return '${start.year}';
+      default:
+        return '${DateFormat('d.M.yyyy', locale).format(start)} — ${DateFormat('d.M.yyyy', locale).format(end)}';
+    }
   }
 
   @override
@@ -44,6 +95,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 const SizedBox(height: 24),
                 if (state is StatisticsLoaded) ...[
                   _buildSummaryCards(context, state),
+                  if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state)],
                   const SizedBox(height: 24),
                   Expanded(
                     child: Row(
@@ -69,6 +121,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   }
 
   Widget _buildHeader(BuildContext context, StatisticsState state) {
+    final locale = context.locale.languageCode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -81,17 +134,20 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               children: [
                 SegmentedButton<String>(
                   segments: [
-                    ButtonSegment(value: 'today', label: Text(tr('time_tracking.today'))),
-                    ButtonSegment(value: 'week', label: Text(tr('time_tracking.this_week'))),
-                    ButtonSegment(value: 'month', label: Text(tr('time_tracking.this_month'))),
-                    ButtonSegment(value: 'year', label: Text(tr('statistics.this_year'))),
+                    ButtonSegment(value: 'today', label: Text(tr('statistics.select_day'))),
+                    ButtonSegment(value: 'week', label: Text(tr('statistics.select_week'))),
+                    ButtonSegment(value: 'month', label: Text(tr('statistics.select_month'))),
+                    ButtonSegment(value: 'year', label: Text(tr('statistics.select_year'))),
                   ],
                   selected: _selectedRange != 'custom' ? {_selectedRange} : {},
                   emptySelectionAllowed: true,
                   onSelectionChanged: (selected) {
                     if (selected.isNotEmpty) {
-                      setState(() => _selectedRange = selected.first);
-                      context.read<StatisticsBloc>().add(ChangeStatisticsRange(selected.first));
+                      setState(() {
+                        _selectedRange = selected.first;
+                        _periodOffset = 0;
+                      });
+                      _dispatchRange();
                     }
                   },
                 ),
@@ -104,13 +160,52 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             ),
           ],
         ),
-        if (state is StatisticsLoaded)
+        if (_selectedRange != 'custom')
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () {
+                    setState(() => _periodOffset--);
+                    _dispatchRange();
+                  },
+                  tooltip: tr('pdf_reports.previous_month'),
+                ),
+                const SizedBox(width: 8),
+                Text(_formatRangeLabel(_selectedRange, _periodOffset, locale), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: () {
+                    setState(() => _periodOffset++);
+                    _dispatchRange();
+                  },
+                  tooltip: tr('pdf_reports.next_month'),
+                ),
+                if (_periodOffset != 0) ...[
+                  const SizedBox(width: 8),
+                  FilledButton.tonalIcon(
+                    onPressed: () {
+                      setState(() => _periodOffset = 0);
+                      _dispatchRange();
+                    },
+                    icon: const Icon(Icons.today, size: 18),
+                    label: Text(tr('time_tracking.today')),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        if (_selectedRange == 'custom' && state is StatisticsLoaded)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Align(
               alignment: Alignment.centerRight,
               child: Text(
-                '${DateFormat('d.M.yyyy', context.locale.languageCode).format(state.startDate)} — ${DateFormat('d.M.yyyy', context.locale.languageCode).format(state.endDate)}',
+                '${DateFormat('d.M.yyyy', locale).format(state.startDate)} — ${DateFormat('d.M.yyyy', locale).format(state.endDate)}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
               ),
             ),
@@ -122,6 +217,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
   Widget _buildProjectFilter(BuildContext context, StatisticsState state) {
     final projects = context.read<ProjectRepository>().getAll().where((p) => !p.isArchived).toList();
     final filteredIds = state is StatisticsLoaded ? state.filteredProjectIds : <String>[];
+    final allSelected = filteredIds.isEmpty;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -129,7 +225,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         children: [
           Icon(Icons.filter_list, size: 18, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
           const SizedBox(width: 8),
-          if (filteredIds.isNotEmpty)
+          if (!allSelected)
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: ActionChip(
@@ -139,7 +235,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
               ),
             ),
           ...projects.map((project) {
-            final isSelected = filteredIds.contains(project.id);
+            final isSelected = allSelected || filteredIds.contains(project.id);
             return Padding(
               padding: const EdgeInsets.only(right: 4),
               child: FilterChip(
@@ -149,13 +245,27 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 avatar: CircleAvatar(backgroundColor: Color(project.colorValue), radius: 6),
                 visualDensity: VisualDensity.compact,
                 onSelected: (selected) {
-                  final newIds = List<String>.from(filteredIds);
-                  if (selected) {
-                    newIds.add(project.id);
+                  if (allSelected) {
+                    // Switching from "all" to explicit: select all except the one being toggled off
+                    final allIds = projects.map((p) => p.id).toList();
+                    if (!selected) {
+                      allIds.remove(project.id);
+                    }
+                    context.read<StatisticsBloc>().add(FilterStatisticsProjects(allIds));
                   } else {
-                    newIds.remove(project.id);
+                    final newIds = List<String>.from(filteredIds);
+                    if (selected) {
+                      newIds.add(project.id);
+                    } else {
+                      newIds.remove(project.id);
+                    }
+                    // If all are selected again, switch back to empty (= all)
+                    if (newIds.length == projects.length) {
+                      context.read<StatisticsBloc>().add(const FilterStatisticsProjects([]));
+                    } else {
+                      context.read<StatisticsBloc>().add(FilterStatisticsProjects(newIds));
+                    }
                   }
-                  context.read<StatisticsBloc>().add(FilterStatisticsProjects(newIds));
                 },
               ),
             );
@@ -356,6 +466,79 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildMonthlyTargetsProgress(BuildContext context, StatisticsLoaded state) {
+    final targetRepo = context.read<MonthlyHoursTargetRepository>();
+    final targets = targetRepo.getAll();
+    if (targets.isEmpty) return const SizedBox.shrink();
+
+    // Calculate hours per project from the statistics entries
+    final timeEntryRepo = context.read<TimeEntryRepository>();
+    final dates = _getDateRange(_selectedRange, _periodOffset);
+    final entries = timeEntryRepo.getByDateRange(dates.$1, dates.$2);
+    final hoursPerProject = <String, double>{};
+    for (final entry in entries) {
+      hoursPerProject.update(entry.projectId, (val) => val + entry.actualDurationSeconds / 3600.0, ifAbsent: () => entry.actualDurationSeconds / 3600.0);
+    }
+
+    return SizedBox(
+      height: 52,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: targets.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final target = targets[index];
+          final workedHours = target.projectIds.fold(0.0, (sum, pid) => sum + (hoursPerProject[pid] ?? 0));
+          final progress = target.targetHours > 0 ? (workedHours / target.targetHours).clamp(0.0, 1.0) : 0.0;
+          final isComplete = workedHours >= target.targetHours;
+
+          return Container(
+            width: 220,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isComplete ? Colors.green.withValues(alpha: 0.5) : Theme.of(context).colorScheme.outlineVariant),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    Icon(isComplete ? Icons.check_circle : Icons.track_changes, size: 14, color: isComplete ? Colors.green : Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        target.name,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '${workedHours.toStringAsFixed(1)}/${target.targetHours.toStringAsFixed(0)}h',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: isComplete ? Colors.green : null),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 5,
+                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: isComplete ? Colors.green : Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
