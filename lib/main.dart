@@ -116,7 +116,15 @@ Future<void> main() async {
     });
 
     // Setup launch at startup
-    launchAtStartup.setup(appName: 'Timer Counter', appPath: Platform.resolvedExecutable);
+    String appPath = Platform.resolvedExecutable;
+    // On macOS, use the .app bundle path instead of the inner executable
+    if (Platform.isMacOS) {
+      final contentsIndex = appPath.indexOf('/Contents/');
+      if (contentsIndex != -1) {
+        appPath = appPath.substring(0, contentsIndex);
+      }
+    }
+    launchAtStartup.setup(appName: 'Timer Counter', appPath: appPath);
 
     // System Tray
     systemTrayService = SystemTrayService();
