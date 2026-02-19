@@ -171,6 +171,8 @@ class _AppWithTheme extends StatelessWidget {
         final task = taskRepo.getById(t.taskId);
         return TrayRunningTimerInfo(
           id: t.id,
+          projectId: t.projectId,
+          taskId: t.taskId,
           projectName: project?.name ?? 'Unknown',
           taskName: task?.name ?? 'Unknown',
           elapsed: TimeFormatter.formatDuration(t.elapsedSeconds, showSeconds: false),
@@ -195,26 +197,58 @@ class _AppWithTheme extends StatelessWidget {
         trayService.updateTitle('0:00 | $totalFormatted');
       }
 
+      // Build recent tasks list for tray
+      final settingsRepo = context.read<SettingsRepository>();
+      final recentPairs = settingsRepo.getRecentTasks();
+      final recentTaskInfos = <TrayRecentTaskInfo>[];
+      for (final pair in recentPairs) {
+        final p = projectRepo.getById(pair['projectId'] ?? '');
+        final t = taskRepo.getById(pair['taskId'] ?? '');
+        if (p != null && t != null && !p.isArchived) {
+          recentTaskInfos.add(TrayRecentTaskInfo(projectId: p.id, taskId: t.id, projectName: p.name, taskName: t.name, projectColor: p.colorValue));
+        }
+      }
+
       // Update menu
       trayService.updateMenu(
         runningTimers: runningTimerInfos,
+        recentTasks: recentTaskInfos,
         projects: projectInfos,
         onStopAll: () => context.read<TimerBloc>().add(const StopAllTimers()),
         onStopTimer: (timerId) => context.read<TimerBloc>().add(StopTimer(timerId)),
-        onStartTimer: (projectId, taskId) => context.read<TimerBloc>().add(StartTimer(projectId: projectId, taskId: taskId)),
+        onStartTimer: (projectId, taskId) {
+          settingsRepo.addRecentTask(projectId, taskId);
+          context.read<TimerBloc>().add(StartTimer(projectId: projectId, taskId: taskId));
+        },
       );
     } else {
       // No timer running — show 0:00 and empty total
       trayService.updateTooltip('Timer Counter');
       trayService.updateTitle('0:00');
 
+      // Build recent tasks list for tray
+      final settingsRepo = context.read<SettingsRepository>();
+      final recentPairs = settingsRepo.getRecentTasks();
+      final recentTaskInfos = <TrayRecentTaskInfo>[];
+      for (final pair in recentPairs) {
+        final p = projectRepo.getById(pair['projectId'] ?? '');
+        final t = taskRepo.getById(pair['taskId'] ?? '');
+        if (p != null && t != null && !p.isArchived) {
+          recentTaskInfos.add(TrayRecentTaskInfo(projectId: p.id, taskId: t.id, projectName: p.name, taskName: t.name, projectColor: p.colorValue));
+        }
+      }
+
       // Update menu with no running timers
       trayService.updateMenu(
         runningTimers: [],
+        recentTasks: recentTaskInfos,
         projects: projectInfos,
         onStopAll: () {},
         onStopTimer: (_) {},
-        onStartTimer: (projectId, taskId) => context.read<TimerBloc>().add(StartTimer(projectId: projectId, taskId: taskId)),
+        onStartTimer: (projectId, taskId) {
+          settingsRepo.addRecentTask(projectId, taskId);
+          context.read<TimerBloc>().add(StartTimer(projectId: projectId, taskId: taskId));
+        },
       );
     }
   }

@@ -81,6 +81,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     final settingsRepo = context.read<SettingsRepository>();
     settingsRepo.setLastProjectId(_selectedProject!.id);
     settingsRepo.setLastTaskId(_selectedTask!.id);
+    settingsRepo.addRecentTask(_selectedProject!.id, _selectedTask!.id);
     context.read<TimerBloc>().add(StartTimer(projectId: _selectedProject!.id, taskId: _selectedTask!.id));
   }
 
@@ -93,7 +94,86 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     final settingsRepo = context.read<SettingsRepository>();
     settingsRepo.setLastProjectId(_selectedProject!.id);
     settingsRepo.setLastTaskId(_selectedTask!.id);
+    settingsRepo.addRecentTask(_selectedProject!.id, _selectedTask!.id);
     context.read<TimerBloc>().add(StartTimer(projectId: _selectedProject!.id, taskId: _selectedTask!.id));
+  }
+
+  void _selectRecentTask(String projectId, String taskId) {
+    final projectRepo = context.read<ProjectRepository>();
+    final taskRepo = context.read<TaskRepository>();
+    final project = projectRepo.getById(projectId);
+    final task = taskRepo.getById(taskId);
+    if (project == null || task == null || project.isArchived) return;
+    setState(() {
+      _selectedProject = project;
+      _tasks = taskRepo.getByProject(project.id);
+      _selectedTask = task;
+    });
+  }
+
+  Widget _buildRecentTasksChips(BuildContext context, TimerRunning timerState) {
+    final settingsRepo = context.read<SettingsRepository>();
+    final projectRepo = context.read<ProjectRepository>();
+    final taskRepo = context.read<TaskRepository>();
+    final recentPairs = settingsRepo.getRecentTasks();
+
+    // Collect running project+task pairs
+    final runningPairs = timerState.runningTimers.map((t) => '${t.projectId}:${t.taskId}').toSet();
+
+    // Filter out invalid/archived entries
+    final validRecent = <({ProjectModel project, TaskModel task})>[];
+    for (final pair in recentPairs) {
+      final project = projectRepo.getById(pair['projectId'] ?? '');
+      final task = taskRepo.getById(pair['taskId'] ?? '');
+      if (project != null && task != null && !project.isArchived) {
+        validRecent.add((project: project, task: task));
+      }
+    }
+
+    if (validRecent.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(tr('time_tracking.recent_tasks'), style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5))),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: validRecent.map((r) {
+              final isRunning = runningPairs.contains('${r.project.id}:${r.task.id}');
+              final isSelected = _selectedProject?.id == r.project.id && _selectedTask?.id == r.task.id;
+              return ActionChip(
+                avatar: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: Color(r.project.colorValue).withValues(alpha: isRunning ? 0.4 : 1.0),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                label: Text(
+                  r.task.name,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isRunning ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.35) : null,
+                  ),
+                ),
+                side: isRunning
+                    ? BorderSide(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2))
+                    : isSelected
+                    ? BorderSide(color: Color(r.project.colorValue), width: 2)
+                    : null,
+                onPressed: isRunning ? null : () => _selectRecentTask(r.project.id, r.task.id),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
   }
 
   _ButtonMode _getButtonMode(TimerRunning timerState) {
@@ -165,6 +245,8 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
               ),
             ],
             const SizedBox(height: 16),
+            // Recent tasks quick-select
+            _buildRecentTasksChips(context, timerState),
             // Project/Task selector card
             Card(
               child: Padding(

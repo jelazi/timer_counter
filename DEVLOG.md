@@ -1,5 +1,30 @@
 # Development Log
 
+## 2026-02-19 — Add recent tasks quick-select to time tracking
+
+### What was done
+- Added `recentTasks` setting key to `AppConstants`
+- Added `getRecentTasks()` and `addRecentTask()` methods to `SettingsRepository` (persists last 4 project+task pairs in Hive)
+- When starting or switching a timer, the project+task pair is saved to recent tasks (most recent first, max 4, deduped)
+- Added `_buildRecentTasksChips()` widget to `TimeTrackingScreen` — shows recent tasks as `ActionChip`s above the project/task dropdowns
+- Clicking a chip auto-selects both the project and the task in the dropdowns
+- The currently selected pair is highlighted with a colored border
+- Invalid/archived entries are filtered out
+- Added translations: EN "Recent", CS "Nedávné"
+- **System tray menu**: Added `TrayRecentTaskInfo` class and `recentTasks` parameter to `updateMenu()`
+- Recent tasks now appear at root level of the tray menu (above project sub-menus) with ★ prefix
+- Starting a timer from the tray menu also saves the pair to recent tasks
+- Both running and idle tray states show recent tasks
+
+### Current state
+- `flutter analyze` — no issues found
+- Recent tasks appear at root level of:
+  - In-app selector area (ActionChips, both mobile and desktop)
+  - System tray menu (★ items, clickable to start timer)
+- Tasks also remain in their normal project sub-menu location
+
+---
+
 ## 2026-02-19 — Remove Firebase secrets from git history
 
 ### What was done
