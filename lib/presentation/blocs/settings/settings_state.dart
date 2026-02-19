@@ -14,8 +14,15 @@ class SettingsState extends Equatable {
   final bool launchAtStartup;
   final bool minimizeToTray;
   final bool remindStart;
+  final int remindStartInterval;
+  final int remindStartUrgency;
   final bool remindStop;
+  final int remindStopInterval;
+  final int remindStopUrgency;
   final bool remindBreak;
+  final int remindBreakInterval;
+  final int remindBreakUrgency;
+  final int remindBreakAfter;
   final bool allowOverlapTimes;
   final Map<int, ({String start, String end, bool enabled})> workSchedule;
 
@@ -33,8 +40,15 @@ class SettingsState extends Equatable {
     this.launchAtStartup = false,
     this.minimizeToTray = true,
     this.remindStart = false,
+    this.remindStartInterval = 15,
+    this.remindStartUrgency = 2,
     this.remindStop = false,
+    this.remindStopInterval = 15,
+    this.remindStopUrgency = 2,
     this.remindBreak = false,
+    this.remindBreakInterval = 30,
+    this.remindBreakUrgency = 2,
+    this.remindBreakAfter = 90,
     this.allowOverlapTimes = false,
     this.workSchedule = const {},
   });
@@ -53,8 +67,15 @@ class SettingsState extends Equatable {
     bool? launchAtStartup,
     bool? minimizeToTray,
     bool? remindStart,
+    int? remindStartInterval,
+    int? remindStartUrgency,
     bool? remindStop,
+    int? remindStopInterval,
+    int? remindStopUrgency,
     bool? remindBreak,
+    int? remindBreakInterval,
+    int? remindBreakUrgency,
+    int? remindBreakAfter,
     bool? allowOverlapTimes,
     Map<int, ({String start, String end, bool enabled})>? workSchedule,
   }) {
@@ -72,8 +93,15 @@ class SettingsState extends Equatable {
       launchAtStartup: launchAtStartup ?? this.launchAtStartup,
       minimizeToTray: minimizeToTray ?? this.minimizeToTray,
       remindStart: remindStart ?? this.remindStart,
+      remindStartInterval: remindStartInterval ?? this.remindStartInterval,
+      remindStartUrgency: remindStartUrgency ?? this.remindStartUrgency,
       remindStop: remindStop ?? this.remindStop,
+      remindStopInterval: remindStopInterval ?? this.remindStopInterval,
+      remindStopUrgency: remindStopUrgency ?? this.remindStopUrgency,
       remindBreak: remindBreak ?? this.remindBreak,
+      remindBreakInterval: remindBreakInterval ?? this.remindBreakInterval,
+      remindBreakUrgency: remindBreakUrgency ?? this.remindBreakUrgency,
+      remindBreakAfter: remindBreakAfter ?? this.remindBreakAfter,
       allowOverlapTimes: allowOverlapTimes ?? this.allowOverlapTimes,
       workSchedule: workSchedule ?? this.workSchedule,
     );
@@ -94,8 +122,15 @@ class SettingsState extends Equatable {
     launchAtStartup,
     minimizeToTray,
     remindStart,
+    remindStartInterval,
+    remindStartUrgency,
     remindStop,
+    remindStopInterval,
+    remindStopUrgency,
     remindBreak,
+    remindBreakInterval,
+    remindBreakUrgency,
+    remindBreakAfter,
     allowOverlapTimes,
     workSchedule,
   ];

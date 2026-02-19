@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/firebase_sync_service_v2.dart';
 import '../../core/services/tyme_data_import_service.dart';
@@ -453,32 +454,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Card(
                           child: Column(
                             children: [
+                              // ── Remind Start ──
                               SwitchListTile(
                                 secondary: const Icon(Icons.alarm),
                                 title: Text(tr('settings.remind_start')),
+                                subtitle: Text(tr('settings.remind_start_desc')),
                                 value: state.remindStart,
                                 onChanged: (v) {
                                   context.read<SettingsBloc>().add(ToggleRemindStart(v));
                                 },
                               ),
+                              if (state.remindStart) ...[
+                                _buildReminderOptions(
+                                  context,
+                                  intervalValue: state.remindStartInterval,
+                                  urgencyValue: state.remindStartUrgency,
+                                  onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStartInterval(v)),
+                                  onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStartUrgency(v)),
+                                ),
+                              ],
                               const Divider(height: 1),
+                              // ── Remind Stop ──
                               SwitchListTile(
                                 secondary: const Icon(Icons.alarm_off),
                                 title: Text(tr('settings.remind_stop')),
+                                subtitle: Text(tr('settings.remind_stop_desc')),
                                 value: state.remindStop,
                                 onChanged: (v) {
                                   context.read<SettingsBloc>().add(ToggleRemindStop(v));
                                 },
                               ),
+                              if (state.remindStop) ...[
+                                _buildReminderOptions(
+                                  context,
+                                  intervalValue: state.remindStopInterval,
+                                  urgencyValue: state.remindStopUrgency,
+                                  onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStopInterval(v)),
+                                  onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStopUrgency(v)),
+                                ),
+                              ],
                               const Divider(height: 1),
+                              // ── Remind Break ──
                               SwitchListTile(
                                 secondary: const Icon(Icons.free_breakfast),
                                 title: Text(tr('settings.remind_break')),
+                                subtitle: Text(tr('settings.remind_break_desc')),
                                 value: state.remindBreak,
                                 onChanged: (v) {
                                   context.read<SettingsBloc>().add(ToggleRemindBreak(v));
                                 },
                               ),
+                              if (state.remindBreak) ...[
+                                _buildReminderOptions(
+                                  context,
+                                  intervalValue: state.remindBreakInterval,
+                                  urgencyValue: state.remindBreakUrgency,
+                                  onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakInterval(v)),
+                                  onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakUrgency(v)),
+                                  showBreakAfter: true,
+                                  breakAfterValue: state.remindBreakAfter,
+                                  onBreakAfterChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakAfter(v)),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -510,6 +547,97 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildReminderOptions(
+    BuildContext context, {
+    required int intervalValue,
+    required int urgencyValue,
+    required ValueChanged<int> onIntervalChanged,
+    required ValueChanged<int> onUrgencyChanged,
+    bool showBreakAfter = false,
+    int breakAfterValue = 90,
+    ValueChanged<int>? onBreakAfterChanged,
+  }) {
+    final urgencyLabels = {
+      1: (icon: Icons.notifications_none, label: tr('settings.urgency_gentle'), color: Colors.green),
+      2: (icon: Icons.notifications_active, label: tr('settings.urgency_normal'), color: Colors.orange),
+      3: (icon: Icons.notification_important, label: tr('settings.urgency_firm'), color: Colors.red),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(56, 0, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Interval
+          Row(
+            children: [
+              Text(tr('settings.reminder_interval'), style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(width: 8),
+              DropdownButton<int>(
+                value: AppConstants.reminderIntervalOptions.contains(intervalValue) ? intervalValue : AppConstants.defaultReminderInterval,
+                isDense: true,
+                underline: const SizedBox(),
+                items: AppConstants.reminderIntervalOptions.map((m) {
+                  return DropdownMenuItem(value: m, child: Text('$m ${tr("settings.minutes_short")}'));
+                }).toList(),
+                onChanged: (v) {
+                  if (v != null) onIntervalChanged(v);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Urgency
+          Row(
+            children: [
+              Text(tr('settings.urgency_level'), style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(width: 8),
+              ...urgencyLabels.entries.map((e) {
+                final selected = e.key == urgencyValue;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: ChoiceChip(
+                    avatar: Icon(e.value.icon, size: 16, color: selected ? Colors.white : e.value.color),
+                    label: Text(e.value.label, style: TextStyle(fontSize: 12, color: selected ? Colors.white : null)),
+                    selected: selected,
+                    selectedColor: e.value.color,
+                    onSelected: (_) => onUrgencyChanged(e.key),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                );
+              }),
+            ],
+          ),
+          // Break-after (only for break reminder)
+          if (showBreakAfter && onBreakAfterChanged != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Text(tr('settings.break_after'), style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(width: 8),
+                DropdownButton<int>(
+                  value: AppConstants.breakAfterOptions.contains(breakAfterValue) ? breakAfterValue : AppConstants.defaultBreakAfter,
+                  isDense: true,
+                  underline: const SizedBox(),
+                  items: AppConstants.breakAfterOptions.map((m) {
+                    final h = m ~/ 60;
+                    final min = m % 60;
+                    final label = h > 0 ? '${h}h${min > 0 ? ' ${min}m' : ''}' : '${min}m';
+                    return DropdownMenuItem(value: m, child: Text(label));
+                  }).toList(),
+                  onChanged: (v) {
+                    if (v != null) onBreakAfterChanged(v);
+                  },
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 

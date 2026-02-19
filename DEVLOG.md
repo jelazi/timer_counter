@@ -1,5 +1,85 @@
 # Development Log
 
+## 2026-02-19 — Enhanced reminder settings (configurable interval, urgency & "Don't remind today")
+
+### What was done
+- Each of the 3 reminders (start, stop, break) now has **configurable repeat interval** and **urgency level** (3 levels: gentle/normal/firm)
+- Break reminder additionally has a **configurable "after X minutes"** threshold (previously hardcoded at 90 min)
+- Notifications now include a **"Don't remind today"** action button — tapping it mutes that specific reminder type for the rest of the day
+- Settings UI shows expandable options below each reminder toggle when enabled: interval dropdown, urgency chip selector, and break-after dropdown
+- Native macOS notification categories registered with `UNNotificationCategory` + `UNNotificationAction` for the mute action
+- MethodChannel callback from Swift → Dart (`onMuteToday`) communicates the action
+
+### Settings added (per reminder)
+- **Interval**: 5, 10, 15, 20, 30, 60 minutes (default: 15)
+- **Urgency**: Gentle (1), Normal (2), Firm (3) — each produces different notification tone/message
+- **Break After** (break only): 30, 45, 60, 90, 120 minutes (default: 90)
+
+### Files modified
+- `lib/core/constants/app_constants.dart` — new setting keys, defaults, option lists
+- `lib/data/repositories/settings_repository.dart` — getter/setter methods for all new settings
+- `lib/presentation/blocs/settings/settings_state.dart` — 7 new state fields
+- `lib/presentation/blocs/settings/settings_event.dart` — 7 new event classes
+- `lib/presentation/blocs/settings/settings_bloc.dart` — handlers, LoadSettings updated
+- `lib/core/services/work_reminder_service.dart` — complete rewrite with configurable interval/urgency, "mute today" support, notification categories
+- `macos/Runner/AppDelegate.swift` — notification categories with "Don't remind today" action, `registerActions` method, `onMuteToday` callback
+- `lib/presentation/screens/settings_screen.dart` — expanded reminder UI with dropdown/chip controls
+- `assets/translations/en.json` — new keys (interval, urgency levels, break after, minutes_short)
+- `assets/translations/cs.json` — Czech translations for all new keys
+
+### Current state
+- All 3 reminders fully configurable from Settings
+- "Don't remind today" button appears on every notification, resets at midnight
+- Build succeeds (flutter analyze clean, flutter build macos OK)
+
+### Known issues
+- None
+
+---
+
+## 2026-02-19 — Work reminder notifications (macOS native)
+
+### What was done
+- Implemented a **`WorkReminderService`** that runs a periodic timer (every 60s) and sends native macOS notifications based on work schedule and timer state
+- Uses native `UNUserNotificationCenter` via a new MethodChannel `com.timer_counter/notifications`
+- The 3 existing reminder toggles in Settings (`remindStart`, `remindStop`, `remindBreak`) now actually trigger real notifications
+
+#### Notification types and escalation:
+
+1. **Remind to Start** — fires when it's a work day, within work hours, and no timer is running
+   - 0–15 min overdue: gentle ("☀️ Good morning!"), then silent for 15 min
+   - 15–45 min: normal ("⏰ Time to work"), every 15 min
+   - 45+ min: firm ("🔴 No timer running!"), every 10 min
+   - Automatically stops if user starts a timer
+
+2. **Remind to Stop** — fires when past end-of-work and a timer is still running
+   - Same escalation pattern (gentle → normal → firm)
+   - Stops if user stops all timers
+
+3. **Remind Break** — fires after 90 min of continuous timer running, then every 30 min
+   - Single level ("☕ Time for a break")
+
+#### All notifications are bilingual (EN/CS) based on app language setting.
+
+### Files created
+- `lib/core/services/work_reminder_service.dart` — Dart notification service with escalation logic
+
+### Files modified
+- `macos/Runner/AppDelegate.swift` — Added `UNUserNotificationCenter` delegate, permission request handler, `showNotification` MethodChannel handler. Notifications show as banners even when app is in foreground. Tapping a notification brings the app to front.
+- `lib/main.dart` — Start `WorkReminderService` on macOS after desktop setup
+- `lib/presentation/screens/settings_screen.dart` — Added subtitle descriptions to all 3 reminder switches
+- `assets/translations/en.json` — Added `remind_start_desc`, `remind_stop_desc`, `remind_break_desc`
+- `assets/translations/cs.json` — Added Czech translations for the 3 description keys
+
+### Current state
+- `flutter analyze` — no issues found
+- `flutter build macos` — successful
+- Each reminder toggle independently controls its notification type
+- Non-work days (disabled in work schedule) produce no notifications
+- Daily state resets at midnight
+
+---
+
 ## 2026-02-19 — Fix "Launch at Startup" not working on macOS
 
 ### Problem
