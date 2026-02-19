@@ -1,5 +1,25 @@
 # Development Log
 
+## 2026-02-19 — Remove Firebase secrets from git history
+
+### What was done
+- Identified 4 sensitive Firebase files tracked in git: `android/app/google-services.json`, `ios/Runner/GoogleService-Info.plist`, `macos/Runner/GoogleService-Info.plist`, `lib/firebase_options.dart`
+- Installed `git-filter-repo` and used it to purge all 4 files from the entire commit history (21 commits rewritten)
+- Files backed up locally at `/tmp/firebase_backup/` and restored to working directory after history rewrite
+- Added all 4 files to `.gitignore` to prevent future accidental commits
+- Force-pushed rewritten history to `origin/master` — secrets are no longer present in any remote commit
+
+### Current state
+- Firebase files exist locally but are NOT tracked by git
+- Remote history is clean — no secrets in any commit
+- App builds and works as before (files are present on disk)
+
+### Next steps
+- Consider revoking and regenerating Firebase API keys as best practice, since they were previously public
+- Consider using environment variables or a secrets manager for CI/CD
+
+---
+
 ## 2026-02-18 — Replace collapse animations with natural scrolling
 
 ### What was done
