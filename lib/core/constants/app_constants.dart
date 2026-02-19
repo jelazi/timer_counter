@@ -31,6 +31,7 @@ class AppConstants {
   static const String remindBreak = 'remind_break';
   static const String lastProjectId = 'last_project_id';
   static const String lastTaskId = 'last_task_id';
+  static const String recentTasks = 'recent_tasks';
   static const String allowOverlapTimes = 'allow_overlap_times';
 
   // Invoice Settings Keys

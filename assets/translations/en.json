@@ -39,7 +39,8 @@
         "no_task_selected": "No task selected",
         "remaining_today": "Remaining Today",
         "overtime": "Overtime",
-        "expected_today": "Expected Today"
+        "expected_today": "Expected Today",
+        "recent_tasks": "Recent"
     },
     "projects": {
         "title": "Projects",

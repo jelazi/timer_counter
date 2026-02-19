@@ -39,7 +39,8 @@
         "no_task_selected": "Žádný úkol nevybrán",
         "remaining_today": "Zbývá dnes",
         "overtime": "Přesčas",
-        "expected_today": "Očekáváno dnes"
+        "expected_today": "Očekáváno dnes",
+        "recent_tasks": "Nedávné"
     },
     "projects": {
         "title": "Projekty",

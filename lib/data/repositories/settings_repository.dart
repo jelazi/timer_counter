@@ -70,6 +70,31 @@ class SettingsRepository {
   String? getLastTaskId() => _box.get(AppConstants.lastTaskId) as String?;
   Future<void> setLastTaskId(String id) => _box.put(AppConstants.lastTaskId, id);
 
+  // Recent tasks (last 4 used project+task pairs)
+  static const int _maxRecentTasks = 4;
+
+  List<Map<String, String>> getRecentTasks() {
+    final raw = _box.get(AppConstants.recentTasks);
+    if (raw == null) return [];
+    return (raw as List).map((e) {
+      final map = Map<dynamic, dynamic>.from(e as Map);
+      return map.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }).toList();
+  }
+
+  Future<void> addRecentTask(String projectId, String taskId) async {
+    final recent = getRecentTasks();
+    // Remove duplicate if exists
+    recent.removeWhere((e) => e['projectId'] == projectId && e['taskId'] == taskId);
+    // Insert at front
+    recent.insert(0, {'projectId': projectId, 'taskId': taskId});
+    // Keep max 4
+    if (recent.length > _maxRecentTasks) {
+      recent.removeRange(_maxRecentTasks, recent.length);
+    }
+    await _box.put(AppConstants.recentTasks, recent);
+  }
+
   // Allow overlapping time entries
   bool getAllowOverlapTimes() => _box.get(AppConstants.allowOverlapTimes, defaultValue: false) as bool;
   Future<void> setAllowOverlapTimes(bool value) => _box.put(AppConstants.allowOverlapTimes, value);
