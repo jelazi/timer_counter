@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:launch_at_startup/launch_at_startup.dart';
 
 import '../../../data/repositories/settings_repository.dart';
 import 'settings_event.dart';
@@ -115,8 +117,17 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   }
 
   Future<void> _onToggleLaunchAtStartup(ToggleLaunchAtStartup event, Emitter<SettingsState> emit) async {
-    await _settingsRepository.setLaunchAtStartup(event.value);
-    emit(state.copyWith(launchAtStartup: event.value));
+    try {
+      if (event.value) {
+        await launchAtStartup.enable();
+      } else {
+        await launchAtStartup.disable();
+      }
+      await _settingsRepository.setLaunchAtStartup(event.value);
+      emit(state.copyWith(launchAtStartup: event.value));
+    } catch (e) {
+      debugPrint('[SettingsBloc] Failed to toggle launch at startup: $e');
+    }
   }
 
   Future<void> _onToggleMinimizeToTray(ToggleMinimizeToTray event, Emitter<SettingsState> emit) async {

@@ -1,5 +1,36 @@
 # Development Log
 
+## 2026-02-19 — Fix "Launch at Startup" not working on macOS
+
+### Problem
+- Toggling "Launch at Startup" in settings saved the boolean to Hive but the app never actually registered/unregistered as a macOS Login Item
+- The `launch_at_startup` package on macOS uses a MethodChannel (`launch_at_startup`) that requires a native Swift handler — none was implemented
+- `Platform.resolvedExecutable` returns the binary path inside the `.app` bundle (e.g. `…/Timer Counter.app/Contents/MacOS/Timer Counter`) instead of the `.app` bundle path
+
+### What was done
+1. **Added native MethodChannel handler** in `macos/Runner/MainFlutterWindow.swift`:
+   - Handles `launchAtStartupIsEnabled` → queries `SMAppService.mainApp.status`
+   - Handles `launchAtStartupSetEnabled` → calls `SMAppService.mainApp.register()` / `.unregister()`
+   - Uses `ServiceManagement` framework (macOS 13+), no third-party SPM dependency needed
+2. **Fixed settings bloc** (`lib/presentation/blocs/settings/settings_bloc.dart`):
+   - `_onToggleLaunchAtStartup` now calls `launchAtStartup.enable()` / `launchAtStartup.disable()` before saving to Hive
+   - Added error handling with `debugPrint` for failures
+3. **Fixed app path** in `lib/main.dart`:
+   - On macOS, strips `/Contents/…` suffix from `Platform.resolvedExecutable` to get the `.app` bundle path
+   - Other platforms unchanged
+
+### Files modified
+- `macos/Runner/MainFlutterWindow.swift` — Added `import ServiceManagement` + MethodChannel handler for `launch_at_startup`
+- `lib/presentation/blocs/settings/settings_bloc.dart` — Added `launchAtStartup.enable()`/`.disable()` calls + error handling
+- `lib/main.dart` — Fixed `appPath` to use `.app` bundle path on macOS
+
+### Current state
+- `flutter analyze` — no issues found
+- `flutter build macos` — successful
+- Login Item registration now uses native `SMAppService` (macOS 13+)
+
+---
+
 ## 2026-02-19 — Add recent tasks quick-select to time tracking
 
 ### What was done
