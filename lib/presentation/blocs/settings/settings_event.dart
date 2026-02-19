@@ -115,6 +115,22 @@ class ToggleRemindStart extends SettingsEvent {
   List<Object?> get props => [value];
 }
 
+class ChangeRemindStartInterval extends SettingsEvent {
+  final int minutes;
+  const ChangeRemindStartInterval(this.minutes);
+
+  @override
+  List<Object?> get props => [minutes];
+}
+
+class ChangeRemindStartUrgency extends SettingsEvent {
+  final int level;
+  const ChangeRemindStartUrgency(this.level);
+
+  @override
+  List<Object?> get props => [level];
+}
+
 class ToggleRemindStop extends SettingsEvent {
   final bool value;
   const ToggleRemindStop(this.value);
@@ -123,12 +139,52 @@ class ToggleRemindStop extends SettingsEvent {
   List<Object?> get props => [value];
 }
 
+class ChangeRemindStopInterval extends SettingsEvent {
+  final int minutes;
+  const ChangeRemindStopInterval(this.minutes);
+
+  @override
+  List<Object?> get props => [minutes];
+}
+
+class ChangeRemindStopUrgency extends SettingsEvent {
+  final int level;
+  const ChangeRemindStopUrgency(this.level);
+
+  @override
+  List<Object?> get props => [level];
+}
+
 class ToggleRemindBreak extends SettingsEvent {
   final bool value;
   const ToggleRemindBreak(this.value);
 
   @override
   List<Object?> get props => [value];
+}
+
+class ChangeRemindBreakInterval extends SettingsEvent {
+  final int minutes;
+  const ChangeRemindBreakInterval(this.minutes);
+
+  @override
+  List<Object?> get props => [minutes];
+}
+
+class ChangeRemindBreakUrgency extends SettingsEvent {
+  final int level;
+  const ChangeRemindBreakUrgency(this.level);
+
+  @override
+  List<Object?> get props => [level];
+}
+
+class ChangeRemindBreakAfter extends SettingsEvent {
+  final int minutes;
+  const ChangeRemindBreakAfter(this.minutes);
+
+  @override
+  List<Object?> get props => [minutes];
 }
 
 class ToggleAllowOverlapTimes extends SettingsEvent {

@@ -54,14 +54,31 @@ class SettingsRepository {
   Future<void> setMinimizeToTray(bool value) => _box.put(AppConstants.minimizeToTray, value);
 
   // Reminders
+  // Remind Start
   bool getRemindStart() => _box.get(AppConstants.remindStart, defaultValue: false) as bool;
   Future<void> setRemindStart(bool value) => _box.put(AppConstants.remindStart, value);
+  int getRemindStartInterval() => _box.get(AppConstants.remindStartInterval, defaultValue: AppConstants.defaultReminderInterval) as int;
+  Future<void> setRemindStartInterval(int minutes) => _box.put(AppConstants.remindStartInterval, minutes);
+  int getRemindStartUrgency() => _box.get(AppConstants.remindStartUrgency, defaultValue: AppConstants.defaultReminderUrgency) as int;
+  Future<void> setRemindStartUrgency(int level) => _box.put(AppConstants.remindStartUrgency, level);
 
+  // Remind Stop
   bool getRemindStop() => _box.get(AppConstants.remindStop, defaultValue: false) as bool;
   Future<void> setRemindStop(bool value) => _box.put(AppConstants.remindStop, value);
+  int getRemindStopInterval() => _box.get(AppConstants.remindStopInterval, defaultValue: AppConstants.defaultReminderInterval) as int;
+  Future<void> setRemindStopInterval(int minutes) => _box.put(AppConstants.remindStopInterval, minutes);
+  int getRemindStopUrgency() => _box.get(AppConstants.remindStopUrgency, defaultValue: AppConstants.defaultReminderUrgency) as int;
+  Future<void> setRemindStopUrgency(int level) => _box.put(AppConstants.remindStopUrgency, level);
 
+  // Remind Break
   bool getRemindBreak() => _box.get(AppConstants.remindBreak, defaultValue: false) as bool;
   Future<void> setRemindBreak(bool value) => _box.put(AppConstants.remindBreak, value);
+  int getRemindBreakInterval() => _box.get(AppConstants.remindBreakInterval, defaultValue: 30) as int;
+  Future<void> setRemindBreakInterval(int minutes) => _box.put(AppConstants.remindBreakInterval, minutes);
+  int getRemindBreakUrgency() => _box.get(AppConstants.remindBreakUrgency, defaultValue: AppConstants.defaultReminderUrgency) as int;
+  Future<void> setRemindBreakUrgency(int level) => _box.put(AppConstants.remindBreakUrgency, level);
+  int getRemindBreakAfter() => _box.get(AppConstants.remindBreakAfter, defaultValue: AppConstants.defaultBreakAfter) as int;
+  Future<void> setRemindBreakAfter(int minutes) => _box.put(AppConstants.remindBreakAfter, minutes);
 
   // Last selected project/task
   String? getLastProjectId() => _box.get(AppConstants.lastProjectId) as String?;

@@ -27,8 +27,22 @@ class AppConstants {
   static const String launchAtStartup = 'launch_at_startup';
   static const String minimizeToTray = 'minimize_to_tray';
   static const String remindStart = 'remind_start';
+  static const String remindStartInterval = 'remind_start_interval';
+  static const String remindStartUrgency = 'remind_start_urgency';
   static const String remindStop = 'remind_stop';
+  static const String remindStopInterval = 'remind_stop_interval';
+  static const String remindStopUrgency = 'remind_stop_urgency';
   static const String remindBreak = 'remind_break';
+  static const String remindBreakInterval = 'remind_break_interval';
+  static const String remindBreakUrgency = 'remind_break_urgency';
+  static const String remindBreakAfter = 'remind_break_after';
+
+  // Reminder defaults
+  static const int defaultReminderInterval = 15; // minutes
+  static const int defaultReminderUrgency = 2; // 1=gentle, 2=normal, 3=firm
+  static const int defaultBreakAfter = 90; // minutes
+  static const List<int> reminderIntervalOptions = [5, 10, 15, 20, 30, 60];
+  static const List<int> breakAfterOptions = [30, 45, 60, 90, 120];
   static const String lastProjectId = 'last_project_id';
   static const String lastTaskId = 'last_task_id';
   static const String recentTasks = 'recent_tasks';

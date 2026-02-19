@@ -14,6 +14,7 @@ import 'app/desktop_window_handler.dart';
 import 'app/system_tray_service.dart';
 import 'core/constants/app_constants.dart';
 import 'core/services/firebase_sync_service_v2.dart';
+import 'core/services/work_reminder_service.dart';
 import 'core/utils/platform_utils.dart';
 import 'data/models/category_model.dart';
 import 'data/models/monthly_hours_target_model.dart';
@@ -132,6 +133,12 @@ Future<void> main() async {
 
     // Desktop window handler (close-to-tray, minimize-to-tray)
     DesktopWindowHandler(settingsRepo: settingsRepository);
+  }
+
+  // ── Work Reminder Notifications ────────────────────────────────────────
+  if (Platform.isMacOS) {
+    final workReminderService = WorkReminderService(settingsRepo: settingsRepository, timerRepo: runningTimerRepository);
+    workReminderService.start();
   }
 
   runApp(

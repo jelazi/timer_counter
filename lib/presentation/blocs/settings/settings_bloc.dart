@@ -24,8 +24,15 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<ToggleLaunchAtStartup>(_onToggleLaunchAtStartup);
     on<ToggleMinimizeToTray>(_onToggleMinimizeToTray);
     on<ToggleRemindStart>(_onToggleRemindStart);
+    on<ChangeRemindStartInterval>(_onChangeRemindStartInterval);
+    on<ChangeRemindStartUrgency>(_onChangeRemindStartUrgency);
     on<ToggleRemindStop>(_onToggleRemindStop);
+    on<ChangeRemindStopInterval>(_onChangeRemindStopInterval);
+    on<ChangeRemindStopUrgency>(_onChangeRemindStopUrgency);
     on<ToggleRemindBreak>(_onToggleRemindBreak);
+    on<ChangeRemindBreakInterval>(_onChangeRemindBreakInterval);
+    on<ChangeRemindBreakUrgency>(_onChangeRemindBreakUrgency);
+    on<ChangeRemindBreakAfter>(_onChangeRemindBreakAfter);
     on<ToggleAllowOverlapTimes>(_onToggleAllowOverlapTimes);
     on<ChangeWorkSchedule>(_onChangeWorkSchedule);
   }
@@ -58,8 +65,15 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
         launchAtStartup: _settingsRepository.getLaunchAtStartup(),
         minimizeToTray: _settingsRepository.getMinimizeToTray(),
         remindStart: _settingsRepository.getRemindStart(),
+        remindStartInterval: _settingsRepository.getRemindStartInterval(),
+        remindStartUrgency: _settingsRepository.getRemindStartUrgency(),
         remindStop: _settingsRepository.getRemindStop(),
+        remindStopInterval: _settingsRepository.getRemindStopInterval(),
+        remindStopUrgency: _settingsRepository.getRemindStopUrgency(),
         remindBreak: _settingsRepository.getRemindBreak(),
+        remindBreakInterval: _settingsRepository.getRemindBreakInterval(),
+        remindBreakUrgency: _settingsRepository.getRemindBreakUrgency(),
+        remindBreakAfter: _settingsRepository.getRemindBreakAfter(),
         allowOverlapTimes: _settingsRepository.getAllowOverlapTimes(),
         workSchedule: _loadWorkSchedule(),
       ),
@@ -140,14 +154,49 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     emit(state.copyWith(remindStart: event.value));
   }
 
+  Future<void> _onChangeRemindStartInterval(ChangeRemindStartInterval event, Emitter<SettingsState> emit) async {
+    await _settingsRepository.setRemindStartInterval(event.minutes);
+    emit(state.copyWith(remindStartInterval: event.minutes));
+  }
+
+  Future<void> _onChangeRemindStartUrgency(ChangeRemindStartUrgency event, Emitter<SettingsState> emit) async {
+    await _settingsRepository.setRemindStartUrgency(event.level);
+    emit(state.copyWith(remindStartUrgency: event.level));
+  }
+
   Future<void> _onToggleRemindStop(ToggleRemindStop event, Emitter<SettingsState> emit) async {
     await _settingsRepository.setRemindStop(event.value);
     emit(state.copyWith(remindStop: event.value));
   }
 
+  Future<void> _onChangeRemindStopInterval(ChangeRemindStopInterval event, Emitter<SettingsState> emit) async {
+    await _settingsRepository.setRemindStopInterval(event.minutes);
+    emit(state.copyWith(remindStopInterval: event.minutes));
+  }
+
+  Future<void> _onChangeRemindStopUrgency(ChangeRemindStopUrgency event, Emitter<SettingsState> emit) async {
+    await _settingsRepository.setRemindStopUrgency(event.level);
+    emit(state.copyWith(remindStopUrgency: event.level));
+  }
+
   Future<void> _onToggleRemindBreak(ToggleRemindBreak event, Emitter<SettingsState> emit) async {
     await _settingsRepository.setRemindBreak(event.value);
     emit(state.copyWith(remindBreak: event.value));
+  }
+
+  Future<void> _onChangeRemindBreakInterval(ChangeRemindBreakInterval event, Emitter<SettingsState> emit) async {
+    await _settingsRepository.setRemindBreakInterval(event.minutes);
+    emit(state.copyWith(remindBreakInterval: event.minutes));
+  }
+
+  Future<void> _onChangeRemindBreakUrgency(ChangeRemindBreakUrgency event, Emitter<SettingsState> emit) async {
+    await _settingsRepository.setRemindBreakUrgency(event.level);
+    emit(state.copyWith(remindBreakUrgency: event.level));
+  }
+
+  Future<void> _onChangeRemindBreakAfter(ChangeRemindBreakAfter event, Emitter<SettingsState> emit) async {
+    await _settingsRepository.setRemindBreakAfter(event.minutes);
+    emit(state.copyWith(remindBreakAfter: event.minutes));
   }
 
   Future<void> _onToggleAllowOverlapTimes(ToggleAllowOverlapTimes event, Emitter<SettingsState> emit) async {
