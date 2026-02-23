@@ -40,6 +40,7 @@
         "remaining_today": "Zbývá dnes",
         "overtime": "Přesčas",
         "expected_today": "Očekáváno dnes",
+        "needed_per_day_month": "Měsíc: {hours}h/den",
         "recent_tasks": "Nedávné"
     },
     "projects": {
@@ -251,7 +252,7 @@
         "total": "Celkem",
         "manual_entry_saved": "Ruční záznam uložen",
         "entry_updated": "Záznam aktualizován",
-        "entries_count": "{count} záznamů",
+        "entries_count": "záznamů",
         "timeline": "Časová osa",
         "month_total": "Celkem za měsíc"
     },
@@ -268,10 +269,10 @@
         "merge_desc": "Aktualizovat existující záznamy, přidat nové (shoda podle ID)",
         "success": "Import úspěšný",
         "error": "Import selhal",
-        "entries_imported": "{count} záznamů importováno",
-        "categories_imported": "{count} kategorií importováno",
-        "projects_imported": "{count} projektů importováno",
-        "tasks_imported": "{count} úkolů importováno",
+        "entries_imported": "záznamů importováno",
+        "categories_imported": "kategorií importováno",
+        "projects_imported": "projektů importováno",
+        "tasks_imported": "úkolů importováno",
         "import_mode": "Režim importu",
         "confirm_overwrite": "Tato akce smaže VŠECHNA stávající data. Jste si jisti?",
         "no_data": "V souboru nebyla nalezena žádná platná data"
@@ -390,7 +391,7 @@
         "sync_error": "Chyba synchronizace",
         "confirm_upload": "Nahrání dat do cloudu přepíše všechna vzdálená data. Pokračovat?",
         "confirm_download": "Stáhnutí dat z cloudu přepíše všechna místní data. Pokračovat?",
-        "items_synced": "{count} položek synchronizováno",
+        "items_synced": " položek synchronizováno",
         "projects": "projektů",
         "tasks": "úkolů",
         "time_entries": "záznamů",

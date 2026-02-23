@@ -341,8 +341,15 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
   }
 
   Widget _buildDaySection(BuildContext context, DateTime day, List<TimeEntryModel> entries, ProjectRepository projectRepo, TaskRepository taskRepo, SettingsState settingsState) {
+    final settingsRepo = context.read<SettingsRepository>();
     final dayTotal = entries.fold(0, (sum, e) => sum + e.actualDurationSeconds);
     final isToday = _isToday(day);
+
+    // Calculate daily deficit/surplus based on expected hours for this day
+    final expectedDayHours = settingsRepo.getExpectedHoursForDay(day.weekday);
+    final workedDayHours = dayTotal / 3600.0;
+    final dayDiff = workedDayHours - expectedDayHours; // positive = surplus, negative = deficit
+    final hasDayExpectation = expectedDayHours > 0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -380,6 +387,20 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                   '${entries.length} \u2014 ${TimeFormatter.formatDuration(dayTotal, showSeconds: false)}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                 ),
+                if (hasDayExpectation) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: dayDiff >= 0 ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${dayDiff >= 0 ? "+" : ""}${dayDiff.toStringAsFixed(1)}h',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: dayDiff >= 0 ? Colors.green : Colors.red, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
