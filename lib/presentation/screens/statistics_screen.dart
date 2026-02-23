@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/utils/time_formatter.dart';
+import '../../data/models/running_timer_model.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/settings_repository.dart';
@@ -11,6 +12,8 @@ import '../../data/repositories/time_entry_repository.dart';
 import '../blocs/statistics/statistics_bloc.dart';
 import '../blocs/statistics/statistics_event.dart';
 import '../blocs/statistics/statistics_state.dart';
+import '../blocs/timer/timer_bloc.dart';
+import '../blocs/timer/timer_state.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
@@ -94,23 +97,49 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
+  /// Get running timers whose startTime falls within the given date range.
+  List<RunningTimerModel> _getRunningTimersInRange(TimerState timerState, DateTime startDate, DateTime endDate) {
+    if (timerState is TimerRunning) {
+      return timerState.runningTimers.where((t) => !t.startTime.isBefore(startDate) && t.startTime.isBefore(endDate)).toList();
+    }
+    return [];
+  }
+
+  /// Calculate total running timer seconds for timers within the date range, optionally per project.
+  int _runningSecondsInRange(TimerState timerState, DateTime startDate, DateTime endDate) {
+    return _getRunningTimersInRange(timerState, startDate, endDate).fold(0, (sum, t) => sum + t.elapsedSeconds);
+  }
+
+  /// Calculate running timer seconds per project within the date range.
+  Map<String, int> _runningSecondsPerProject(TimerState timerState, DateTime startDate, DateTime endDate) {
+    final map = <String, int>{};
+    for (final t in _getRunningTimersInRange(timerState, startDate, endDate)) {
+      map[t.projectId] = (map[t.projectId] ?? 0) + t.elapsedSeconds;
+    }
+    return map;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<StatisticsBloc, StatisticsState>(
-      builder: (context, state) {
-        final isMobile = MediaQuery.of(context).size.width < 600;
-        return Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          body: Padding(
-            padding: EdgeInsets.all(isMobile ? 16 : 24),
-            child: isMobile ? _buildMobileStatistics(context, state, isMobile) : _buildDesktopStatistics(context, state, isMobile),
-          ),
+    return BlocBuilder<TimerBloc, TimerState>(
+      builder: (context, timerState) {
+        return BlocBuilder<StatisticsBloc, StatisticsState>(
+          builder: (context, state) {
+            final isMobile = MediaQuery.of(context).size.width < 600;
+            return Scaffold(
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              body: Padding(
+                padding: EdgeInsets.all(isMobile ? 16 : 24),
+                child: isMobile ? _buildMobileStatistics(context, state, isMobile, timerState) : _buildDesktopStatistics(context, state, isMobile, timerState),
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildDesktopStatistics(BuildContext context, StatisticsState state, bool isMobile) {
+  Widget _buildDesktopStatistics(BuildContext context, StatisticsState state, bool isMobile, TimerState timerState) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -119,14 +148,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         _buildProjectFilter(context, state),
         const SizedBox(height: 24),
         if (state is StatisticsLoaded) ...[
-          _buildSummaryCards(context, state),
-          if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state)],
+          _buildSummaryCards(context, state, timerState),
+          if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state, timerState)],
           const SizedBox(height: 24),
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(flex: 2, child: _buildDailyChart(context, state)),
+                Expanded(flex: 2, child: _buildDailyChart(context, state, timerState)),
                 const SizedBox(width: 16),
                 Expanded(child: _buildProjectDistribution(context, state)),
               ],
@@ -141,7 +170,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _buildMobileStatistics(BuildContext context, StatisticsState state, bool isMobile) {
+  Widget _buildMobileStatistics(BuildContext context, StatisticsState state, bool isMobile, TimerState timerState) {
     final title = Text(tr('statistics.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold));
 
     if (state is StatisticsLoaded) {
@@ -159,10 +188,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   const SizedBox(height: 8),
                   _buildProjectFilter(context, state),
                   const SizedBox(height: 16),
-                  _buildSummaryCards(context, state),
-                  if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state)],
+                  _buildSummaryCards(context, state, timerState),
+                  if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state, timerState)],
                   const SizedBox(height: 16),
-                  SizedBox(height: 300, child: _buildDailyChart(context, state)),
+                  SizedBox(height: 300, child: _buildDailyChart(context, state, timerState)),
                   const SizedBox(height: 16),
                   SizedBox(height: 350, child: _buildProjectDistribution(context, state)),
                   const SizedBox(height: 16),
@@ -622,58 +651,103 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _buildSummaryCards(BuildContext context, StatisticsLoaded state) {
-    final cards = [
+  Widget _buildSummaryCards(BuildContext context, StatisticsLoaded state, TimerState timerState) {
+    // Include running timer seconds for timers within the viewed date range
+    final runningSeconds = _runningSecondsInRange(timerState, state.startDate, state.endDate);
+    final runningPerProject = _runningSecondsPerProject(timerState, state.startDate, state.endDate);
+
+    // Calculate running billable seconds and revenue
+    final projectRepo = context.read<ProjectRepository>();
+    int runningBillableSeconds = 0;
+    double runningRevenue = 0;
+    for (final entry in runningPerProject.entries) {
+      final projects = projectRepo.getAll().where((p) => p.id == entry.key).toList();
+      if (projects.isNotEmpty && projects.first.isBillable) {
+        runningBillableSeconds += entry.value;
+        runningRevenue += (entry.value / 3600) * projects.first.hourlyRate;
+      }
+    }
+
+    final totalSeconds = state.totalSeconds + runningSeconds;
+    final billableSeconds = state.billableSeconds + runningBillableSeconds;
+    final totalRevenue = state.totalRevenue + runningRevenue;
+
+    final isMonth = _selectedRange == 'month';
+
+    final cards = <Widget>[
       _StatCard(
         title: tr('statistics.worked_hours'),
-        value: TimeFormatter.formatHumanReadable(state.totalSeconds),
+        value: TimeFormatter.formatHumanReadable(totalSeconds),
         icon: Icons.access_time,
         color: Theme.of(context).colorScheme.primary,
       ),
-      _StatCard(title: tr('statistics.billable_hours'), value: TimeFormatter.formatHumanReadable(state.billableSeconds), icon: Icons.attach_money, color: Colors.green),
-      _StatCard(title: tr('statistics.total_revenue'), value: '${state.totalRevenue.toStringAsFixed(0)} CZK', icon: Icons.monetization_on, color: Colors.orange),
-      _StatCard(title: tr('statistics.average_daily'), value: TimeFormatter.formatHumanReadable(state.averageDailySeconds.round()), icon: Icons.trending_up, color: Colors.purple),
+      _StatCard(title: tr('statistics.billable_hours'), value: TimeFormatter.formatHumanReadable(billableSeconds), icon: Icons.attach_money, color: Colors.green),
+      _StatCard(title: tr('statistics.total_revenue'), value: '${totalRevenue.toStringAsFixed(0)} CZK', icon: Icons.monetization_on, color: Colors.orange),
     ];
+
+    // Show average daily card only for month view, calculated per working days
+    if (isMonth) {
+      final settingsRepo = context.read<SettingsRepository>();
+      // Count working days (past + today) within the viewed month up to today
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final monthStart = state.startDate;
+      final monthEnd = state.endDate;
+      // Count working days from month start up to min(today, monthEnd)
+      final countUpTo = today.isBefore(monthEnd) ? today : monthEnd;
+      int workingDays = 0;
+      for (DateTime d = monthStart; !d.isAfter(countUpTo); d = d.add(const Duration(days: 1))) {
+        if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
+          workingDays++;
+        }
+      }
+      final averageDailySeconds = workingDays > 0 ? totalSeconds / workingDays : totalSeconds.toDouble();
+      cards.add(
+        _StatCard(title: tr('statistics.average_daily'), value: TimeFormatter.formatHumanReadable(averageDailySeconds.round()), icon: Icons.trending_up, color: Colors.purple),
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth < 600) {
-          return Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(child: cards[0]),
-                  const SizedBox(width: 8),
-                  Expanded(child: cards[1]),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(child: cards[2]),
-                  const SizedBox(width: 8),
-                  Expanded(child: cards[3]),
-                ],
-              ),
-            ],
-          );
+          // Build rows of 2 cards
+          final rows = <Widget>[];
+          for (int i = 0; i < cards.length; i += 2) {
+            if (i + 1 < cards.length) {
+              rows.add(
+                Row(
+                  children: [
+                    Expanded(child: cards[i]),
+                    const SizedBox(width: 8),
+                    Expanded(child: cards[i + 1]),
+                  ],
+                ),
+              );
+            } else {
+              rows.add(
+                Row(
+                  children: [
+                    Expanded(child: cards[i]),
+                    const SizedBox(width: 8),
+                    const Expanded(child: SizedBox.shrink()),
+                  ],
+                ),
+              );
+            }
+            if (i + 2 < cards.length) rows.add(const SizedBox(height: 8));
+          }
+          return Column(children: rows);
         }
         return Row(
           children: [
-            Expanded(child: cards[0]),
-            const SizedBox(width: 16),
-            Expanded(child: cards[1]),
-            const SizedBox(width: 16),
-            Expanded(child: cards[2]),
-            const SizedBox(width: 16),
-            Expanded(child: cards[3]),
+            for (int i = 0; i < cards.length; i++) ...[if (i > 0) const SizedBox(width: 16), Expanded(child: cards[i])],
           ],
         );
       },
     );
   }
 
-  Widget _buildMonthlyTargetsProgress(BuildContext context, StatisticsLoaded state) {
+  Widget _buildMonthlyTargetsProgress(BuildContext context, StatisticsLoaded state, TimerState timerState) {
     final targetRepo = context.read<MonthlyHoursTargetRepository>();
     final settingsRepo = context.read<SettingsRepository>();
     final targets = targetRepo.getAll();
@@ -686,6 +760,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final hoursPerProject = <String, double>{};
     for (final entry in entries) {
       hoursPerProject.update(entry.projectId, (val) => val + entry.actualDurationSeconds / 3600.0, ifAbsent: () => entry.actualDurationSeconds / 3600.0);
+    }
+
+    // Include running timer seconds per project
+    final runningPerProject = _runningSecondsPerProject(timerState, dates.$1, dates.$2);
+    for (final entry in runningPerProject.entries) {
+      hoursPerProject.update(entry.key, (val) => val + entry.value / 3600.0, ifAbsent: () => entry.value / 3600.0);
     }
 
     // Calculate remaining working days in the viewed month
@@ -770,9 +850,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     );
   }
 
-  Widget _buildDailyChart(BuildContext context, StatisticsLoaded state) {
+  Widget _buildDailyChart(BuildContext context, StatisticsLoaded state, TimerState timerState) {
     final locale = context.locale.languageCode;
     final range = state.range;
+
+    // Calculate running timer seconds for the viewed range
+    final runningTimersInRange = _getRunningTimersInRange(timerState, state.startDate, state.endDate);
 
     // Build chart data based on range
     List<_ChartBar> bars;
@@ -786,6 +869,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         final hour = entry.startTime.hour;
         hourlySeconds[hour] += entry.actualDurationSeconds;
       }
+      // Add running timer seconds to current hour
+      final now = DateTime.now();
+      for (final t in runningTimersInRange) {
+        hourlySeconds[now.hour] += t.elapsedSeconds;
+      }
       bars = List.generate(24, (i) => _ChartBar(label: i.toString().padLeft(2, '0'), hours: hourlySeconds[i] / 3600));
     } else if (range == 'week') {
       // Show all 7 days of the week (Mon-Sun)
@@ -793,6 +881,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       final dailyMap = <DateTime, double>{};
       for (final ds in state.dailyStatistics) {
         dailyMap[DateTime(ds.date.year, ds.date.month, ds.date.day)] = ds.totalSeconds / 3600;
+      }
+      // Add running timer seconds to their start day
+      for (final t in runningTimersInRange) {
+        final dayKey = DateTime(t.startTime.year, t.startTime.month, t.startTime.day);
+        dailyMap[dayKey] = (dailyMap[dayKey] ?? 0) + t.elapsedSeconds / 3600;
       }
       bars = List.generate(7, (i) {
         final day = weekStart.add(Duration(days: i));
@@ -806,6 +899,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       for (final ds in state.dailyStatistics) {
         dailyMap[ds.date.day] = ds.totalSeconds / 3600;
       }
+      // Add running timer seconds to their start day
+      for (final t in runningTimersInRange) {
+        final day = t.startTime.day;
+        dailyMap[day] = (dailyMap[day] ?? 0) + t.elapsedSeconds / 3600;
+      }
       bars = List.generate(daysInMonth, (i) {
         final dayNum = i + 1;
         return _ChartBar(label: '$dayNum', hours: dailyMap[dayNum] ?? 0);
@@ -816,17 +914,31 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       for (final ds in state.dailyStatistics) {
         monthlySeconds[ds.date.month - 1] += ds.totalSeconds;
       }
+      // Add running timer seconds to their start month
+      for (final t in runningTimersInRange) {
+        monthlySeconds[t.startTime.month - 1] += t.elapsedSeconds;
+      }
       bars = List.generate(12, (i) {
         final monthDate = DateTime(state.startDate.year, i + 1);
         return _ChartBar(label: DateFormat('MMM', locale).format(monthDate), hours: monthlySeconds[i] / 3600);
       });
     } else {
       // Custom range: show daily stats as-is
-      if (state.dailyStatistics.isEmpty) {
+      if (state.dailyStatistics.isEmpty && runningTimersInRange.isEmpty) {
         return Card(child: Center(child: Text(tr('statistics.no_data'))));
       }
+      // Build a map so we can add running timer seconds
+      final dailyMap = <String, double>{};
+      for (final ds in state.dailyStatistics) {
+        dailyMap[DateFormat('d/M', locale).format(ds.date)] = ds.totalSeconds / 3600;
+      }
+      for (final t in runningTimersInRange) {
+        final key = DateFormat('d/M', locale).format(t.startTime);
+        dailyMap[key] = (dailyMap[key] ?? 0) + t.elapsedSeconds / 3600;
+      }
       bars = state.dailyStatistics.map((ds) {
-        return _ChartBar(label: DateFormat('d/M', locale).format(ds.date), hours: ds.totalSeconds / 3600);
+        final key = DateFormat('d/M', locale).format(ds.date);
+        return _ChartBar(label: key, hours: dailyMap[key] ?? 0);
       }).toList();
     }
 

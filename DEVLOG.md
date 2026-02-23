@@ -1,5 +1,85 @@
 # Development Log
 
+## 2026-02-23 — Add monthly daily need to today card, fix  in overview, add daily deficit per day
+
+### What was done
+1. **Time tracking card — "Expected Today" now also shows monthly target-based daily need**
+   - Below the work-schedule expected hours (e.g. 8.5h), a second line shows "Měsíc: X.Xh/den" (Month: X.Xh/day)
+   - Calculated as: sum of remaining hours across all monthly targets / remaining working days in the month
+   - Highlighted in orange if the monthly need exceeds the daily schedule expectation
+   - Only shown when monthly targets exist and are not yet fully met
+2. **Time entries overview — removed `` placeholder bug in month total**
+   - The month total card was showing `15  záznamů` because the translation key contained `` but no namedArgs were passed; now just shows the number
+3. **Time entries overview — added daily deficit/surplus badge to each day card**
+   - Each day section header now shows a colored badge: green `+X.Xh` if surplus, red `-X.Xh` if deficit
+   - Deficit calculated as: worked hours that day − expected hours for that weekday (from work schedule settings)
+   - Only shown for days that are expected working days (non-zero expected hours)
+
+### Files modified
+- `lib/presentation/screens/time_tracking_screen.dart` — added `MonthlyHoursTargetRepository` and `TimeEntryRepository` imports, new `_calculateMonthlyDailyNeeded()` helper, updated `_buildTotalTodayCard` expected column with monthly subtitle
+- `lib/presentation/screens/time_entries_overview_screen.dart` — fixed entries count display (removed translation with ``), updated `_buildDaySection` with daily deficit badge
+- `assets/translations/en.json` — added `time_tracking.needed_per_day_month` key
+- `assets/translations/cs.json` — added `time_tracking.needed_per_day_month` key
+
+### Current state
+- Time tracking card shows daily need from monthly targets beneath "Expected Today"
+- Overview day cards show green/red surplus/deficit badge
+- `flutter analyze` — no new issues (1 pre-existing info warning in work_reminder_service.dart)
+
+### Known issues
+- None
+
+---
+
+## 2026-02-22 — Remove average daily card (keep only for month), force portrait on mobile
+
+### What was done
+1. **Average daily card** removed from statistics summary cards for all views except **month**
+   - When shown (month view), the average is now calculated per **working days** (from settings work schedule) instead of calendar days
+   - Working days counted from month start up to today (or month end, whichever is earlier)
+2. **Portrait-only orientation** enforced on mobile (Android/iOS) via `SystemChrome.setPreferredOrientations`
+
+### Files modified
+- `lib/presentation/screens/statistics_screen.dart` — `_buildSummaryCards` now conditionally adds average card only for month range, uses working-day count; layout dynamically adapts to 3 or 4 cards
+- `lib/main.dart` — added `import 'package:flutter/services.dart'` and `SystemChrome.setPreferredOrientations([portraitUp, portraitDown])` for Android/iOS
+
+### Current state
+- Statistics shows 3 cards (worked, billable, revenue) for day/week/year/custom; 4 cards (+ average daily per working day) for month
+- Mobile devices are locked to portrait orientation
+- `flutter analyze` — no new issues
+
+### Known issues
+- None
+
+---
+
+## 2026-02-22 — Fix statistics not updating in real-time while timer is running
+
+### Problem
+- When a timer was running, the statistics screen (summary cards, average daily, monthly targets, daily chart) did not include the running timer's elapsed time
+- Values only updated after the timer was stopped and saved as a time entry
+- This meant "average daily", "worked hours", "billable hours", "total revenue", monthly target progress, and daily chart bars were all stale while a timer was active
+
+### What was done
+- Added a nested `BlocBuilder<TimerBloc, TimerState>` in the statistics screen so it rebuilds every second while a timer is ticking
+- Created helper methods: `_getRunningTimersInRange`, `_runningSecondsInRange`, `_runningSecondsPerProject` to calculate running timer contributions within the viewed date range
+- Updated `_buildSummaryCards` to add running timer seconds to total worked, billable, revenue, and average daily calculations
+- Updated `_buildMonthlyTargetsProgress` to include running timer hours per project in target progress and "daily needed" calculation
+- Updated `_buildDailyChart` to include running timer seconds in the bar chart for all range views (today, week, month, year, custom)
+
+### Files modified
+- `lib/presentation/screens/statistics_screen.dart` — added TimerBloc/TimerState imports, nested BlocBuilder, running timer calculation helpers, updated all data display methods
+
+### Current state
+- Statistics screen now shows real-time values that include running timer elapsed time
+- All summary cards, monthly targets, and chart bars update live while a timer is running
+- `flutter analyze` — no new issues
+
+### Known issues
+- None
+
+---
+
 ## 2026-02-19 — Enhanced reminder settings (configurable interval, urgency & "Don't remind today")
 
 ### What was done

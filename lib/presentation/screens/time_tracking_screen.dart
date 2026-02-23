@@ -5,9 +5,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/task_model.dart';
+import '../../data/repositories/monthly_hours_target_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/task_repository.dart';
+import '../../data/repositories/time_entry_repository.dart';
 import '../blocs/settings/settings_bloc.dart';
 import '../blocs/settings/settings_state.dart';
 import '../blocs/timer/timer_bloc.dart';
@@ -602,6 +604,9 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     final remainingSeconds = expectedSeconds - workedSeconds;
     final isOvertime = remainingSeconds < 0;
 
+    // Calculate monthly-target-based daily need
+    final monthlyDailyNeeded = _calculateMonthlyDailyNeeded(context);
+
     final iconWidget = Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
@@ -643,6 +648,17 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
         Text(tr('time_tracking.expected_today'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
         const SizedBox(height: 4),
         Text('${expectedHours.toStringAsFixed(1)}h', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
+        if (monthlyDailyNeeded > 0) ...[
+          const SizedBox(height: 2),
+          Text(
+            tr('time_tracking.needed_per_day_month', namedArgs: {'hours': monthlyDailyNeeded.toStringAsFixed(1)}),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: monthlyDailyNeeded > expectedHours ? Colors.orange : Theme.of(context).colorScheme.tertiary,
+              fontWeight: FontWeight.w500,
+              fontSize: 11,
+            ),
+          ),
+        ],
       ],
     );
 
@@ -716,6 +732,48 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
         ),
       ),
     );
+  }
+
+  /// Calculates the combined daily hours needed to meet all monthly targets.
+  /// Returns 0 if no targets or all targets already met.
+  double _calculateMonthlyDailyNeeded(BuildContext context) {
+    final targetRepo = context.read<MonthlyHoursTargetRepository>();
+    final timeEntryRepo = context.read<TimeEntryRepository>();
+    final settingsRepo = context.read<SettingsRepository>();
+    final targets = targetRepo.getAll();
+    if (targets.isEmpty) return 0;
+
+    final now = DateTime.now();
+    final monthStart = DateTime(now.year, now.month, 1);
+    final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+    final today = DateTime(now.year, now.month, now.day);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+
+    // Get all entries for this month
+    final monthEntries = timeEntryRepo.getByDateRange(monthStart, monthEnd);
+    final hoursPerProject = <String, double>{};
+    for (final entry in monthEntries) {
+      hoursPerProject.update(entry.projectId, (val) => val + entry.actualDurationSeconds / 3600.0, ifAbsent: () => entry.actualDurationSeconds / 3600.0);
+    }
+
+    // Remaining working days (from today inclusive)
+    int remainingWorkDays = 0;
+    for (DateTime d = today; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
+      if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
+        remainingWorkDays++;
+      }
+    }
+    if (remainingWorkDays == 0) return 0;
+
+    // Sum remaining hours across all targets
+    double totalRemainingHours = 0;
+    for (final target in targets) {
+      final workedHours = target.projectIds.fold(0.0, (sum, pid) => sum + (hoursPerProject[pid] ?? 0));
+      final remaining = (target.targetHours - workedHours).clamp(0.0, double.infinity);
+      totalRemainingHours += remaining;
+    }
+
+    return totalRemainingHours / remainingWorkDays;
   }
 }
 

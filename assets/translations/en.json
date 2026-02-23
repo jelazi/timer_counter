@@ -40,6 +40,7 @@
         "remaining_today": "Remaining Today",
         "overtime": "Overtime",
         "expected_today": "Expected Today",
+        "needed_per_day_month": "Month: {hours}h/day",
         "recent_tasks": "Recent"
     },
     "projects": {
@@ -251,7 +252,7 @@
         "total": "Total",
         "manual_entry_saved": "Manual time entry saved",
         "entry_updated": "Time entry updated",
-        "entries_count": "{count} entries",
+        "entries_count": "entries",
         "timeline": "Timeline",
         "month_total": "Month Total"
     },
@@ -268,10 +269,10 @@
         "merge_desc": "Update existing entries, add new ones (match by ID)",
         "success": "Import successful",
         "error": "Import failed",
-        "entries_imported": "{count} entries imported",
-        "categories_imported": "{count} categories imported",
-        "projects_imported": "{count} projects imported",
-        "tasks_imported": "{count} tasks imported",
+        "entries_imported": "entries imported",
+        "categories_imported": "categories imported",
+        "projects_imported": "projects imported",
+        "tasks_imported": "tasks imported",
         "import_mode": "Import Mode",
         "confirm_overwrite": "This will delete ALL existing data. Are you sure?",
         "no_data": "No valid data found in file"
@@ -390,7 +391,7 @@
         "sync_error": "Sync error",
         "confirm_upload": "Uploading will replace all remote data with local data. Continue?",
         "confirm_download": "Downloading will replace all local data with remote data. Continue?",
-        "items_synced": "{count} items synced",
+        "items_synced": " items synced",
         "projects": "projects",
         "tasks": "tasks",
         "time_entries": "entries",
