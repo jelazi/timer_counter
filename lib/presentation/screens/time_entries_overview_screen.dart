@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/services/firebase_sync_service_v2.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/project_model.dart';
+import '../../data/models/running_timer_model.dart';
 import '../../data/models/task_model.dart';
 import '../../data/models/time_entry_model.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
@@ -40,6 +41,23 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
   DateTime get _monthEnd {
     final nextMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
     return nextMonth.subtract(const Duration(seconds: 1));
+  }
+
+  /// Get running timers whose startTime falls within the given date range.
+  List<RunningTimerModel> _getRunningTimersInRange(TimerState timerState, DateTime startDate, DateTime endDate) {
+    if (timerState is TimerRunning) {
+      return timerState.runningTimers.where((t) => !t.startTime.isBefore(startDate) && t.startTime.isBefore(endDate)).toList();
+    }
+    return [];
+  }
+
+  /// Calculate running timer seconds per project within the date range.
+  Map<String, int> _runningSecondsPerProject(TimerState timerState, DateTime startDate, DateTime endDate) {
+    final map = <String, int>{};
+    for (final t in _getRunningTimersInRange(timerState, startDate, endDate)) {
+      map[t.projectId] = (map[t.projectId] ?? 0) + t.elapsedSeconds;
+    }
+    return map;
   }
 
   @override
@@ -178,8 +196,11 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     // Sort days descending (newest first)
     final sortedDays = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
 
-    // Month total
-    final totalSeconds = entries.fold(0, (sum, e) => sum + e.actualDurationSeconds);
+    // Month total (including running timers)
+    final timerState = context.read<TimerBloc>().state;
+    final runningTimersInMonth = _getRunningTimersInRange(timerState, _monthStart, _monthEnd.add(const Duration(seconds: 1)));
+    final runningSecondsMonth = runningTimersInMonth.fold(0, (sum, t) => sum + t.elapsedSeconds);
+    final totalSeconds = entries.fold(0, (sum, e) => sum + e.actualDurationSeconds) + runningSecondsMonth;
 
     final summaryWidgets = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,13 +277,29 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
       hoursPerProject.update(entry.projectId, (val) => val + entry.actualDurationSeconds / 3600.0, ifAbsent: () => entry.actualDurationSeconds / 3600.0);
     }
 
-    // Calculate remaining working days in current month (from tomorrow to end of month)
+    // Include running timer seconds per project
+    final timerState = context.read<TimerBloc>().state;
+    final runningPerProject = _runningSecondsPerProject(timerState, _monthStart, _monthEnd.add(const Duration(seconds: 1)));
+    for (final entry in runningPerProject.entries) {
+      hoursPerProject.update(entry.key, (val) => val + entry.value / 3600.0, ifAbsent: () => entry.value / 3600.0);
+    }
+
+    // Calculate remaining working days in current month
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+    // Check if today is a working day and already has entries
+    final todayIsWorkDay = settingsRepo.getExpectedHoursForDay(today.weekday) > 0;
+    final hasTodayEntries =
+        monthEntries.any((e) {
+          final entryDay = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
+          return entryDay == today;
+        }) ||
+        _getRunningTimersInRange(timerState, today, today.add(const Duration(days: 1))).isNotEmpty;
+    // If today is a work day and already has work done, skip it (start from tomorrow)
+    final countFrom = (todayIsWorkDay && hasTodayEntries) ? today.add(const Duration(days: 1)) : today;
     int remainingWorkDays = 0;
-    // Include today if there's still working time, and all future days
-    for (DateTime d = today; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
+    for (DateTime d = countFrom; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
       if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
         remainingWorkDays++;
       }
@@ -345,9 +382,16 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     final dayTotal = entries.fold(0, (sum, e) => sum + e.actualDurationSeconds);
     final isToday = _isToday(day);
 
+    // Include running timer seconds for today
+    final timerState = context.read<TimerBloc>().state;
+    final dayStart = DateTime(day.year, day.month, day.day);
+    final dayEnd = dayStart.add(const Duration(days: 1));
+    final runningDaySeconds = isToday ? _getRunningTimersInRange(timerState, dayStart, dayEnd).fold(0, (sum, t) => sum + t.elapsedSeconds) : 0;
+    final dayTotalWithRunning = dayTotal + runningDaySeconds;
+
     // Calculate daily deficit/surplus based on expected hours for this day
     final expectedDayHours = settingsRepo.getExpectedHoursForDay(day.weekday);
-    final workedDayHours = dayTotal / 3600.0;
+    final workedDayHours = dayTotalWithRunning / 3600.0;
     final dayDiff = workedDayHours - expectedDayHours; // positive = surplus, negative = deficit
     final hasDayExpectation = expectedDayHours > 0;
 
@@ -384,7 +428,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${entries.length} \u2014 ${TimeFormatter.formatDuration(dayTotal, showSeconds: false)}',
+                  '${entries.length} \u2014 ${TimeFormatter.formatDuration(dayTotalWithRunning, showSeconds: false)}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 if (hasDayExpectation) ...[

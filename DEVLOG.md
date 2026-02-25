@@ -1,5 +1,52 @@
 # Development Log
 
+## 2026-02-25 — Include running timer in time entries overview & time tracking calculations
+
+### What was done
+- Time entries overview screen now includes running timer elapsed time in:
+  - Month total (top card)
+  - Monthly targets progress (worked hours per project, daily needed)
+  - Day section header (total duration and deficit/surplus badge for today)
+  - "Has today entries" check (running timer counts as work done today for remaining work days exclusion)
+- Time tracking screen `_calculateMonthlyDailyNeeded` now includes running timer hours per project in the calculation
+- Statistics screen `hasTodayEntries` now also considers running timers (consistent across all screens)
+
+### Files modified
+- `lib/presentation/screens/time_entries_overview_screen.dart` — added `RunningTimerModel` import, `_getRunningTimersInRange`/`_runningSecondsPerProject` helpers, included running timer in month total, monthly targets, and day section
+- `lib/presentation/screens/time_tracking_screen.dart` — included running timer hours in `_calculateMonthlyDailyNeeded` per-project calculation and `hasTodayEntries` check
+- `lib/presentation/screens/statistics_screen.dart` — included running timer in `hasTodayEntries` check for remaining work days
+
+### Current state
+- Monthly targets progress and daily needed values are now consistent between statistics and time entries overview screens
+- `flutter analyze` — no issues
+
+### Known issues
+- None
+
+---
+
+## 2026-02-25 — Exclude today from remaining working days if work already done
+
+### What was done
+- When today is a working day and there are already time entries logged for today, today is now excluded from:
+  - The count of remaining working days
+  - The "daily needed" (hours per day) calculation for monthly targets
+- This applies consistently across all 3 screens: time entries overview, time tracking, and statistics
+
+### Files modified
+- `lib/presentation/screens/time_entries_overview_screen.dart` — updated `_buildMonthlyTargetsProgress` to skip today if it has entries
+- `lib/presentation/screens/time_tracking_screen.dart` — updated `_calculateMonthlyDailyNeeded` to skip today if it has entries
+- `lib/presentation/screens/statistics_screen.dart` — updated `_buildMonthlyTargetsProgress` to skip today if it has entries
+
+### Current state
+- Remaining working days and daily needed calculations correctly exclude today when work has already been logged
+- `flutter analyze` — no issues
+
+### Known issues
+- None
+
+---
+
 ## 2026-02-23 — Add monthly daily need to today card, fix  in overview, add daily deficit per day
 
 ### What was done

@@ -773,8 +773,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final lastDayOfMonth = DateTime(monthStart.year, monthStart.month + 1, 0);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    // Check if today is a working day and already has entries
+    final todayIsWorkDay = settingsRepo.getExpectedHoursForDay(today.weekday) > 0;
+    final hasTodayEntries =
+        entries.any((e) {
+          final entryDay = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
+          return entryDay == today;
+        }) ||
+        _getRunningTimersInRange(timerState, today, today.add(const Duration(days: 1))).isNotEmpty;
     // Start counting from today (or month start if viewing a future month)
-    final countFrom = today.isAfter(monthStart) ? today : monthStart;
+    // If today is a work day and already has work done, skip it (start from tomorrow)
+    final baseCountFrom = today.isAfter(monthStart) ? today : monthStart;
+    final countFrom = (todayIsWorkDay && hasTodayEntries && baseCountFrom == today) ? today.add(const Duration(days: 1)) : baseCountFrom;
     int remainingWorkDays = 0;
     for (DateTime d = countFrom; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
       if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
