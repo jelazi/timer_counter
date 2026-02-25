@@ -756,9 +756,32 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
       hoursPerProject.update(entry.projectId, (val) => val + entry.actualDurationSeconds / 3600.0, ifAbsent: () => entry.actualDurationSeconds / 3600.0);
     }
 
-    // Remaining working days (from today inclusive)
+    // Include running timer seconds per project
+    final timerState = context.read<TimerBloc>().state;
+    if (timerState is TimerRunning) {
+      for (final t in timerState.runningTimers) {
+        if (!t.startTime.isBefore(monthStart) && t.startTime.isBefore(monthEnd)) {
+          hoursPerProject.update(t.projectId, (val) => val + t.elapsedSeconds / 3600.0, ifAbsent: () => t.elapsedSeconds / 3600.0);
+        }
+      }
+    }
+
+    // Check if today is a working day and already has entries (or running timer)
+    final todayIsWorkDay = settingsRepo.getExpectedHoursForDay(today.weekday) > 0;
+    final hasTodayEntries =
+        monthEntries.any((e) {
+          final entryDay = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
+          return entryDay == today;
+        }) ||
+        (timerState is TimerRunning &&
+            timerState.runningTimers.any((t) {
+              final tDay = DateTime(t.startTime.year, t.startTime.month, t.startTime.day);
+              return tDay == today;
+            }));
+    // If today is a work day and already has work done, skip it (start from tomorrow)
+    final countFrom = (todayIsWorkDay && hasTodayEntries) ? today.add(const Duration(days: 1)) : today;
     int remainingWorkDays = 0;
-    for (DateTime d = today; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
+    for (DateTime d = countFrom; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
       if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
         remainingWorkDays++;
       }
