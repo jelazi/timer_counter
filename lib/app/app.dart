@@ -12,6 +12,7 @@ import '../data/repositories/monthly_hours_target_repository.dart';
 import '../data/repositories/project_repository.dart';
 import '../data/repositories/running_timer_repository.dart';
 import '../data/repositories/settings_repository.dart';
+import '../data/repositories/standalone_invoice_repository.dart';
 import '../data/repositories/task_repository.dart';
 import '../data/repositories/time_entry_repository.dart';
 import '../presentation/blocs/category/category_bloc.dart';
@@ -20,6 +21,8 @@ import '../presentation/blocs/project/project_bloc.dart';
 import '../presentation/blocs/project/project_event.dart';
 import '../presentation/blocs/settings/settings_bloc.dart';
 import '../presentation/blocs/settings/settings_event.dart';
+import '../presentation/blocs/standalone_invoice/standalone_invoice_bloc.dart';
+import '../presentation/blocs/standalone_invoice/standalone_invoice_event.dart';
 import '../presentation/blocs/statistics/statistics_bloc.dart';
 import '../presentation/blocs/task/task_bloc.dart';
 import '../presentation/blocs/task/task_event.dart';
@@ -37,6 +40,7 @@ class TymeApp extends StatelessWidget {
   final RunningTimerRepository runningTimerRepository;
   final SettingsRepository settingsRepository;
   final MonthlyHoursTargetRepository monthlyHoursTargetRepository;
+  final StandaloneInvoiceRepository standaloneInvoiceRepository;
   final SystemTrayService? systemTrayService;
   final FirebaseSyncService? firebaseSyncService;
 
@@ -49,6 +53,7 @@ class TymeApp extends StatelessWidget {
     required this.runningTimerRepository,
     required this.settingsRepository,
     required this.monthlyHoursTargetRepository,
+    required this.standaloneInvoiceRepository,
     this.systemTrayService,
     this.firebaseSyncService,
   });
@@ -64,6 +69,7 @@ class TymeApp extends StatelessWidget {
         Provider<RunningTimerRepository>.value(value: runningTimerRepository),
         Provider<SettingsRepository>.value(value: settingsRepository),
         Provider<MonthlyHoursTargetRepository>.value(value: monthlyHoursTargetRepository),
+        Provider<StandaloneInvoiceRepository>.value(value: standaloneInvoiceRepository),
         if (systemTrayService != null) Provider<SystemTrayService>.value(value: systemTrayService!),
         Provider<FirebaseSyncService?>.value(value: firebaseSyncService),
       ],
@@ -95,6 +101,7 @@ class TymeApp extends StatelessWidget {
             create: (context) => StatisticsBloc(timeEntryRepository: timeEntryRepository, projectRepository: projectRepository, settingsRepository: settingsRepository),
           ),
           BlocProvider<SettingsBloc>(create: (context) => SettingsBloc(settingsRepository: settingsRepository)..add(LoadSettings())),
+          BlocProvider<StandaloneInvoiceBloc>(create: (context) => StandaloneInvoiceBloc(repository: standaloneInvoiceRepository)..add(const LoadStandaloneInvoices())),
         ],
         child: _AppWithTheme(settingsRepository: settingsRepository, systemTrayService: systemTrayService),
       ),

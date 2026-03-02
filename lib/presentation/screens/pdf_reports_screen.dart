@@ -6,13 +6,18 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/services/pdf_report_service.dart';
 import '../../data/models/invoice_settings.dart';
+import '../../data/models/standalone_invoice_model.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../data/repositories/standalone_invoice_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
+import '../blocs/standalone_invoice/standalone_invoice_bloc.dart';
+import '../blocs/standalone_invoice/standalone_invoice_event.dart';
 
 class PdfReportsScreen extends StatefulWidget {
   const PdfReportsScreen({super.key});
@@ -154,6 +159,11 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
         projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds,
       );
 
+      // Save the time-based invoice to the tracking system
+      if (mounted) {
+        await _saveTimeBasedInvoice(invoiceSettings, service);
+      }
+
       setState(() {
         _isGenerating = false;
         _generatedFiles = paths;
@@ -163,6 +173,83 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
         _isGenerating = false;
         _errorMessage = e.toString();
       });
+    }
+  }
+
+  /// Save or update the time-based invoice in the tracking system.
+  /// If an invoice for the same month + customer + projects already exists, overwrite it.
+  Future<void> _saveTimeBasedInvoice(InvoiceSettings invoiceSettings, PdfReportService service) async {
+    final invoiceRepo = context.read<StandaloneInvoiceRepository>();
+    final projectIds = _selectedProjectIds.isEmpty
+        ? context.read<ProjectRepository>().getAll().where((p) => !p.isArchived).map((p) => p.id).toList()
+        : List<String>.from(_selectedProjectIds);
+
+    // Use the same calculation as the PDF report to ensure amounts match
+    final totals = service.getInvoiceTotals(_monthStart, _monthEnd, projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds);
+    final totalHours = totals.totalHours;
+    final hourlyRate = totals.hourlyRate;
+
+    // Check for existing time-based invoice for this month
+    // Also clean up any stale time-based invoices for this month (from before the fix)
+    var existing = invoiceRepo.findTimeBasedInvoice(month: _selectedMonth, year: _selectedYear);
+
+    // Fallback: if not found, search all time-based invoices whose notes mention this month
+    // This catches invoices created with the old buggy code that had wrong issueDate
+    if (existing == null) {
+      final notePattern = '${_czechMonths[_selectedMonth]} $_selectedYear';
+      try {
+        existing = invoiceRepo.getAll().firstWhere((inv) => inv.invoiceType == 'time_based' && inv.notes.contains(notePattern));
+      } catch (_) {
+        // No match found — will create new
+      }
+    }
+
+    final now = DateTime.now();
+    // Use last day of selected month as issue date so dedup can match by month
+    final issueDate = DateTime(_selectedYear, _selectedMonth + 1, 0);
+    final dueDate = issueDate.add(const Duration(days: 14));
+
+    // Determine invoice number
+    int invoiceNumber;
+    if (existing != null) {
+      // Keep the existing invoice number when overwriting
+      invoiceNumber = existing.invoiceNumber;
+    } else {
+      invoiceNumber = invoiceRepo.getNextTimeBasedInvoiceNumber(_selectedMonth);
+    }
+
+    final invoice = StandaloneInvoiceModel(
+      id: existing?.id ?? const Uuid().v4(),
+      invoiceNumber: invoiceNumber,
+      issueDate: issueDate,
+      dueDate: dueDate,
+      taxDate: DateTime(_selectedYear, _selectedMonth + 1, 0),
+      supplierJson: invoiceSettings.supplier.toJson(),
+      customerJson: invoiceSettings.customer.toJson(),
+      lineItems: [InvoiceLineItem(description: invoiceSettings.description, quantity: totalHours, unit: 'hod', unitPrice: hourlyRate, discountPercent: 0)],
+      bankName: invoiceSettings.bankName,
+      bankCode: invoiceSettings.bankCode,
+      swift: invoiceSettings.swift,
+      accountNumber: invoiceSettings.accountNumber,
+      iban: invoiceSettings.iban,
+      issuerName: invoiceSettings.issuerName,
+      issuerEmail: invoiceSettings.issuerEmail,
+      notes: 'Auto-generated from PDF Reports for ${_czechMonths[_selectedMonth]} $_selectedYear',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      invoiceType: 'time_based',
+      sourceProjectIds: projectIds,
+    );
+
+    if (existing != null) {
+      await invoiceRepo.update(invoice);
+    } else {
+      await invoiceRepo.add(invoice);
+    }
+
+    // Refresh the standalone invoice BLoC so the list updates
+    if (mounted) {
+      context.read<StandaloneInvoiceBloc>().add(const LoadStandaloneInvoices());
     }
   }
 
@@ -220,8 +307,10 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
     if (_selectedProjectIds.isNotEmpty) {
       entries = entries.where((e) => _selectedProjectIds.contains(e.projectId)).toList();
     }
-    final totalSeconds = entries.fold<int>(0, (sum, e) => sum + e.actualDurationSeconds);
-    final totalHours = totalSeconds / 3600;
+    // Use the same minute-based calculation as the PDF invoice for consistency
+    final pdfService = PdfReportService(timeEntryRepo: timeEntryRepo, projectRepo: projectRepo, taskRepo: context.read<TaskRepository>());
+    final totals = pdfService.getInvoiceTotals(_monthStart, _monthEnd, projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds);
+    final totalHours = totals.totalHours;
     final entryCount = entries.length;
     final invoiceSettings = _loadInvoiceSettings();
 

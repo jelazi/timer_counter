@@ -9,6 +9,7 @@ import '../blocs/settings/settings_state.dart';
 import 'pdf_reports_screen.dart';
 import 'projects_screen.dart';
 import 'settings_screen.dart';
+import 'standalone_invoices_screen.dart';
 import 'statistics_screen.dart';
 import 'time_entries_overview_screen.dart';
 import 'time_tracking_screen.dart';
@@ -23,9 +24,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  /// Desktop screens include PDF Reports; mobile omits them.
+  /// Desktop screens include PDF Reports and Standalone Invoices; mobile omits them.
   List<Widget> get _screens => PlatformUtils.isDesktop
-      ? const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), PdfReportsScreen(), SettingsScreen()]
+      ? const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), PdfReportsScreen(), StandaloneInvoicesScreen(), SettingsScreen()]
       : const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), SettingsScreen()];
 
   @override
@@ -187,6 +188,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   icon: Tooltip(message: tr('nav.pdf_reports'), child: const Icon(Icons.picture_as_pdf_outlined)),
                   selectedIcon: Tooltip(message: tr('nav.pdf_reports'), child: const Icon(Icons.picture_as_pdf)),
                   label: Text(tr('nav.pdf_reports')),
+                ),
+                NavigationRailDestination(
+                  icon: Tooltip(message: tr('nav.standalone_invoices'), child: const Icon(Icons.receipt_long_outlined)),
+                  selectedIcon: Tooltip(message: tr('nav.standalone_invoices'), child: const Icon(Icons.receipt_long)),
+                  label: Text(tr('nav.standalone_invoices')),
                 ),
                 NavigationRailDestination(
                   icon: Tooltip(message: tr('nav.settings'), child: const Icon(Icons.settings_outlined)),

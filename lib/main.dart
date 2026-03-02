@@ -21,6 +21,7 @@ import 'data/models/category_model.dart';
 import 'data/models/monthly_hours_target_model.dart';
 import 'data/models/project_model.dart';
 import 'data/models/running_timer_model.dart';
+import 'data/models/standalone_invoice_model.dart';
 import 'data/models/task_model.dart';
 import 'data/models/time_entry_model.dart';
 import 'data/repositories/category_repository.dart';
@@ -28,6 +29,7 @@ import 'data/repositories/monthly_hours_target_repository.dart';
 import 'data/repositories/project_repository.dart';
 import 'data/repositories/running_timer_repository.dart';
 import 'data/repositories/settings_repository.dart';
+import 'data/repositories/standalone_invoice_repository.dart';
 import 'data/repositories/task_repository.dart';
 import 'data/repositories/time_entry_repository.dart';
 import 'firebase_options.dart';
@@ -65,6 +67,8 @@ Future<void> main() async {
   Hive.registerAdapter(TimeEntryModelAdapter());
   Hive.registerAdapter(RunningTimerModelAdapter());
   Hive.registerAdapter(MonthlyHoursTargetModelAdapter());
+  Hive.registerAdapter(InvoiceLineItemAdapter());
+  Hive.registerAdapter(StandaloneInvoiceModelAdapter());
 
   // Create & Initialize Repositories
   final categoryRepository = CategoryRepository();
@@ -81,6 +85,8 @@ Future<void> main() async {
   await settingsRepository.init();
   final monthlyHoursTargetRepository = MonthlyHoursTargetRepository();
   await monthlyHoursTargetRepository.init();
+  final standaloneInvoiceRepository = StandaloneInvoiceRepository();
+  await standaloneInvoiceRepository.init();
 
   // ── Firebase Sync Service ──────────────────────────────────────────────
   FirebaseSyncService? firebaseSyncService;
@@ -160,6 +166,7 @@ Future<void> main() async {
         runningTimerRepository: runningTimerRepository,
         settingsRepository: settingsRepository,
         monthlyHoursTargetRepository: monthlyHoursTargetRepository,
+        standaloneInvoiceRepository: standaloneInvoiceRepository,
         systemTrayService: systemTrayService,
         firebaseSyncService: firebaseSyncService,
       ),
