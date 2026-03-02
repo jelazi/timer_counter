@@ -1,5 +1,24 @@
 # Development Log
 
+## 2026-03-02 — Fix "remind to start" notification showing nonsensical inactive minutes
+
+### What was done
+- **Root cause**: `_checkRemindStart` calculated `overdueMin = nowMinutes - startMinutes` (minutes since work day start). If work starts at 8:00 and it's 16:02, it would show "482 minutes" — completely misleading.
+- **Fix 1 — Minutes since last timer stop**: If there are completed time entries today, the notification now shows minutes since the most recent entry's `endTime` (i.e., last known moment when a timer was running). Falls back to "since work start" only if there are zero entries today.
+- **Fix 2 — Skip if daily goal met**: Before sending the notification, checks `workedSeconds >= expectedSeconds` (from `getTodayExpectedHours()`). If the daily goal is already fulfilled, the reminder is suppressed entirely.
+- **Fix 3 — Updated notification messages**: Czech and English messages now say "without tracking" instead of "since work started", which is accurate for both fallback and normal scenarios.
+- Added `TimeEntryRepository` as a dependency of `WorkReminderService`.
+
+### Modified files
+- `lib/core/services/work_reminder_service.dart` — added `TimeEntryRepository` dependency, daily goal check, minutes-since-last-stop calculation, updated message strings
+- `lib/main.dart` — pass `timeEntryRepo` when creating `WorkReminderService`
+
+### Current state
+- `flutter analyze` — 1 info-level issue (pre-existing `unnecessary_brace_in_string_interps`), no errors
+- Reminder only fires when: work day, timer not running, daily goal not met, and shows accurate idle time
+
+---
+
 ## 2026-03-02 — Fix all amount calculations to match issued invoice exactly
 
 ### What was done

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../data/repositories/running_timer_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../data/repositories/time_entry_repository.dart';
 
 /// Urgency level for reminder messages.
 /// 1 = gentle, 2 = normal, 3 = firm.
@@ -39,6 +40,7 @@ class WorkReminderService {
 
   final SettingsRepository _settingsRepo;
   final RunningTimerRepository _timerRepo;
+  final TimeEntryRepository _timeEntryRepo;
 
   Timer? _checkTimer;
 
@@ -55,7 +57,10 @@ class WorkReminderService {
   /// Day for daily reset.
   int _lastResetDay = -1;
 
-  WorkReminderService({required SettingsRepository settingsRepo, required RunningTimerRepository timerRepo}) : _settingsRepo = settingsRepo, _timerRepo = timerRepo;
+  WorkReminderService({required SettingsRepository settingsRepo, required RunningTimerRepository timerRepo, required TimeEntryRepository timeEntryRepo})
+    : _settingsRepo = settingsRepo,
+      _timerRepo = timerRepo,
+      _timeEntryRepo = timeEntryRepo;
 
   /// Start the periodic check (every 60 seconds).
   void start() {
@@ -201,17 +206,38 @@ class WorkReminderService {
       return;
     }
 
+    // Check if daily goal is already met — no need to remind
+    final todayEntries = _timeEntryRepo.getToday();
+    final workedSeconds = todayEntries.fold(0, (sum, e) => sum + e.actualDurationSeconds);
+    final expectedHours = _settingsRepo.getTodayExpectedHours();
+    final expectedSeconds = (expectedHours * 3600).round();
+    if (workedSeconds >= expectedSeconds) {
+      debugPrint('[WorkReminder] Start: daily goal met (${workedSeconds}s >= ${expectedSeconds}s), skip');
+      _lastStartReminder = null;
+      return;
+    }
+
     final interval = _settingsRepo.getRemindStartInterval();
     if (_lastStartReminder != null && now.difference(_lastStartReminder!).inMinutes < interval) {
       debugPrint('[WorkReminder] Start: too soon (interval=${interval}min, last=${_lastStartReminder})');
       return;
     }
 
+    // Calculate minutes since last timer stop (not since work day start)
+    int inactiveMin;
+    if (todayEntries.isNotEmpty && todayEntries.first.endTime != null) {
+      inactiveMin = now.difference(todayEntries.first.endTime!).inMinutes;
+    } else {
+      // No entries today — fall back to minutes since work start
+      inactiveMin = nowMinutes - startMinutes;
+    }
+    // Sanity: never show negative
+    if (inactiveMin < 0) inactiveMin = 0;
+
     _lastStartReminder = now;
     final urgency = ReminderUrgency.fromInt(_settingsRepo.getRemindStartUrgency());
-    final overdueMin = nowMinutes - startMinutes;
-    debugPrint('[WorkReminder] Start: SENDING notification (overdue=${overdueMin}min, urgency=$urgency, interval=$interval)');
-    final msg = _startMessages(urgency, overdueMin);
+    debugPrint('[WorkReminder] Start: SENDING notification (inactive=${inactiveMin}min, urgency=$urgency, interval=$interval)');
+    final msg = _startMessages(urgency, inactiveMin);
     _sendNotification(title: msg.title, body: msg.body, identifier: 'remind_start', categoryIdentifier: 'REMIND_START');
   }
 
@@ -220,18 +246,18 @@ class WorkReminderService {
     if (lang == 'cs') {
       switch (urgency) {
         case ReminderUrgency.gentle:
-          return (title: '☀️ Dobré ráno!', body: 'Nezapomeň spustit sledování času. Pracovní doba začala před $overdueMin min.');
+          return (title: '☀️ Dobré ráno!', body: 'Nezapomeň spustit sledování času. Časovač neběží už $overdueMin min.');
         case ReminderUrgency.normal:
-          return (title: '⏰ Čas pracovat', body: 'Už $overdueMin minut od začátku pracovní doby a žádný časovač neběží.');
+          return (title: '⏰ Čas pracovat', body: 'Už $overdueMin minut bez sledování času a denní cíl není splněn.');
         case ReminderUrgency.firm:
           return (title: '🔴 Sledování neběží!', body: 'Už $overdueMin minut bez sledování času! Spusť časovač.');
       }
     } else {
       switch (urgency) {
         case ReminderUrgency.gentle:
-          return (title: '☀️ Good morning!', body: 'Work started $overdueMin min ago. Remember to start time tracking.');
+          return (title: '☀️ Good morning!', body: 'No timer running for $overdueMin min. Remember to start time tracking.');
         case ReminderUrgency.normal:
-          return (title: '⏰ Time to work', body: "It's been $overdueMin minutes since work started and no timer is running.");
+          return (title: '⏰ Time to work', body: "$overdueMin minutes without tracking and daily goal not met.");
         case ReminderUrgency.firm:
           return (title: '🔴 No timer running!', body: '$overdueMin minutes without tracking! Start your timer now.');
       }

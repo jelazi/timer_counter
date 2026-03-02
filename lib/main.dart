@@ -149,7 +149,7 @@ Future<void> main() async {
 
   // ── Work Reminder Notifications ────────────────────────────────────────
   if (Platform.isMacOS) {
-    final workReminderService = WorkReminderService(settingsRepo: settingsRepository, timerRepo: runningTimerRepository);
+    final workReminderService = WorkReminderService(settingsRepo: settingsRepository, timerRepo: runningTimerRepository, timeEntryRepo: timeEntryRepository);
     workReminderService.start();
   }
 
