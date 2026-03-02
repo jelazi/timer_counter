@@ -12,6 +12,7 @@ class AppConstants {
   static const String settingsBox = 'settings';
   static const String runningTimersBox = 'running_timers';
   static const String monthlyHoursTargetsBox = 'monthly_hours_targets';
+  static const String standaloneInvoicesBox = 'standalone_invoices';
 
   // Settings Keys
   static const String themeMode = 'theme_mode';
@@ -64,6 +65,9 @@ class AppConstants {
   static const String invoiceReportFilename = 'invoice_report_filename';
   static const String invoiceReportRezijniFilename = 'invoice_report_rezijni_filename';
   static const String invoiceInvoiceFilename = 'invoice_invoice_filename';
+
+  // Invoice Numbering
+  static const String invoiceNumberCounter = 'invoice_number_counter';
 
   // PDF Report Project Filter
   static const String pdfReportProjectIds = 'pdf_report_project_ids';

@@ -1,5 +1,171 @@
 # Development Log
 
+## 2026-03-02 — Fix all amount calculations to match issued invoice exactly
+
+### What was done
+- **Root cause**: Three separate places computed hours/amounts differently:
+  1. **PDF invoice** (`generateInvoicePdf`): truncates each entry's seconds→minutes, sums minutes, divides by 60 → **110,018.33** (correct, matches issued invoice)
+  2. **Saved invoice** (`_saveTimeBasedInvoice`): used `getInvoiceTotals()` which rounded to 1 decimal → **110,000** (wrong)
+  3. **Period summary** on PDF reports screen: used raw `totalSeconds / 3600` → **110,103** (wrong)
+- **Fix**: Single source of truth — `getInvoiceTotals()` returns full-precision minutes-based hours (no rounding). Both the PDF generation and period summary now use this same method. All three places now produce identical amounts matching the issued invoice.
+
+### Modified files
+- `lib/core/services/pdf_report_service.dart` — `getInvoiceTotals()` removed 1-decimal rounding, returns full precision
+- `lib/presentation/screens/pdf_reports_screen.dart` — period summary uses `pdfService.getInvoiceTotals()` instead of raw `totalSeconds / 3600`
+
+### Current state
+- `flutter analyze` — 4 info-level issues (all pre-existing), no errors
+- PDF invoice = saved invoice = period summary = identical amounts to the cent
+
+---
+
+## 2026-03-02 — Fix rounding inconsistency between PDF and saved invoice
+
+### What was done
+- **Root cause**: PDF displayed hours rounded to 1 decimal (e.g. 148.2) but calculated total from full precision (148.2167 × 550 = 81,519.17). Saved invoice stored the rounded quantity (148.2) so its total was 148.2 × 550 = 81,510.00 — a visible difference.
+- **Fix**: Unified rounding — `getInvoiceTotals()` now rounds hours to 1 decimal. `generateInvoicePdf()` reuses `getInvoiceTotals()` so both the PDF and the saved invoice use the same rounded value. Quantity × rate = total is now consistent everywhere.
+
+### Modified files
+- `lib/core/services/pdf_report_service.dart` — `getInvoiceTotals()` rounds to 1 decimal; `generateInvoicePdf()` delegates to it
+- `lib/presentation/screens/pdf_reports_screen.dart` — removed redundant rounding in `_saveTimeBasedInvoice`
+
+### Current state
+- `flutter analyze` — 4 info-level issues (all pre-existing), no errors
+- PDF invoice total = saved invoice total = displayed list total
+
+---
+
+## 2026-03-02 — Fix time-based invoice amount mismatch
+
+### What was done
+- **Root cause**: `_saveTimeBasedInvoice` recalculated totals from raw seconds (`actualDurationSeconds / 3600`), while the PDF report truncates each entry to minutes first (`actualDurationSeconds ~/ 60`), then sums. Small per-entry truncation losses accumulated into noticeably different amounts.
+- **Fix**: Added `getInvoiceTotals()` public method to `PdfReportService` that uses the same `_processEntries` logic. `_saveTimeBasedInvoice` now calls `service.getInvoiceTotals()` instead of doing its own calculation, guaranteeing the saved invoice matches the PDF exactly.
+
+### Modified files
+- `lib/core/services/pdf_report_service.dart` — added `getInvoiceTotals(monthStart, monthEnd, {projectIds})` returning `({double totalHours, double hourlyRate})`
+- `lib/presentation/screens/pdf_reports_screen.dart` — replaced manual seconds-based calculation with `service.getInvoiceTotals()`
+
+### Current state
+- `flutter analyze` — 4 info-level issues (all pre-existing), no errors or warnings
+- Time-based invoices now show the exact same amount as the generated PDF
+
+---
+
+## 2026-03-02 — Redesign invoice numbering: gap-filling + month-based starts
+
+### What was done
+- **Redesigned numbering logic**: Replaced single `getDefaultInvoiceNumber()` with three methods:
+  - `getUsedInvoiceNumbers()` — returns `Set<int>` of all currently used invoice numbers
+  - `getNextTimeBasedInvoiceNumber(int month)` — starts from the month number (e.g., Feb=2), finds first free (gap-filling)
+  - `getNextStandaloneInvoiceNumber()` — starts from 1, finds first free (gap-filling)
+- **Deleted invoice numbers are reusable**: Both methods scan for gaps in existing numbers
+- **Restored delete for time-based invoices**: Delete button shown for all invoice types; edit/export remain standalone-only
+
+### Modified files
+- `lib/data/repositories/standalone_invoice_repository.dart` — replaced `getDefaultInvoiceNumber()` with 3 new methods
+- `lib/presentation/blocs/standalone_invoice/standalone_invoice_bloc.dart` — updated 4 calls to use `getNextStandaloneInvoiceNumber()`
+- `lib/presentation/screens/standalone_invoice_form_screen.dart` — uses `getNextStandaloneInvoiceNumber()`
+- `lib/presentation/screens/pdf_reports_screen.dart` — uses `getNextTimeBasedInvoiceNumber(_selectedMonth)`
+
+### Current state
+- `flutter analyze` — 4 info-level issues (all pre-existing), no errors or warnings
+- Numbering: time-based starts from month number, standalone starts from 1, both fill gaps
+
+---
+
+## 2026-03-02 — Fix time-based invoice dedup, read-only time invoices, numbering
+
+### What was done
+- **Fixed dedup**: Time-based invoice `issueDate` was set to `DateTime.now()` (March) but dedup searched by selected month (February) — never matched. Now uses last day of the selected month as `issueDate`.
+- **Read-only time-based invoices**: Time-based invoices in the list now only show Preview PDF button. Edit, delete, and export buttons are hidden (only shown for standalone invoices).
+- **Fixed numbering**: Changed from `month + count` (which could skip numbers) to `highest_existing_number + 1`. If no invoices exist, defaults to current month number.
+
+### Modified files
+- `lib/presentation/screens/pdf_reports_screen.dart` — `issueDate` uses last day of selected month instead of `DateTime.now()`
+- `lib/data/repositories/standalone_invoice_repository.dart` — `getDefaultInvoiceNumber()` returns `highest + 1` or `month` if empty
+- `lib/presentation/screens/standalone_invoices_screen.dart` — export/edit/delete buttons wrapped in `if (invoice.isStandalone)`
+
+### Current state
+- Time-based invoice regeneration correctly overwrites existing entry (dedup works)
+- `flutter analyze` — 4 info-level issues (all pre-existing), no errors or warnings
+
+---
+
+## 2026-03-02 — Enhance invoice system: numbering, customer creation, time-based invoice tracking
+
+### What was done
+- **Invoice number default**: Changed from sequential counter to formula `current_month + total_invoice_count`. Example: in March with 0 invoices → default is 3; with 2 invoices → default is 5. The field remains editable.
+- **Customer creation**: Added "Save customer" button on the standalone invoice form. Users can fill in customer details and save them to the global customer list, making them available in both standalone invoices and time-based (PDF Reports) invoice settings.
+- **Time-based invoice tracking**: When generating PDFs from the PDF Reports screen, the system now also saves the time-based invoice as a tracked entry in the invoices list. If regenerating for the same month + customer + projects, the existing entry is overwritten (deduplication).
+- **Invoice type badges**: The invoices list now shows type badges ("Časová" for time-based, "Samostatná" for standalone) next to each invoice number.
+- **Model extension**: Added `invoiceType` (String: 'standalone' or 'time_based') and `sourceProjectIds` (List<String>) fields to `StandaloneInvoiceModel` with backward-compatible Hive adapter (HiveField 18, 19).
+
+### Modified files
+- `lib/data/models/standalone_invoice_model.dart` — added `invoiceType`, `sourceProjectIds` fields, `isTimeBased`/`isStandalone` getters
+- `lib/data/models/standalone_invoice_model.g.dart` — updated Hive adapter for new fields (backward-compatible with existing data)
+- `lib/data/repositories/standalone_invoice_repository.dart` — added `getDefaultInvoiceNumber()`, `getStandaloneOnly()`, `getTimeBasedOnly()`, `findTimeBasedInvoice()` methods
+- `lib/presentation/blocs/standalone_invoice/standalone_invoice_bloc.dart` — switched to `getDefaultInvoiceNumber()` for next number calculation
+- `lib/presentation/screens/standalone_invoice_form_screen.dart` — uses new numbering formula, added `_saveCustomerToGlobal()` method and "Save customer" button
+- `lib/presentation/screens/standalone_invoices_screen.dart` — added type badges (time-based / standalone) in invoice list
+- `lib/presentation/screens/pdf_reports_screen.dart` — added `_saveTimeBasedInvoice()` method called after PDF generation, imports for StandaloneInvoiceModel/Repository/BLoC
+- `assets/translations/cs.json` — added keys: `type_time_based`, `type_standalone`, `no_saved_customers`, `customer_name_required`, `customer_saved`, `save_customer`
+- `assets/translations/en.json` — same new keys in English
+
+### Current state
+- Invoice numbering follows `month + total_count` formula (editable)
+- Customers can be created inline on invoice form and saved globally
+- Time-based invoices are automatically tracked when PDFs are generated
+- Deduplication works by month + customer name + project IDs
+- `flutter analyze` — 4 info-level issues (all pre-existing), no errors or warnings
+
+### Known issues / Next steps
+- Time-based invoices use the same PDF layout via `generateStandaloneInvoicePdf()` for consistency
+- Old `invoiceNumberCounter` in Hive settings still exists but is no longer used for default numbering
+- Mobile navigation still does not include Invoices tab (desktop-only)
+
+---
+
+## 2026-03-02 — Add standalone invoices section (non-time-based invoices)
+
+### What was done
+- Added a new **Standalone Invoices** section to the app for creating invoices that are not related to time tracking
+- Implemented a shared sequential invoice numbering system stored in Hive (`invoice_number_counter`) so that time-based and standalone invoices share the same number sequence
+- Full invoice form with: supplier, customer, bank details, issuer info, line items (description, quantity, unit, price, discount), dates (issue, due, tax), and notes
+- Line items support multiple rows — user can add/remove items freely
+- Supplier and customer can be loaded from saved entries (same ones used in PDF Reports settings)
+- Standalone invoice PDF generation uses the **exact same layout** as time-based invoices including QR payment code
+- List screen shows all standalone invoices with preview PDF, export PDF, edit, and delete actions
+- New navigation tab "Faktury" in the desktop NavigationRail (between PDF Reports and Settings)
+
+### New files
+- `lib/data/models/standalone_invoice_model.dart` + `.g.dart` — Hive model for standalone invoices with `InvoiceLineItem` and `StandaloneInvoiceModel`
+- `lib/data/repositories/standalone_invoice_repository.dart` — Hive-based CRUD + shared invoice number counter
+- `lib/presentation/blocs/standalone_invoice/standalone_invoice_bloc.dart` — BLoC
+- `lib/presentation/blocs/standalone_invoice/standalone_invoice_event.dart` — Events
+- `lib/presentation/blocs/standalone_invoice/standalone_invoice_state.dart` — States
+- `lib/presentation/screens/standalone_invoices_screen.dart` — List screen
+- `lib/presentation/screens/standalone_invoice_form_screen.dart` — Create/edit form
+
+### Modified files
+- `lib/core/constants/app_constants.dart` — added `standaloneInvoicesBox` and `invoiceNumberCounter` keys
+- `lib/core/services/pdf_report_service.dart` — added `generateStandaloneInvoicePdf()` method and `_formatAmount()` helper
+- `lib/main.dart` — registered Hive adapters (`InvoiceLineItemAdapter`, `StandaloneInvoiceModelAdapter`), initialized `StandaloneInvoiceRepository`
+- `lib/app/app.dart` — added `StandaloneInvoiceRepository` provider and `StandaloneInvoiceBloc` to `MultiBlocProvider`
+- `lib/presentation/screens/home_screen.dart` — added `StandaloneInvoicesScreen` to desktop navigation (7 tabs total)
+- `assets/translations/cs.json` — added `nav.standalone_invoices`, `standalone_invoices.*` keys (50+ keys), `common.open`
+- `assets/translations/en.json` — same translation keys in English
+
+### Current state
+- Standalone invoices can be created, edited, deleted, previewed as PDF, and exported as PDF
+- Invoice numbering is sequential and shared via `invoice_number_counter` in Hive settings box
+- `flutter analyze` — 4 info-level issues (1 pre-existing), no errors or warnings
+
+### Known issues / Next steps
+- Time-based invoices (in PDF Reports) still use the old hardcoded `YYYY-0000M` numbering — they should be migrated to use the shared counter in a future update
+- Mobile navigation does not include the Standalone Invoices tab (desktop-only for now, same as PDF Reports)
+
+---
+
 ## 2026-02-25 — Include running timer in time entries overview & time tracking calculations
 
 ### What was done
