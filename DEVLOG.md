@@ -1,5 +1,20 @@
 # Development Log
 
+## 2026-03-03 — Fix false overlap detection when editing time entries
+
+### What was done
+- **Root cause**: Timer-created entries store `startTime`/`endTime` with seconds and milliseconds (e.g., `10:00:30`). The edit dialog only works at minute precision (creates `DateTime` with seconds=0). When checking for overlaps, the raw `DateTime` comparison treated adjacent entries like "8:00–10:00:30" and "10:00–12:00" as overlapping because `10:00:00 < 10:00:30`. The user sees "10:00" in both cases and correctly believes there's no overlap.
+- **Fix**: In both `_AddManualEntryDialog` and `_EditEntryDialog`, the overlap check now truncates existing entries' `startTime`/`endTime` to minute precision before comparing. This matches the dialog's minute-level granularity.
+
+### Modified files
+- `lib/presentation/screens/time_entries_overview_screen.dart` — overlap check in both Add and Edit dialogs now truncates existing entry times to minute precision
+
+### Current state
+- `flutter analyze` — no issues found
+- Overlap check now works consistently at minute precision, matching the dialog UI
+
+---
+
 ## 2026-03-02 — Fix "remind to start" notification showing nonsensical inactive minutes
 
 ### What was done

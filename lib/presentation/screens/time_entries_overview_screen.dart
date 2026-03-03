@@ -1005,7 +1005,10 @@ class _AddManualEntryDialogState extends State<_AddManualEntryDialog> {
                     );
                     final hasOverlap = existingEntries.any((existing) {
                       if (existing.endTime == null) return false;
-                      return start.isBefore(existing.endTime!) && end.isAfter(existing.startTime);
+                      // Truncate to minute precision — timer-created entries may have seconds
+                      final eStart = DateTime(existing.startTime.year, existing.startTime.month, existing.startTime.day, existing.startTime.hour, existing.startTime.minute);
+                      final eEnd = DateTime(existing.endTime!.year, existing.endTime!.month, existing.endTime!.day, existing.endTime!.hour, existing.endTime!.minute);
+                      return start.isBefore(eEnd) && end.isAfter(eStart);
                     });
                     if (hasOverlap) {
                       setState(() => _overlapError = tr('time_entries.overlap_error'));
@@ -1325,7 +1328,10 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
                     final hasOverlap = existingEntries.any((existing) {
                       if (existing.id == widget.entry.id) return false;
                       if (existing.endTime == null) return false;
-                      return start.isBefore(existing.endTime!) && end.isAfter(existing.startTime);
+                      // Truncate to minute precision — timer-created entries may have seconds
+                      final eStart = DateTime(existing.startTime.year, existing.startTime.month, existing.startTime.day, existing.startTime.hour, existing.startTime.minute);
+                      final eEnd = DateTime(existing.endTime!.year, existing.endTime!.month, existing.endTime!.day, existing.endTime!.hour, existing.endTime!.minute);
+                      return start.isBefore(eEnd) && end.isAfter(eStart);
                     });
                     if (hasOverlap) {
                       setState(() => _overlapError = tr('time_entries.overlap_error'));
