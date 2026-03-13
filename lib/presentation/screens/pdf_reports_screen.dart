@@ -366,7 +366,8 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                                     initialValue: _selectedMonth,
                                     items: List.generate(12, (i) {
                                       final m = i + 1;
-                                      return DropdownMenuItem(value: m, child: Text(_czechMonths[m]!));
+                                      final monthName = DateFormat('MMMM', context.locale.languageCode).format(DateTime(2024, m));
+                                      return DropdownMenuItem(value: m, child: Text(monthName[0].toUpperCase() + monthName.substring(1)));
                                     }),
                                     onChanged: (v) => setState(() => _selectedMonth = v!),
                                   ),
@@ -444,7 +445,10 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                                 _SummaryTile(
                                   icon: Icons.calendar_today,
                                   label: tr('pdf_reports.period'),
-                                  value: '${_czechMonths[_selectedMonth]} $_selectedYear',
+                                  value: () {
+                                    final monthName = DateFormat('MMMM', context.locale.languageCode).format(DateTime(_selectedYear, _selectedMonth));
+                                    return '${monthName[0].toUpperCase()}${monthName.substring(1)} $_selectedYear';
+                                  }(),
                                   color: Theme.of(context).colorScheme.tertiary,
                                 ),
                               ],

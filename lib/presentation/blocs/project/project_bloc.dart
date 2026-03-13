@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../core/services/firebase_sync_service_v2.dart';
+import '../../../core/services/pocketbase_sync_service.dart';
 import '../../../data/repositories/project_repository.dart';
 import '../../../data/repositories/task_repository.dart';
 import '../../../data/repositories/time_entry_repository.dart';
@@ -12,17 +12,17 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   final ProjectRepository _projectRepository;
   final TaskRepository _taskRepository;
   final TimeEntryRepository _timeEntryRepository;
-  final FirebaseSyncService? _firebaseSyncService;
+  final PocketBaseSyncService? _syncService;
 
   ProjectBloc({
     required ProjectRepository projectRepository,
     required TaskRepository taskRepository,
     required TimeEntryRepository timeEntryRepository,
-    FirebaseSyncService? firebaseSyncService,
+    PocketBaseSyncService? syncService,
   }) : _projectRepository = projectRepository,
        _taskRepository = taskRepository,
        _timeEntryRepository = timeEntryRepository,
-       _firebaseSyncService = firebaseSyncService,
+       _syncService = syncService,
        super(const ProjectInitial()) {
     on<LoadProjects>(_onLoadProjects);
     on<AddProject>(_onAddProject);
@@ -46,7 +46,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   Future<void> _onAddProject(AddProject event, Emitter<ProjectState> emit) async {
     try {
       await _projectRepository.add(event.project);
-      _firebaseSyncService?.pushProject(event.project).catchError((e) => debugPrint('[ProjectBloc] sync push error: $e'));
+      _syncService?.pushProject(event.project).catchError((e) => debugPrint('[ProjectBloc] sync push error: $e'));
       _emitFilteredState(emit);
     } catch (e) {
       emit(ProjectError(e.toString()));
@@ -56,7 +56,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   Future<void> _onUpdateProject(UpdateProject event, Emitter<ProjectState> emit) async {
     try {
       await _projectRepository.update(event.project);
-      _firebaseSyncService?.pushProject(event.project).catchError((e) => debugPrint('[ProjectBloc] sync push error: $e'));
+      _syncService?.pushProject(event.project).catchError((e) => debugPrint('[ProjectBloc] sync push error: $e'));
       _emitFilteredState(emit);
     } catch (e) {
       emit(ProjectError(e.toString()));
@@ -65,20 +65,20 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
 
   Future<void> _onDeleteProject(DeleteProject event, Emitter<ProjectState> emit) async {
     try {
-      // Collect IDs before deleting for Firebase sync
+      // Collect IDs before deleting for sync
       final entriesToDelete = _timeEntryRepository.getByProject(event.projectId);
       final tasksToDelete = _taskRepository.getByProject(event.projectId);
       await _timeEntryRepository.deleteByProject(event.projectId);
       await _taskRepository.deleteByProject(event.projectId);
       await _projectRepository.delete(event.projectId);
-      // Sync deletions to Firebase
+      // Sync deletions to PocketBase
       for (final entry in entriesToDelete) {
-        _firebaseSyncService?.deleteTimeEntry(entry.id).catchError((e) => debugPrint('[ProjectBloc] sync delete error: $e'));
+        _syncService?.deleteTimeEntry(entry.id).catchError((e) => debugPrint('[ProjectBloc] sync delete error: $e'));
       }
       for (final task in tasksToDelete) {
-        _firebaseSyncService?.deleteTask(task.id).catchError((e) => debugPrint('[ProjectBloc] sync delete error: $e'));
+        _syncService?.deleteTask(task.id).catchError((e) => debugPrint('[ProjectBloc] sync delete error: $e'));
       }
-      _firebaseSyncService?.deleteProject(event.projectId).catchError((e) => debugPrint('[ProjectBloc] sync delete error: $e'));
+      _syncService?.deleteProject(event.projectId).catchError((e) => debugPrint('[ProjectBloc] sync delete error: $e'));
       _emitFilteredState(emit);
     } catch (e) {
       emit(ProjectError(e.toString()));
@@ -90,7 +90,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       await _projectRepository.archive(event.projectId);
       final project = _projectRepository.getById(event.projectId);
       if (project != null) {
-        _firebaseSyncService?.pushProject(project).catchError((e) => debugPrint('[ProjectBloc] sync push error: $e'));
+        _syncService?.pushProject(project).catchError((e) => debugPrint('[ProjectBloc] sync push error: $e'));
       }
       _emitFilteredState(emit);
     } catch (e) {
@@ -103,7 +103,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
       await _projectRepository.unarchive(event.projectId);
       final project = _projectRepository.getById(event.projectId);
       if (project != null) {
-        _firebaseSyncService?.pushProject(project).catchError((e) => debugPrint('[ProjectBloc] sync push error: $e'));
+        _syncService?.pushProject(project).catchError((e) => debugPrint('[ProjectBloc] sync push error: $e'));
       }
       _emitFilteredState(emit);
     } catch (e) {

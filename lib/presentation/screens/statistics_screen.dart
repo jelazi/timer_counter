@@ -8,6 +8,7 @@ import '../../data/models/running_timer_model.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
 import '../blocs/statistics/statistics_bloc.dart';
 import '../blocs/statistics/statistics_event.dart';
@@ -25,6 +26,7 @@ class StatisticsScreen extends StatefulWidget {
 class _StatisticsScreenState extends State<StatisticsScreen> {
   String _selectedRange = 'week';
   int _periodOffset = 0; // 0 = current period, -1 = previous, etc.
+  String _distributionMode = 'projects'; // 'projects', 'tasks', 'all_tasks'
 
   @override
   void initState() {
@@ -1073,63 +1075,401 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(tr('statistics.distribution'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 200,
-              child: PieChart(
-                PieChartData(
-                  sections: state.projectStatistics.map((ps) {
-                    final percentage = state.totalSeconds > 0 ? (ps.totalSeconds / state.totalSeconds * 100) : 0.0;
-                    return PieChartSectionData(
-                      value: ps.totalSeconds.toDouble(),
-                      title: '${percentage.toStringAsFixed(0)}%',
-                      color: Color(ps.colorValue),
-                      radius: 60,
-                      titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                    );
-                  }).toList(),
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 30,
-                ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final shouldScroll = constraints.maxHeight < 430;
+          final distributionContent = _distributionMode == 'projects'
+              ? _buildProjectPieChart(context, state)
+              : _distributionMode == 'tasks'
+              ? _buildTasksPerProjectPieCharts(context, state)
+              : _buildAllTasksPieChart(context, state);
+
+          final header = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(tr('statistics.distribution'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
               ),
-            ),
-            const SizedBox(height: 16),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: state.projectStatistics.length,
-                itemBuilder: (context, index) {
-                  final ps = state.projectStatistics[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(color: Color(ps.colorValue), shape: BoxShape.circle),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(ps.projectName, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis),
-                        ),
-                        Text(TimeFormatter.formatHumanReadable(ps.totalSeconds), style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
-                      ],
+              Row(
+                children: [
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        // Scale font down proportionally when space is tight, min 9px
+                        final fontSize = (constraints.maxWidth / 18).clamp(9.0, 11.0);
+                        return SegmentedButton<String>(
+                          segments: [
+                            ButtonSegment(
+                              value: 'projects',
+                              label: Text(
+                                tr('statistics.distribution_by_projects'),
+                                style: TextStyle(fontSize: fontSize),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            ButtonSegment(
+                              value: 'tasks',
+                              label: Text(
+                                tr('statistics.distribution_by_tasks'),
+                                style: TextStyle(fontSize: fontSize),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                            ButtonSegment(
+                              value: 'all_tasks',
+                              label: Text(
+                                tr('statistics.distribution_all_tasks'),
+                                style: TextStyle(fontSize: fontSize),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                          selected: {_distributionMode},
+                          onSelectionChanged: (s) => setState(() => _distributionMode = s.first),
+                          style: ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
+              const SizedBox(height: 24),
+            ],
+          );
+
+          if (shouldScroll) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  header,
+                  SizedBox(height: _distributionScrollHeight(), child: distributionContent),
+                ],
+              ),
+            );
+          }
+
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                header,
+                Expanded(child: distributionContent),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
+  }
+
+  double _distributionScrollHeight() {
+    switch (_distributionMode) {
+      case 'tasks':
+        return 520;
+      case 'all_tasks':
+        return 420;
+      case 'projects':
+      default:
+        return 420;
+    }
+  }
+
+  Widget _buildProjectPieChart(BuildContext context, StatisticsLoaded state) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 200,
+          child: PieChart(
+            PieChartData(
+              sections: state.projectStatistics.map((ps) {
+                final percentage = state.totalSeconds > 0 ? (ps.totalSeconds / state.totalSeconds * 100) : 0.0;
+                return PieChartSectionData(
+                  value: ps.totalSeconds.toDouble(),
+                  title: '${percentage.toStringAsFixed(0)}%',
+                  color: Color(ps.colorValue),
+                  radius: 60,
+                  titleStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                );
+              }).toList(),
+              sectionsSpace: 2,
+              centerSpaceRadius: 30,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Flexible(
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: state.projectStatistics.length,
+            itemBuilder: (context, index) {
+              final ps = state.projectStatistics[index];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(color: Color(ps.colorValue), shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(ps.projectName, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis),
+                    ),
+                    Text(TimeFormatter.formatHumanReadable(ps.totalSeconds), style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Build per-project task breakdown: one pie chart per project
+  Widget _buildTasksPerProjectPieCharts(BuildContext context, StatisticsLoaded state) {
+    final timeEntryRepo = context.read<TimeEntryRepository>();
+    final taskRepo = context.read<TaskRepository>();
+    final entries = timeEntryRepo.getByDateRange(state.startDate, state.endDate);
+    final filteredIds = state.filteredProjectIds;
+
+    // Group entries by project, then by task
+    final Map<String, Map<String, int>> projectTaskSeconds = {};
+    for (final entry in entries) {
+      if (filteredIds.isNotEmpty && !filteredIds.contains(entry.projectId)) continue;
+      projectTaskSeconds.putIfAbsent(entry.projectId, () => {});
+      projectTaskSeconds[entry.projectId]![entry.taskId] = (projectTaskSeconds[entry.projectId]![entry.taskId] ?? 0) + entry.actualDurationSeconds;
+    }
+
+    final projectRepo = context.read<ProjectRepository>();
+
+    // Sort projects by total seconds descending
+    final sortedProjects = projectTaskSeconds.entries.toList()..sort((a, b) => b.value.values.fold(0, (s, v) => s + v).compareTo(a.value.values.fold(0, (s, v) => s + v)));
+
+    return ListView.builder(
+      itemCount: sortedProjects.length,
+      itemBuilder: (context, index) {
+        final projectId = sortedProjects[index].key;
+        final taskSecondsMap = sortedProjects[index].value;
+        final project = projectRepo.getAll().where((p) => p.id == projectId).toList();
+        final projectName = project.isNotEmpty ? project.first.name : 'Unknown';
+        final projectColor = project.isNotEmpty ? Color(project.first.colorValue) : Colors.grey;
+        final totalProjectSeconds = taskSecondsMap.values.fold(0, (s, v) => s + v);
+
+        // Build task list sorted by seconds
+        final taskEntries = taskSecondsMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+        // Generate colors for tasks based on project color
+        final taskColors = _generateTaskColors(projectColor, taskEntries.length);
+
+        return Padding(
+          padding: EdgeInsets.only(bottom: index < sortedProjects.length - 1 ? 20 : 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(color: projectColor, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      projectName,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(TimeFormatter.formatHumanReadable(totalProjectSeconds), style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 120,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 120,
+                      height: 120,
+                      child: PieChart(
+                        PieChartData(
+                          sections: taskEntries.asMap().entries.map((e) {
+                            final percentage = totalProjectSeconds > 0 ? (e.value.value / totalProjectSeconds * 100) : 0.0;
+                            return PieChartSectionData(
+                              value: e.value.value.toDouble(),
+                              title: percentage >= 10 ? '${percentage.toStringAsFixed(0)}%' : '',
+                              color: taskColors[e.key],
+                              radius: 40,
+                              titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                            );
+                          }).toList(),
+                          sectionsSpace: 1,
+                          centerSpaceRadius: 15,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: taskEntries.asMap().entries.map((e) {
+                          final task = taskRepo.getById(e.value.key);
+                          final taskName = task?.name ?? 'Unknown';
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(color: taskColors[e.key], shape: BoxShape.circle),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(taskName, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11), overflow: TextOverflow.ellipsis),
+                                ),
+                                Text(
+                                  TimeFormatter.formatHumanReadable(e.value.value),
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Build a single pie chart with all tasks from all projects
+  Widget _buildAllTasksPieChart(BuildContext context, StatisticsLoaded state) {
+    final timeEntryRepo = context.read<TimeEntryRepository>();
+    final taskRepo = context.read<TaskRepository>();
+    final projectRepo = context.read<ProjectRepository>();
+    final entries = timeEntryRepo.getByDateRange(state.startDate, state.endDate);
+    final filteredIds = state.filteredProjectIds;
+
+    // Group by task, tracking project for color
+    final Map<String, int> taskSeconds = {};
+    final Map<String, String> taskToProject = {};
+    for (final entry in entries) {
+      if (filteredIds.isNotEmpty && !filteredIds.contains(entry.projectId)) continue;
+      taskSeconds[entry.taskId] = (taskSeconds[entry.taskId] ?? 0) + entry.actualDurationSeconds;
+      taskToProject.putIfAbsent(entry.taskId, () => entry.projectId);
+    }
+
+    final sortedTasks = taskSeconds.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final totalSeconds = sortedTasks.fold(0, (s, e) => s + e.value);
+
+    // Generate distinct colors
+    final colors = _generateDistinctColors(sortedTasks.length);
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 200,
+          child: PieChart(
+            PieChartData(
+              sections: sortedTasks.asMap().entries.map((e) {
+                final percentage = totalSeconds > 0 ? (e.value.value / totalSeconds * 100) : 0.0;
+                return PieChartSectionData(
+                  value: e.value.value.toDouble(),
+                  title: percentage >= 5 ? '${percentage.toStringAsFixed(0)}%' : '',
+                  color: colors[e.key],
+                  radius: 60,
+                  titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                );
+              }).toList(),
+              sectionsSpace: 2,
+              centerSpaceRadius: 30,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Flexible(
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: sortedTasks.length,
+            itemBuilder: (context, index) {
+              final taskId = sortedTasks[index].key;
+              final seconds = sortedTasks[index].value;
+              final task = taskRepo.getById(taskId);
+              final projectId = taskToProject[taskId] ?? '';
+              final project = projectRepo.getAll().where((p) => p.id == projectId).toList();
+              final taskName = task?.name ?? 'Unknown';
+              final projectName = project.isNotEmpty ? project.first.name : '';
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(color: colors[index], shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(taskName, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis),
+                          if (projectName.isNotEmpty)
+                            Text(
+                              projectName,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Text(TimeFormatter.formatHumanReadable(seconds), style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Generate shade variations of a base color for task breakdown
+  List<Color> _generateTaskColors(Color baseColor, int count) {
+    if (count <= 1) return [baseColor];
+    final hsl = HSLColor.fromColor(baseColor);
+    return List.generate(count, (i) {
+      final lightness = (hsl.lightness + 0.15 - (i * 0.25 / count)).clamp(0.25, 0.75);
+      final hue = (hsl.hue + i * 15) % 360;
+      return hsl.withHue(hue).withLightness(lightness).toColor();
+    });
+  }
+
+  /// Generate distinct colors for all-tasks view
+  List<Color> _generateDistinctColors(int count) {
+    if (count == 0) return [];
+    return List.generate(count, (i) {
+      final hue = (i * 360 / count) % 360;
+      return HSLColor.fromAHSL(1.0, hue, 0.65, 0.50).toColor();
+    });
   }
 }
 

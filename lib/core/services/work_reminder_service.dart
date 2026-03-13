@@ -217,6 +217,18 @@ class WorkReminderService {
       return;
     }
 
+    // Check if there's an existing time entry covering the current time
+    // (e.g., user manually entered 8:00-14:00 in the morning)
+    final hasCoveringEntry = todayEntries.any((e) {
+      if (e.endTime == null) return false;
+      return !e.startTime.isAfter(now) && !e.endTime!.isBefore(now);
+    });
+    if (hasCoveringEntry) {
+      debugPrint('[WorkReminder] Start: current time is covered by an existing entry, skip');
+      _lastStartReminder = null;
+      return;
+    }
+
     final interval = _settingsRepo.getRemindStartInterval();
     if (_lastStartReminder != null && now.difference(_lastStartReminder!).inMinutes < interval) {
       debugPrint('[WorkReminder] Start: too soon (interval=${interval}min, last=${_lastStartReminder})');
@@ -224,11 +236,13 @@ class WorkReminderService {
     }
 
     // Calculate minutes since last timer stop (not since work day start)
+    // Only consider entries that ended before now (not future entries)
+    final pastEntries = todayEntries.where((e) => e.endTime != null && e.endTime!.isBefore(now)).toList();
     int inactiveMin;
-    if (todayEntries.isNotEmpty && todayEntries.first.endTime != null) {
-      inactiveMin = now.difference(todayEntries.first.endTime!).inMinutes;
+    if (pastEntries.isNotEmpty) {
+      inactiveMin = now.difference(pastEntries.first.endTime!).inMinutes;
     } else {
-      // No entries today — fall back to minutes since work start
+      // No past entries today — fall back to minutes since work start
       inactiveMin = nowMinutes - startMinutes;
     }
     // Sanity: never show negative

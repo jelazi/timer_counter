@@ -75,11 +75,14 @@ class AppConstants {
   // Work Schedule (per weekday)
   static const String workSchedulePrefix = 'work_schedule';
 
-  // Firebase Sync Keys
-  static const String firebaseProjectId = 'firebase_project_id';
-  static const String firebaseApiKey = 'firebase_api_key';
-  static const String firebaseEnabled = 'firebase_enabled';
-  static const String firebaseLastSync = 'firebase_last_sync';
+  // PocketBase Sync Keys
+  static const String pocketBaseUrl = 'pocketbase_url';
+  static const String pocketBaseEmail = 'pocketbase_email';
+  static const String pocketBasePassword = 'pocketbase_password';
+  static const String pocketBaseAuthToken = 'pocketbase_auth_token';
+  static const String pocketBaseAuthModel = 'pocketbase_auth_model';
+  static const String pocketBaseEnabled = 'pocketbase_enabled';
+  static const String pocketBaseLastSync = 'pocketbase_last_sync';
 
   // Default Values
   static const double defaultDailyWorkingHours = 8.0;

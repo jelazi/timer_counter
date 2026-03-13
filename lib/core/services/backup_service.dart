@@ -310,11 +310,12 @@ class BackupService {
       'invoiceSuppliers': _settingsRepository.getSuppliers().map((s) => s.toJson()).toList(),
       'invoiceCustomers': _settingsRepository.getCustomers().map((c) => c.toJson()).toList(),
 
-      // Firebase
-      'firebaseProjectId': _settingsRepository.getFirebaseProjectId(),
-      'firebaseApiKey': _settingsRepository.getFirebaseApiKey(),
-      'firebaseEnabled': _settingsRepository.getFirebaseEnabled(),
-      'firebaseLastSync': _settingsRepository.getFirebaseLastSync(),
+      // PocketBase
+      'pocketBaseUrl': _settingsRepository.getPocketBaseUrl(),
+      'pocketBaseEmail': _settingsRepository.getPocketBaseEmail(),
+      'pocketBasePassword': _settingsRepository.getPocketBasePassword(),
+      'pocketBaseEnabled': _settingsRepository.getPocketBaseEnabled(),
+      'pocketBaseLastSync': _settingsRepository.getPocketBaseLastSync(),
     };
   }
 
@@ -372,11 +373,12 @@ class BackupService {
       await _settingsRepository.setCustomers(customers);
     }
 
-    // Firebase
-    if (s['firebaseProjectId'] != null) await _settingsRepository.setFirebaseProjectId(s['firebaseProjectId'] as String);
-    if (s['firebaseApiKey'] != null) await _settingsRepository.setFirebaseApiKey(s['firebaseApiKey'] as String);
-    if (s['firebaseEnabled'] != null) await _settingsRepository.setFirebaseEnabled(s['firebaseEnabled'] as bool);
-    if (s['firebaseLastSync'] != null) await _settingsRepository.setFirebaseLastSync(s['firebaseLastSync'] as String);
+    // PocketBase
+    if (s['pocketBaseUrl'] != null) await _settingsRepository.setPocketBaseUrl(s['pocketBaseUrl'] as String);
+    if (s['pocketBaseEmail'] != null) await _settingsRepository.setPocketBaseEmail(s['pocketBaseEmail'] as String);
+    if (s['pocketBasePassword'] != null) await _settingsRepository.setPocketBasePassword(s['pocketBasePassword'] as String);
+    if (s['pocketBaseEnabled'] != null) await _settingsRepository.setPocketBaseEnabled(s['pocketBaseEnabled'] as bool);
+    if (s['pocketBaseLastSync'] != null) await _settingsRepository.setPocketBaseLastSync(s['pocketBaseLastSync'] as String);
   }
 
   Future<void> _clearAllData() async {
@@ -420,10 +422,11 @@ class BackupService {
     await _settingsRepository.setRemindStart(false);
     await _settingsRepository.setRemindStop(false);
     await _settingsRepository.setRemindBreak(false);
-    await _settingsRepository.setFirebaseProjectId('');
-    await _settingsRepository.setFirebaseApiKey('');
-    await _settingsRepository.setFirebaseEnabled(false);
-    await _settingsRepository.setFirebaseLastSync('');
+    await _settingsRepository.setPocketBaseUrl('');
+    await _settingsRepository.setPocketBaseEmail('');
+    await _settingsRepository.setPocketBasePassword('');
+    await _settingsRepository.setPocketBaseEnabled(false);
+    await _settingsRepository.setPocketBaseLastSync('');
   }
 
   Future<String> _getDefaultBackupPath() async {

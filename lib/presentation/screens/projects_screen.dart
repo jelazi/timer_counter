@@ -2,7 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../core/services/firebase_sync_service_v2.dart';
+import '../../core/services/pocketbase_sync_service.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/project_model.dart';
@@ -271,23 +271,23 @@ class ProjectsScreen extends StatelessWidget {
                     onPressed: () async {
                       if (!context.mounted) return;
                       final projectRepo = context.read<ProjectRepository>();
-                      final firebaseSync = context.read<FirebaseSyncService?>();
+                      final syncService = context.read<PocketBaseSyncService?>();
                       final taskRepo = context.read<TaskRepository>();
                       final entryRepo = context.read<TimeEntryRepository>();
                       final projectBloc = context.read<ProjectBloc>();
 
                       // Restore project
                       await projectRepo.add(project);
-                      firebaseSync?.pushProject(project);
+                      syncService?.pushProject(project);
                       // Restore tasks
                       for (final task in tasks) {
                         await taskRepo.add(task);
-                        firebaseSync?.pushTask(task);
+                        syncService?.pushTask(task);
                       }
                       // Restore time entries
                       for (final entry in entries) {
                         await entryRepo.add(entry);
-                        firebaseSync?.pushTimeEntry(entry);
+                        syncService?.pushTimeEntry(entry);
                       }
                       projectBloc.add(const LoadProjects());
                       if (context.mounted) {
@@ -356,11 +356,11 @@ class ProjectsScreen extends StatelessWidget {
                     onPressed: () async {
                       if (!context.mounted) return;
                       final categoryRepo = context.read<CategoryRepository>();
-                      final firebaseSync = context.read<FirebaseSyncService?>();
+                      final syncService = context.read<PocketBaseSyncService?>();
                       final categoryBloc = context.read<CategoryBloc>();
 
                       await categoryRepo.add(category);
-                      firebaseSync?.pushCategory(category);
+                      syncService?.pushCategory(category);
                       categoryBloc.add(const LoadCategories());
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('categories.category_restored')), backgroundColor: Colors.green));

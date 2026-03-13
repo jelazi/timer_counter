@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../core/services/firebase_sync_service_v2.dart';
+import '../../core/services/pocketbase_sync_service.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/running_timer_model.dart';
@@ -657,7 +657,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
 
     await context.read<TimeEntryRepository>().delete(entry.id);
     if (!context.mounted) return;
-    context.read<FirebaseSyncService?>()?.deleteTimeEntry(entry.id);
+    context.read<PocketBaseSyncService?>()?.deleteTimeEntry(entry.id);
     context.read<TimerBloc>().add(const LoadRunningTimers());
     setState(() {});
 
@@ -673,7 +673,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
           onPressed: () async {
             await context.read<TimeEntryRepository>().add(entry);
             if (!context.mounted) return;
-            context.read<FirebaseSyncService?>()?.pushTimeEntry(entry);
+            context.read<PocketBaseSyncService?>()?.pushTimeEntry(entry);
             context.read<TimerBloc>().add(const LoadRunningTimers());
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('time_tracking.entry_restored')), backgroundColor: Colors.green));
             setState(() {});
@@ -697,7 +697,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
           final timeEntryRepo = context.read<TimeEntryRepository>();
           await timeEntryRepo.update(updatedEntry);
           if (context.mounted) {
-            context.read<FirebaseSyncService?>()?.pushTimeEntry(updatedEntry);
+            context.read<PocketBaseSyncService?>()?.pushTimeEntry(updatedEntry);
             context.read<TimerBloc>().add(const LoadRunningTimers());
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('time_entries.entry_updated'))));
             setState(() {});
@@ -724,7 +724,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
           final timeEntryRepo = context.read<TimeEntryRepository>();
           await timeEntryRepo.add(entry);
           if (context.mounted) {
-            context.read<FirebaseSyncService?>()?.pushTimeEntry(entry);
+            context.read<PocketBaseSyncService?>()?.pushTimeEntry(entry);
             context.read<TimerBloc>().add(const LoadRunningTimers());
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('time_entries.manual_entry_saved'))));
             setState(() {});
