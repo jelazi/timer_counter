@@ -207,21 +207,38 @@ class SettingsRepository {
   String getInvoiceInvoiceFilename() => _box.get(AppConstants.invoiceInvoiceFilename, defaultValue: 'faktura_{month}_{year}') as String;
   Future<void> setInvoiceInvoiceFilename(String v) => _box.put(AppConstants.invoiceInvoiceFilename, v);
 
-  // === Firebase Sync Settings ===
+  // === PocketBase Sync Settings ===
 
-  String getFirebaseProjectId() => _box.get(AppConstants.firebaseProjectId, defaultValue: '') as String;
-  Future<void> setFirebaseProjectId(String v) => _box.put(AppConstants.firebaseProjectId, v);
+  String getPocketBaseUrl() => _box.get(AppConstants.pocketBaseUrl, defaultValue: '') as String;
+  Future<void> setPocketBaseUrl(String v) => _box.put(AppConstants.pocketBaseUrl, v);
 
-  String getFirebaseApiKey() => _box.get(AppConstants.firebaseApiKey, defaultValue: '') as String;
-  Future<void> setFirebaseApiKey(String v) => _box.put(AppConstants.firebaseApiKey, v);
+  String getPocketBaseEmail() => _box.get(AppConstants.pocketBaseEmail, defaultValue: '') as String;
+  Future<void> setPocketBaseEmail(String v) => _box.put(AppConstants.pocketBaseEmail, v);
 
-  bool getFirebaseEnabled() => _box.get(AppConstants.firebaseEnabled, defaultValue: false) as bool;
-  Future<void> setFirebaseEnabled(bool v) => _box.put(AppConstants.firebaseEnabled, v);
+  String getPocketBasePassword() => _box.get(AppConstants.pocketBasePassword, defaultValue: '') as String;
+  Future<void> setPocketBasePassword(String v) => _box.put(AppConstants.pocketBasePassword, v);
 
-  String getFirebaseLastSync() => _box.get(AppConstants.firebaseLastSync, defaultValue: '') as String;
-  Future<void> setFirebaseLastSync(String v) => _box.put(AppConstants.firebaseLastSync, v);
+  String getPocketBaseAuthToken() => _box.get(AppConstants.pocketBaseAuthToken, defaultValue: '') as String;
+  Future<void> setPocketBaseAuthToken(String v) => _box.put(AppConstants.pocketBaseAuthToken, v);
 
-  bool get isFirebaseConfigured => getFirebaseProjectId().isNotEmpty && getFirebaseApiKey().isNotEmpty;
+  String getPocketBaseAuthModel() => _box.get(AppConstants.pocketBaseAuthModel, defaultValue: '') as String;
+  Future<void> setPocketBaseAuthModel(String v) => _box.put(AppConstants.pocketBaseAuthModel, v);
+
+  bool getPocketBaseEnabled() => _box.get(AppConstants.pocketBaseEnabled, defaultValue: false) as bool;
+  Future<void> setPocketBaseEnabled(bool v) => _box.put(AppConstants.pocketBaseEnabled, v);
+
+  String getPocketBaseLastSync() => _box.get(AppConstants.pocketBaseLastSync, defaultValue: '') as String;
+  Future<void> setPocketBaseLastSync(String v) => _box.put(AppConstants.pocketBaseLastSync, v);
+
+  bool get hasPocketBaseOverride => getPocketBaseUrl().isNotEmpty || getPocketBaseEmail().isNotEmpty || getPocketBasePassword().isNotEmpty;
+
+  Future<void> clearPocketBaseOverride() async {
+    await setPocketBaseUrl('');
+    await setPocketBaseEmail('');
+    await setPocketBasePassword('');
+  }
+
+  bool get isPocketBaseConfigured => getPocketBaseUrl().isNotEmpty;
 
   // === PDF Report Project Filter ===
 

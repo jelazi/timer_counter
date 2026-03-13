@@ -210,6 +210,138 @@ flutter run -d macos
 flutter build macos
 ```
 
+---
+
+## PocketBase Deployment Guide (Hetzner + Coolify)
+
+Step-by-step guide to deploy PocketBase on a Hetzner VPS using Coolify and configure the database for this app.
+
+### 1. Create a Hetzner VPS
+
+1. Go to [Hetzner Cloud Console](https://console.hetzner.cloud/)
+2. Create a new project (e.g. `timer-counter`)
+3. **Add Server**:
+   - Location: any (e.g. `Falkenstein`)
+   - Image: **Ubuntu 24.04**
+   - Type: **CX22** (2 vCPU, 4 GB RAM) — cheapest option sufficient for PocketBase
+   - SSH Key: add your public key (or use password)
+   - Name: e.g. `coolify-server`
+4. Note the server **IP address**
+
+### 2. Point Domain to Server
+
+1. In your DNS provider, create an **A record**:
+   - `pb.yourdomain.com` → `<server-ip>`
+2. Optionally create a wildcard for Coolify:
+   - `*.coolify.yourdomain.com` → `<server-ip>`
+3. Wait for DNS propagation (usually 1–5 minutes)
+
+### 3. Install Coolify
+
+SSH into your server and run:
+
+```bash
+ssh root@<server-ip>
+curl -fsSL https://cdn.coollabs.io/coolify/install.sh | bash
+```
+
+After installation:
+1. Open `http://<server-ip>:8000` in your browser
+2. Create your Coolify admin account
+3. Complete the initial setup wizard
+
+### 4. Deploy PocketBase via Coolify
+
+#### 4.1 Create a New Resource
+
+1. In Coolify dashboard, go to **Projects** → Create a new project (e.g. `Timer Counter`)
+2. Click **+ New** → **Add a Resource**
+3. Select **Docker Image**
+4. Set the Docker image to:
+   ```
+   ghcr.io/muchobien/pocketbase:latest
+   ```
+5. Set a name (e.g. `pocketbase`)
+
+#### 4.2 Configure the Resource
+
+1. **Network** tab:
+   - Port exposes: `8090`
+   - Set domain: `https://pb.yourdomain.com`
+2. **Storage** tab — Add a persistent volume:
+   - Container path: `/pb/pb_data`
+   - Name: `pocketbase_data`
+3. **Environment Variables** (optional):
+   - No env vars needed for default config
+4. Click **Deploy**
+
+#### 4.3 Verify
+
+1. Open `https://pb.yourdomain.com/_/` — this is the PocketBase **Admin UI**
+2. Create your **admin account** (first visit only)
+3. You should see the PocketBase admin dashboard
+
+### 5. Import Database Schema
+
+The collection definitions and API rules are in `pocketbase/pb_schema.json` (gitignored — copy it from the repo locally).
+
+1. Open PocketBase Admin UI → **Settings** → **Import collections**
+2. Paste the contents of `pocketbase/pb_schema.json`
+3. Click **Review** → **Confirm and import**
+
+This creates 6 collections (`categories`, `projects`, `tasks`, `time_entries`, `running_timers`, `monthly_targets`) with all fields, relations, and API rules pre-configured.
+
+> **API Rules** (already included in schema): each collection restricts List/View/Update/Delete to `@request.auth.id != "" && user = @request.auth.id` — users can only access their own records.
+
+### 6. Create User Account
+
+Users can register directly from the app (Sign Up button), or you can create them manually:
+
+1. In Admin UI → **Collections** → **users**
+2. Click **+ New record**
+3. Fill in email and password
+4. The app will authenticate with these credentials
+
+### 7. Connect the App
+
+1. Open the app → **Settings** → **Cloud Sync** section
+2. Click **Configure** (or Sign In)
+3. Enter:
+   - **Server URL**: `https://pb.yourdomain.com`
+   - **Email**: your user email
+   - **Password**: your password
+4. Click **Sign In** (or **Sign Up** to create a new account)
+5. Once connected, real-time sync starts automatically
+6. Use **Upload** to push local data to PocketBase
+7. Use **Download** to pull remote data to the app
+
+### 8. Backups (Optional)
+
+PocketBase stores all data in a single SQLite file. To backup:
+
+```bash
+# SSH into server
+ssh root@<server-ip>
+
+# Find the PocketBase data volume
+docker volume ls | grep pocketbase
+
+# Copy the database file
+docker cp <container-id>:/pb/pb_data/data.db ./backup_$(date +%Y%m%d).db
+```
+
+Or configure automated backups in Coolify's settings.
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Can't reach admin UI | Check Coolify deployment logs, verify DNS, check port 8090 |
+| Auth fails | Verify user exists in the `users` collection |
+| Sync not working | Check API rules are set for all collections |
+| SSL certificate error | Coolify auto-provisions Let's Encrypt — wait a few minutes |
+| Real-time not updating | Check browser/network firewall isn't blocking SSE connections |
+
 ## Licence
 
 Tento projekt je pro osobní použití.

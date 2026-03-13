@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../core/services/firebase_sync_service_v2.dart';
+import '../../../core/services/pocketbase_sync_service.dart';
 import '../../../data/models/running_timer_model.dart';
 import '../../../data/models/time_entry_model.dart';
 import '../../../data/repositories/running_timer_repository.dart';
@@ -17,7 +17,7 @@ class TimerBloc extends Bloc<TimerEvent, TimerState> {
   final RunningTimerRepository _runningTimerRepository;
   final TimeEntryRepository _timeEntryRepository;
   final SettingsRepository _settingsRepository;
-  final FirebaseSyncService? _firebaseSyncService;
+  final PocketBaseSyncService? _syncService;
   Timer? _ticker;
   StreamSubscription? _syncSubscription;
   final _uuid = const Uuid();
@@ -26,11 +26,11 @@ class TimerBloc extends Bloc<TimerEvent, TimerState> {
     required RunningTimerRepository runningTimerRepository,
     required TimeEntryRepository timeEntryRepository,
     required SettingsRepository settingsRepository,
-    FirebaseSyncService? firebaseSyncService,
+    PocketBaseSyncService? syncService,
   }) : _runningTimerRepository = runningTimerRepository,
        _timeEntryRepository = timeEntryRepository,
        _settingsRepository = settingsRepository,
-       _firebaseSyncService = firebaseSyncService,
+       _syncService = syncService,
        super(const TimerInitial()) {
     on<LoadRunningTimers>(_onLoadRunningTimers);
     on<StartTimer>(_onStartTimer);
@@ -51,10 +51,10 @@ class TimerBloc extends Bloc<TimerEvent, TimerState> {
     });
   }
 
-  /// Listen to Firestore sync events for running timers and time entries.
+  /// Listen to PocketBase sync events for running timers and time entries.
   void _startSyncListener() {
-    if (_firebaseSyncService == null) return;
-    _syncSubscription = _firebaseSyncService.onCollectionChanged.listen((col) {
+    if (_syncService == null) return;
+    _syncSubscription = _syncService.onCollectionChanged.listen((col) {
       if (col == SyncCollection.runningTimers || col == SyncCollection.timeEntries) {
         add(const SyncTimersChanged());
       }
@@ -80,8 +80,8 @@ class TimerBloc extends Bloc<TimerEvent, TimerState> {
       final timer = RunningTimerModel(id: _uuid.v4(), projectId: event.projectId, taskId: event.taskId, startTime: DateTime.now(), notes: event.notes);
 
       await _runningTimerRepository.start(timer);
-      // Push to Firebase
-      _firebaseSyncService?.pushRunningTimer(timer).catchError((e) => debugPrint('[TimerBloc] sync push error: $e'));
+      // Push to PocketBase
+      _syncService?.pushRunningTimer(timer).catchError((e) => debugPrint('[TimerBloc] sync push error: $e'));
       _emitCurrentState(emit);
     } catch (e) {
       emit(TimerError(e.toString()));
@@ -146,9 +146,9 @@ class TimerBloc extends Bloc<TimerEvent, TimerState> {
     await _timeEntryRepository.add(entry);
     await _runningTimerRepository.stop(timer.id);
 
-    // Push to Firebase
-    _firebaseSyncService?.pushTimeEntry(entry).catchError((e) => debugPrint('[TimerBloc] sync push error: $e'));
-    _firebaseSyncService?.deleteRunningTimer(timer.id).catchError((e) => debugPrint('[TimerBloc] sync delete error: $e'));
+    // Push to PocketBase
+    _syncService?.pushTimeEntry(entry).catchError((e) => debugPrint('[TimerBloc] sync push error: $e'));
+    _syncService?.deleteRunningTimer(timer.id).catchError((e) => debugPrint('[TimerBloc] sync delete error: $e'));
   }
 
   void _emitCurrentState(Emitter<TimerState> emit) {

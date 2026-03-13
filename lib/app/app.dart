@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 
-import '../core/services/firebase_sync_service_v2.dart';
+import '../core/services/pocketbase_sync_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/platform_utils.dart';
 import '../core/utils/time_formatter.dart';
@@ -18,7 +18,6 @@ import '../data/repositories/time_entry_repository.dart';
 import '../presentation/blocs/category/category_bloc.dart';
 import '../presentation/blocs/category/category_event.dart';
 import '../presentation/blocs/project/project_bloc.dart';
-import '../presentation/blocs/project/project_event.dart';
 import '../presentation/blocs/settings/settings_bloc.dart';
 import '../presentation/blocs/settings/settings_event.dart';
 import '../presentation/blocs/standalone_invoice/standalone_invoice_bloc.dart';
@@ -42,7 +41,7 @@ class TymeApp extends StatelessWidget {
   final MonthlyHoursTargetRepository monthlyHoursTargetRepository;
   final StandaloneInvoiceRepository standaloneInvoiceRepository;
   final SystemTrayService? systemTrayService;
-  final FirebaseSyncService? firebaseSyncService;
+  final PocketBaseSyncService? pocketBaseSyncService;
 
   const TymeApp({
     super.key,
@@ -55,7 +54,7 @@ class TymeApp extends StatelessWidget {
     required this.monthlyHoursTargetRepository,
     required this.standaloneInvoiceRepository,
     this.systemTrayService,
-    this.firebaseSyncService,
+    this.pocketBaseSyncService,
   });
 
   @override
@@ -71,31 +70,27 @@ class TymeApp extends StatelessWidget {
         Provider<MonthlyHoursTargetRepository>.value(value: monthlyHoursTargetRepository),
         Provider<StandaloneInvoiceRepository>.value(value: standaloneInvoiceRepository),
         if (systemTrayService != null) Provider<SystemTrayService>.value(value: systemTrayService!),
-        Provider<FirebaseSyncService?>.value(value: firebaseSyncService),
+        Provider<PocketBaseSyncService?>.value(value: pocketBaseSyncService),
       ],
       child: MultiBlocProvider(
         providers: [
           BlocProvider<CategoryBloc>(
-            create: (context) => CategoryBloc(categoryRepository: categoryRepository, firebaseSyncService: firebaseSyncService)..add(LoadCategories()),
+            create: (context) => CategoryBloc(categoryRepository: categoryRepository, syncService: pocketBaseSyncService)..add(LoadCategories()),
           ),
           BlocProvider<ProjectBloc>(
-            create: (context) => ProjectBloc(
-              projectRepository: projectRepository,
-              taskRepository: taskRepository,
-              timeEntryRepository: timeEntryRepository,
-              firebaseSyncService: firebaseSyncService,
-            )..add(LoadProjects()),
+            create: (context) =>
+                ProjectBloc(projectRepository: projectRepository, taskRepository: taskRepository, timeEntryRepository: timeEntryRepository, syncService: pocketBaseSyncService),
           ),
           BlocProvider<TaskBloc>(
-            create: (context) => TaskBloc(taskRepository: taskRepository, timeEntryRepository: timeEntryRepository, firebaseSyncService: firebaseSyncService)..add(LoadAllTasks()),
+            create: (context) => TaskBloc(taskRepository: taskRepository, timeEntryRepository: timeEntryRepository, syncService: pocketBaseSyncService)..add(LoadAllTasks()),
           ),
           BlocProvider<TimerBloc>(
             create: (context) => TimerBloc(
               runningTimerRepository: runningTimerRepository,
               timeEntryRepository: timeEntryRepository,
               settingsRepository: settingsRepository,
-              firebaseSyncService: firebaseSyncService,
-            )..add(LoadRunningTimers()),
+              syncService: pocketBaseSyncService,
+            ),
           ),
           BlocProvider<StatisticsBloc>(
             create: (context) => StatisticsBloc(timeEntryRepository: timeEntryRepository, projectRepository: projectRepository, settingsRepository: settingsRepository),

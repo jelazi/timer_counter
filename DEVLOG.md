@@ -1,5 +1,190 @@
 # Development Log
 
+## 2026-03-13 — Smart first sync & manual upload/download
+
+### What was done
+- Implemented "smart first sync" that automatically detects data state on first PocketBase connection:
+  - Remote empty + local has data → auto uploads all local data to cloud
+  - Local empty + remote has data → auto downloads cloud data to local
+  - Both empty → marks as synced, nothing to do
+  - Both have data → shows conflict dialog asking user to choose Upload/Download/Skip
+- Added manual Upload All / Download All buttons in the PocketBase settings section (visible when connected)
+- Last sync timestamp displayed in settings
+
+### Changes made
+1. **PocketBaseSyncService** (`pocketbase_sync_service.dart`)
+   - Added `SmartSyncAction` enum with 5 states: uploaded, downloaded, bothEmpty, conflict, alreadySynced
+   - Added `countRemoteRecords()` — counts all remote PB records for the user
+   - Added `countLocalRecords()` — counts all local Hive records
+   - Added `smartFirstSync()` — checks lastSync, counts data, decides action
+2. **main.dart** — calls `smartFirstSync()` after successful signIn + startListeners
+3. **Settings screen** — added Upload/Download buttons, conflict dialog, last sync display, sync progress feedback
+4. **Translations** — added CS + EN keys: sync_actions, sync_actions_hint, first_sync_title, first_sync_conflict, first_sync_skip
+
+### Current state
+- Smart first sync runs automatically on app startup after first connection
+- Manual upload/download available in Settings when connected
+- Build verified: 0 errors, macOS release 59.5MB
+
+---
+
+## 2026-03-13 — Add PocketBase status, test button, and settings override
+
+### What was done
+- Added a PocketBase section back to Settings, but only for configuration visibility and testing, not for the old bulky sync/auth UI.
+- The app now resolves PocketBase config in this order: local settings override first, bundled `lib/config/pocketbase_config.json` second.
+- Added a direct connection test so PocketBase auth errors are visible in the UI instead of failing silently at startup.
+
+### Changes made
+1. **Effective config resolution**
+   - `PocketBaseConfig.loadEffective(settingsRepository)` now prefers values stored in `SettingsRepository` over the bundled config file.
+   - Added `pocketBaseEmail` and `pocketBasePassword` settings keys.
+2. **Settings UI**
+   - Added a new PocketBase card to `settings_screen.dart` with:
+     - current config source indicator (bundled file / local settings override / none)
+     - current connection status chip
+     - URL, email, password fields
+     - `Test Connection`, `Save Override`, and `Use File Default` actions
+   - If a running `PocketBaseSyncService` exists, saving applies the new credentials immediately and restarts listeners.
+   - If there is no running service, the override is saved and becomes active on next app start.
+3. **Sync service status**
+   - `PocketBaseSyncService` now exposes `lastError` and sets status to `error` when sign-in fails.
+4. **Backup support**
+   - Backup export/restore now includes PocketBase email/password override fields.
+5. **Translations**
+   - Added new sync/status/override texts in both Czech and English.
+
+### Manual verification
+- `curl` test against `http://timer.91.98.132.127.sslip.io/api/collections/users/auth-with-password` returned:
+  - `{"data":{},"message":"Failed to authenticate.","status":400}`
+- This confirms the current URL is reachable over HTTP, but the provided credentials are currently rejected by PocketBase.
+- `https://timer.91.98.132.127.sslip.io/...` returned `404 page not found`.
+
+### Current state
+- `flutter analyze` reports only 4 pre-existing info-level issues outside the changed files.
+- `flutter build macos --release` succeeds.
+- Settings now show whether sync is configured, from which source, and whether authentication succeeds.
+
+### What is pending / next steps
+- Verify the correct PocketBase credentials for the target server.
+- After entering working credentials in Settings, use `Test Connection`; if it passes, save the override and sync should reconnect immediately when a sync service is already running.
+
+---
+
+## 2025-07-15 — Remove PocketBase UI from settings, use config file instead
+
+### What was done
+- **Problem**: PocketBase sign-in/settings in the app UI didn't work reliably ("dávám data do pocketbase v settings ani nastavit ani přihlásit nijak nefunguje")
+- **Solution**: Removed all PocketBase UI from settings screen. Config now comes from a gitignored JSON file — if file exists with real credentials, sync happens automatically; if not, no sync.
+
+### Changes made:
+1. **Created `lib/config/pocketbase_config.json`** — Template config file with placeholder values (`pb.example.com`, `user@example.com`, `your-password-here`)
+2. **Created `lib/core/services/pocketbase_config.dart`** — `PocketBaseConfig.load()` static method that reads the bundled asset, validates it's not using placeholder values
+3. **Updated `lib/main.dart`** — Uses `PocketBaseConfig.load()` instead of `settingsRepository.getPocketBaseUrl()`. Auto sign-in with credentials from config file, then starts real-time listeners on success
+4. **Updated `pubspec.yaml`** — Added `lib/config/` to assets section
+5. **Updated `.gitignore`** — Added `lib/config/pocketbase_config.json` to prevent committing real credentials
+6. **Cleaned `lib/presentation/screens/settings_screen.dart`** — Removed `_PocketBaseSyncSection` widget, `_PocketBaseAuthDialog` widget, and all associated state/methods (~500 lines). Removed unused `dart:async` import. Kept `pocketbase_sync_service` import (still used for monthly target sync)
+
+### How to configure PocketBase sync:
+- Edit `lib/config/pocketbase_config.json` with real PocketBase URL, email, and password
+- Rebuild the app — credentials are bundled as an asset
+- If file has placeholder values or is missing, sync is silently disabled
+
+### Current state
+- Build succeeds: `flutter build macos --release` — Exit Code: 0
+- PocketBase UI fully removed from settings screen
+- Auto sign-in happens at startup from config file
+- Monthly target sync calls still work via `context.read<PocketBaseSyncService?>()`
+
+### What is pending / next steps
+- Test end-to-end with real PocketBase credentials in config file
+- Consider whether `settingsRepository` PocketBase methods (URL, token, model storage) are still needed or can be simplified
+
+---
+
+## 2025-07-15 — Migrate from Firebase to PocketBase
+
+### What was done
+
+#### Complete Firebase → PocketBase Migration
+- **Reason**: Firebase SDK (firebase_core, firebase_auth, cloud_firestore) takes too much space and adds complexity. PocketBase is lightweight, self-hosted, and uses a single SQLite file.
+- **Approach**: Replaced all Firebase functionality (auth, Firestore CRUD, real-time sync) with PocketBase SDK equivalents.
+
+#### Changes made:
+1. **Dependencies** (`pubspec.yaml`): Removed `firebase_core`, `firebase_auth`, `cloud_firestore`. Added `pocketbase: ^0.23.2`.
+2. **New service** (`lib/core/services/pocketbase_sync_service.dart`): ~600-line PocketBase sync service with:
+   - Email/password auth (signIn, signUp, signOut)
+   - Auth state persistence (token + model saved to Hive settings)
+   - Real-time SSE subscriptions for 6 collections
+   - Push/delete for all model types
+   - Bulk uploadAll/downloadAll
+   - Upsert pattern using `item_id` field (app UUID separate from PocketBase auto-generated `id`)
+3. **Constants** (`app_constants.dart`): Replaced Firebase keys with PocketBase keys (pocketBaseUrl, pocketBaseAuthToken, pocketBaseAuthModel, pocketBaseEnabled, pocketBaseLastSync)
+4. **Settings repository** (`settings_repository.dart`): Replaced Firebase getters/setters with PocketBase equivalents
+5. **App entry** (`main.dart`): Removed Firebase initialization; creates PocketBaseSyncService from stored URL
+6. **App providers** (`app.dart`): FirebaseSyncService → PocketBaseSyncService throughout
+7. **All 4 BLoCs** (category, project, task, timer): Updated service references
+8. **Settings screen** (`settings_screen.dart`): Completely rewrote sync section — new `_PocketBaseSyncSection` and `_PocketBaseAuthDialog` widgets with server URL input field
+9. **Other screens** (`projects_screen.dart`, `time_entries_overview_screen.dart`): Updated sync service references
+10. **Backup service** (`backup_service.dart`): Updated backup/restore/clear to use PocketBase settings
+11. **Translations** (`en.json`, `cs.json`): Updated sync section — "Firebase" → "PocketBase", added server URL labels
+12. **Android build files**: Removed FlutterFire/Google Services plugin references
+13. **Deleted files**: `lib/firebase_options.dart`, `lib/core/services/firebase_sync_service_v2.dart`
+14. **README**: Added comprehensive PocketBase deployment guide for Hetzner + Coolify, including all 6 collection schemas
+
+### Data model (PocketBase collections)
+- 6 collections: `categories`, `projects`, `tasks`, `time_entries`, `running_timers`, `monthly_targets`
+- Each record has `item_id` (app UUID), `user` (relation to users collection)
+- API rules: `@request.auth.id != "" && user = @request.auth.id`
+
+### Current state
+- All Firebase references removed from the codebase
+- `flutter analyze` passes with 0 errors (only pre-existing warnings/info)
+- App compiles successfully
+- **Needs testing**: PocketBase connection, auth flow, sync upload/download, real-time subscriptions
+
+### What is pending / next steps
+- Test PocketBase sync end-to-end with a running PocketBase instance
+- Optionally remove remaining Firebase platform files (GoogleService-Info.plist, google-services.json) if no longer needed by other plugins
+- Consider removing `firebase.json` from project root
+
+---
+
+## 2026-03-13 — Fix reminder logic, localize month names, add task-based pie charts
+
+### What was done
+
+#### 1. Fix "remind to start" notification when time is already covered
+- **Problem**: If user manually entered a future time range (e.g., 8:00–14:00 in the morning), the reminder would still fire during that covered period.
+- **Fix**: Added a check in `_checkRemindStart` that looks for any existing entry whose `startTime ≤ now ≤ endTime`. If found, the reminder is suppressed. Also improved inactive minutes calculation to only consider entries that ended before `now`.
+
+#### 2. Localize month names in PDF Reports screen
+- **Problem**: The month dropdown and period display in `PdfReportsScreen` used hardcoded Czech month names (`_czechMonths` map) for UI display.
+- **Fix**: Replaced UI usages with `DateFormat('MMMM', locale)` from intl, which respects the current app language. The `_czechMonths` / `_czechMonthsLower` maps are kept for internal data (file naming, invoice note matching) since PDF output stays Czech.
+
+#### 3. Add task-based distribution pie charts in Statistics
+- **Problem**: The distribution pie chart only showed project-level breakdown.
+- **Fix**: Added three modes selectable via a segmented button:
+  - **By Projects**: Original single pie chart by project (default)
+  - **By Tasks**: One pie chart per project showing task breakdown within each project
+  - **All Tasks**: Single pie chart with all tasks from all projects
+- New translation keys: `statistics.distribution_by_projects`, `statistics.distribution_by_tasks`, `statistics.distribution_all_tasks`
+
+### Modified files
+- `lib/core/services/work_reminder_service.dart` — added covering-entry check, improved inactive minutes calculation
+- `lib/presentation/screens/statistics_screen.dart` — added `_distributionMode` state, `TaskRepository` import, three new pie chart builder methods, color generation helpers
+- `lib/presentation/screens/pdf_reports_screen.dart` — replaced hardcoded Czech month names in UI with `DateFormat`-based localized names
+- `assets/translations/en.json` — added 3 distribution mode keys
+- `assets/translations/cs.json` — added 3 distribution mode keys
+
+### Current state
+- `flutter analyze` — 4 info-level issues (all pre-existing), no errors
+- Reminder suppressed when current time is covered by an existing entry
+- Month names in PDF Reports screen are localized
+- Statistics pie chart supports project, per-project task, and all-tasks views
+
+---
+
 ## 2026-03-03 — Fix false overlap detection when editing time entries
 
 ### What was done

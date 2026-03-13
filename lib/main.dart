@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,7 +13,8 @@ import 'app/app.dart';
 import 'app/desktop_window_handler.dart';
 import 'app/system_tray_service.dart';
 import 'core/constants/app_constants.dart';
-import 'core/services/firebase_sync_service_v2.dart';
+import 'core/services/pocketbase_config.dart';
+import 'core/services/pocketbase_sync_service.dart';
 import 'core/services/work_reminder_service.dart';
 import 'core/utils/platform_utils.dart';
 import 'data/models/category_model.dart';
@@ -32,7 +32,6 @@ import 'data/repositories/settings_repository.dart';
 import 'data/repositories/standalone_invoice_repository.dart';
 import 'data/repositories/task_repository.dart';
 import 'data/repositories/time_entry_repository.dart';
-import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,16 +45,6 @@ Future<void> main() async {
 
   // Use bundled fonts — don't fetch from network
   GoogleFonts.config.allowRuntimeFetching = false;
-
-  // ── Firebase ────────────────────────────────────────────────────────────
-  bool firebaseAvailable = false;
-  try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-    firebaseAvailable = true;
-    debugPrint('[main] Firebase initialized successfully');
-  } catch (e) {
-    debugPrint('[main] Firebase not available: $e');
-  }
 
   // ── Hive ────────────────────────────────────────────────────────────────
   await Hive.initFlutter();
@@ -88,10 +77,14 @@ Future<void> main() async {
   final standaloneInvoiceRepository = StandaloneInvoiceRepository();
   await standaloneInvoiceRepository.init();
 
-  // ── Firebase Sync Service ──────────────────────────────────────────────
-  FirebaseSyncService? firebaseSyncService;
-  if (firebaseAvailable) {
-    firebaseSyncService = FirebaseSyncService(
+  // ── PocketBase Sync Service ────────────────────────────────────────────
+  // Config-file driven: if lib/config/pocketbase_config.json exists with
+  // real credentials, sync is enabled. Otherwise it stays null (no sync).
+  PocketBaseSyncService? pocketBaseSyncService;
+  final pbConfig = await PocketBaseConfig.loadEffective(settingsRepository);
+  if (pbConfig != null) {
+    pocketBaseSyncService = PocketBaseSyncService(
+      serverUrl: pbConfig.url,
       categoryRepo: categoryRepository,
       projectRepo: projectRepository,
       taskRepo: taskRepository,
@@ -100,9 +93,15 @@ Future<void> main() async {
       monthlyTargetRepo: monthlyHoursTargetRepository,
       settingsRepo: settingsRepository,
     );
-    // Auto-start listeners if already signed in
-    if (firebaseSyncService.isSignedIn) {
-      firebaseSyncService.startListeners();
+    // Auto sign-in, start listeners, and smart first sync
+    final error = await pocketBaseSyncService.signIn(pbConfig.email, pbConfig.password);
+    if (error == null) {
+      await pocketBaseSyncService.startListeners();
+      // Smart first sync — auto upload/download on first connection
+      final (action, result) = await pocketBaseSyncService.smartFirstSync();
+      debugPrint('[PocketBase] Smart first sync: $action, ${result?.total ?? 0} items');
+    } else {
+      debugPrint('[PocketBase] Auto sign-in failed: $error');
     }
   }
 
@@ -168,7 +167,7 @@ Future<void> main() async {
         monthlyHoursTargetRepository: monthlyHoursTargetRepository,
         standaloneInvoiceRepository: standaloneInvoiceRepository,
         systemTrayService: systemTrayService,
-        firebaseSyncService: firebaseSyncService,
+        pocketBaseSyncService: pocketBaseSyncService,
       ),
     ),
   );

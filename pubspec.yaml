@@ -51,10 +51,8 @@ dependencies:
   sqlite3: ^3.1.6
   package_info_plus: ^9.0.0
 
-  # Firebase
-  firebase_core: ^4.4.0
-  firebase_auth: ^6.1.4
-  cloud_firestore: ^6.1.2
+  # Cloud Sync
+  pocketbase: ^0.23.2
   share_plus: ^12.0.1
 
 dev_dependencies:
@@ -87,6 +85,7 @@ flutter:
     - assets/translations/
     - assets/icons/
     - assets/fonts/
+    - lib/config/
 
   fonts:
     - family: Inter

@@ -11,7 +11,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/backup_service.dart';
-import '../../core/services/firebase_sync_service_v2.dart';
+import '../../core/services/pocketbase_config.dart';
+import '../../core/services/pocketbase_sync_service.dart';
 import '../../core/services/tyme_data_import_service.dart';
 import '../../core/services/tyme_export_service.dart';
 import '../../core/services/tyme_import_service.dart';
@@ -274,6 +275,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _buildMonthlyTargetsSection(context),
                         const SizedBox(height: 20),
 
+                        // PocketBase
+                        _buildPocketBaseSection(context),
+                        const SizedBox(height: 20),
+
                         // Format & Currency
                         _buildSectionTitle(context, tr('settings.general')),
                         Card(
@@ -442,11 +447,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 20),
-
-                        // Cloud Sync
-                        _buildSectionTitle(context, tr('sync.title')),
-                        _FirebaseSyncSection(settingsRepo: context.read<SettingsRepository>()),
                         const SizedBox(height: 20),
 
                         // Reminders
@@ -651,6 +651,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildPocketBaseSection(BuildContext context) {
+    return _PocketBaseSettingsSection(settingsRepository: context.read<SettingsRepository>(), syncService: context.read<PocketBaseSyncService?>());
+  }
+
   Widget _buildMonthlyTargetsSection(BuildContext context) {
     final targetRepo = context.read<MonthlyHoursTargetRepository>();
     final projectRepo = context.read<ProjectRepository>();
@@ -725,7 +729,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               if (confirm == true) {
                                 await targetRepo.delete(target.id);
                                 if (context.mounted) {
-                                  context.read<FirebaseSyncService?>()?.deleteMonthlyTarget(target.id);
+                                  context.read<PocketBaseSyncService?>()?.deleteMonthlyTarget(target.id);
                                   setState(() {});
 
                                   // Show SnackBar with undo
@@ -739,7 +743,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         onPressed: () async {
                                           await targetRepo.add(target);
                                           if (context.mounted) {
-                                            context.read<FirebaseSyncService?>()?.pushMonthlyTarget(target);
+                                            context.read<PocketBaseSyncService?>()?.pushMonthlyTarget(target);
                                             ScaffoldMessenger.of(
                                               context,
                                             ).showSnackBar(SnackBar(content: Text(tr('monthly_targets.target_restored')), backgroundColor: Colors.green));
@@ -854,7 +858,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   await targetRepo.add(newTarget);
                 }
                 if (context.mounted) {
-                  context.read<FirebaseSyncService?>()?.pushMonthlyTarget(newTarget);
+                  context.read<PocketBaseSyncService?>()?.pushMonthlyTarget(newTarget);
                 }
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
                 if (context.mounted) setState(() {});
@@ -1354,482 +1358,517 @@ class _ImportDialogState extends State<_ImportDialog> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Firebase Cloud Sync Section
-// ─────────────────────────────────────────────────────────────────────────────
+class _PocketBaseSettingsSection extends StatefulWidget {
+  final SettingsRepository settingsRepository;
+  final PocketBaseSyncService? syncService;
 
-class _FirebaseSyncSection extends StatefulWidget {
-  final SettingsRepository settingsRepo;
-
-  const _FirebaseSyncSection({required this.settingsRepo});
+  const _PocketBaseSettingsSection({required this.settingsRepository, required this.syncService});
 
   @override
-  State<_FirebaseSyncSection> createState() => _FirebaseSyncSectionState();
+  State<_PocketBaseSettingsSection> createState() => _PocketBaseSettingsSectionState();
 }
 
-class _FirebaseSyncSectionState extends State<_FirebaseSyncSection> {
-  bool _isSyncing = false;
-  String? _syncMessage;
-  StreamSubscription<SyncStatus>? _statusSub;
-  SyncStatus _status = SyncStatus.disabled;
+class _PocketBaseSettingsSectionState extends State<_PocketBaseSettingsSection> {
+  final _urlController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
 
-  FirebaseSyncService? get _service => context.read<FirebaseSyncService?>();
+  StreamSubscription<SyncStatus>? _statusSubscription;
+  SyncStatus _status = SyncStatus.disabled;
+  PocketBaseConfigSource? _source;
+  bool _isLoading = true;
+  bool _isTesting = false;
+  bool _isSaving = false;
+  bool _isSyncing = false;
+  bool _obscurePassword = true;
+  bool? _lastTestSucceeded;
+  String? _message;
+
+  bool get _isBusy => _isLoading || _isTesting || _isSaving || _isSyncing;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final svc = _service;
-      if (svc != null) {
-        _status = svc.currentStatus;
-        _statusSub = svc.statusStream.listen((s) {
-          if (mounted) setState(() => _status = s);
-        });
-        setState(() {});
-      }
+    _status = widget.syncService?.currentStatus ?? SyncStatus.disabled;
+    _statusSubscription = widget.syncService?.statusStream.listen((status) {
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+      });
     });
+    _loadConfig();
   }
 
   @override
   void dispose() {
-    _statusSub?.cancel();
+    _statusSubscription?.cancel();
+    _urlController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
-  bool get _isSignedIn => _service?.isSignedIn ?? false;
-  String? get _userEmail => _service?.currentUser?.email;
+  Future<void> _loadConfig() async {
+    final effective = await PocketBaseConfig.loadEffective(widget.settingsRepository);
+    if (!mounted) return;
 
-  Future<void> _doUpload() async {
-    final svc = _service;
-    if (svc == null || !svc.isSignedIn) return;
+    setState(() {
+      _urlController.text = effective?.url ?? '';
+      _emailController.text = effective?.email ?? '';
+      _passwordController.text = effective?.password ?? '';
+      _source = effective?.source;
+      _isLoading = false;
+      _message = _buildInitialMessage();
+      _lastTestSucceeded = widget.syncService?.isSignedIn == true ? true : null;
+    });
+  }
+
+  String _buildInitialMessage() {
+    final syncService = widget.syncService;
+    if (syncService?.isSignedIn == true) {
+      final email = syncService?.userEmail;
+      return email == null || email.isEmpty ? tr('sync.connection_ok') : '${tr('sync.connection_ok')}: $email';
+    }
+    final error = syncService?.lastError;
+    if (error != null && error.isNotEmpty) {
+      return '${tr('sync.connection_failed')}: $error';
+    }
+    if (_source == null) return tr('sync.no_effective_config');
+    return tr('sync.ready_to_test');
+  }
+
+  Future<void> _testConnection() async {
+    final url = _urlController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (!PocketBaseConfig.isValid(url: url, email: email, password: password)) {
+      setState(() {
+        _lastTestSucceeded = false;
+        _message = tr('sync.invalid_config');
+      });
+      return;
+    }
+
+    setState(() {
+      _isTesting = true;
+      _message = tr('sync.testing_connection');
+    });
+
+    final result = await PocketBaseConfig.testConnection(url: url, email: email, password: password);
+    if (!mounted) return;
+
+    setState(() {
+      _isTesting = false;
+      _lastTestSucceeded = result.isSuccess;
+      _message = result.isSuccess ? '${tr('sync.connection_ok')}: ${result.message}' : '${tr('sync.connection_failed')}: ${result.message}';
+    });
+  }
+
+  Future<void> _saveOverride() async {
+    final url = _urlController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (!PocketBaseConfig.isValid(url: url, email: email, password: password)) {
+      setState(() {
+        _lastTestSucceeded = false;
+        _message = tr('sync.invalid_config');
+      });
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _message = tr('sync.saving_override');
+    });
+
+    await widget.settingsRepository.setPocketBaseUrl(url);
+    await widget.settingsRepository.setPocketBaseEmail(email);
+    await widget.settingsRepository.setPocketBasePassword(password);
+    await widget.settingsRepository.setPocketBaseEnabled(true);
+
+    final applyError = await _applyConfigToRunningService(PocketBaseConfig(url: url, email: email, password: password, source: PocketBaseConfigSource.settingsOverride));
+
+    if (!mounted) return;
+
+    setState(() {
+      _isSaving = false;
+      _source = PocketBaseConfigSource.settingsOverride;
+      if (applyError == null) {
+        _lastTestSucceeded = true;
+        _message = widget.syncService == null ? tr('sync.override_saved_restart_required') : tr('sync.override_saved_connected');
+      } else {
+        _lastTestSucceeded = false;
+        _message = '${tr('sync.override_saved')}: $applyError';
+      }
+    });
+  }
+
+  Future<void> _clearOverride() async {
+    setState(() {
+      _isSaving = true;
+      _message = tr('sync.loading_file_defaults');
+    });
+
+    await widget.settingsRepository.clearPocketBaseOverride();
+
+    final bundled = await PocketBaseConfig.loadBundled();
+    await widget.settingsRepository.setPocketBaseEnabled(bundled != null);
+    final applyError = bundled == null ? await _disconnectRunningService() : await _applyConfigToRunningService(bundled);
+
+    if (!mounted) return;
+
+    await _loadConfig();
+    if (!mounted) return;
+
+    setState(() {
+      _isSaving = false;
+      if (bundled == null) {
+        _lastTestSucceeded = null;
+        _message = tr('sync.no_effective_config');
+      } else if (applyError == null) {
+        _lastTestSucceeded = true;
+        _message = widget.syncService == null ? tr('sync.file_default_restart_required') : tr('sync.file_default_applied');
+      } else {
+        _lastTestSucceeded = false;
+        _message = '${tr('sync.connection_failed')}: $applyError';
+      }
+    });
+  }
+
+  Future<String?> _applyConfigToRunningService(PocketBaseConfig config) async {
+    final syncService = widget.syncService;
+    if (syncService == null) return null;
+
+    await syncService.signOut();
+    syncService.updateServerUrl(config.url);
+    final error = await syncService.signIn(config.email, config.password);
+    if (error != null) return error;
+
+    await syncService.startListeners();
+    if (syncService.lastError != null) return syncService.lastError;
+
+    // Run smart first sync after successful connection
+    final (action, result) = await syncService.smartFirstSync(
+      onProgress: (msg, _) {
+        if (mounted) setState(() => _message = msg);
+      },
+    );
+    if (action == SmartSyncAction.conflict) {
+      if (mounted) await _showConflictDialog();
+    } else if (result?.hasError == true) {
+      return result!.error;
+    }
+    return null;
+  }
+
+  Future<String?> _disconnectRunningService() async {
+    final syncService = widget.syncService;
+    if (syncService == null) return null;
+    await syncService.signOut();
+    return null;
+  }
+
+  Future<void> _uploadAll() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: Text(tr('sync.upload')),
         content: Text(tr('sync.confirm_upload')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('sync.upload'))),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('common.cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('sync.upload'))),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
-    await _runSync(() => svc.uploadAll(onProgress: _onProgress), tr('sync.upload_success'));
+
+    setState(() {
+      _isSyncing = true;
+      _message = tr('sync.syncing');
+    });
+
+    final result = await widget.syncService!.uploadAll(
+      onProgress: (msg, _) {
+        if (mounted) setState(() => _message = msg);
+      },
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isSyncing = false;
+      if (result.hasError) {
+        _lastTestSucceeded = false;
+        _message = '${tr('sync.sync_error')}: ${result.error}';
+      } else {
+        _lastTestSucceeded = true;
+        _message = '${tr('sync.upload_success')} (${result.total}${tr('sync.items_synced')})';
+      }
+    });
   }
 
-  Future<void> _doDownload() async {
-    final svc = _service;
-    if (svc == null || !svc.isSignedIn) return;
+  Future<void> _downloadAll() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: Text(tr('sync.download')),
         content: Text(tr('sync.confirm_download')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-            child: Text(tr('sync.download')),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('common.cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('sync.download'))),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
-    await _runSync(() => svc.downloadAll(onProgress: _onProgress), tr('sync.download_success'));
-  }
 
-  void _onProgress(String message, double progress) {
-    if (!mounted) return;
-    setState(() => _syncMessage = message);
-  }
-
-  Future<void> _runSync(Future<SyncResult> Function() action, String successMsg) async {
     setState(() {
       _isSyncing = true;
-      _syncMessage = tr('sync.syncing');
+      _message = tr('sync.syncing');
     });
-    try {
-      final result = await action();
-      if (!mounted) return;
+
+    final result = await widget.syncService!.downloadAll(
+      onProgress: (msg, _) {
+        if (mounted) setState(() => _message = msg);
+      },
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isSyncing = false;
       if (result.hasError) {
-        setState(() {
-          _isSyncing = false;
-          _syncMessage = '${tr('sync.sync_error')}: ${result.error}';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('sync.sync_error')}: ${result.error}'), backgroundColor: Colors.red));
+        _lastTestSucceeded = false;
+        _message = '${tr('sync.sync_error')}: ${result.error}';
       } else {
-        widget.settingsRepo.setFirebaseLastSync(DateTime.now().toIso8601String());
-        setState(() {
-          _isSyncing = false;
-          _syncMessage = '$successMsg (${tr('sync.items_synced')}: ${result.total})';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '$successMsg — '
-              '${tr('sync.categories')}: ${result.categoriesSynced}, '
-              '${tr('sync.projects')}: ${result.projectsSynced}, '
-              '${tr('sync.tasks')}: ${result.tasksSynced}, '
-              '${tr('sync.time_entries')}: ${result.timeEntriesSynced}',
-            ),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _lastTestSucceeded = true;
+        _message = '${tr('sync.download_success')} (${result.total}${tr('sync.items_synced')})';
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isSyncing = false;
-        _syncMessage = '${tr('sync.sync_error')}: $e';
-      });
-    }
+    });
+  }
+
+  Future<void> _showConflictDialog() async {
+    final action = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('sync.first_sync_title')),
+        content: Text(tr('sync.first_sync_conflict')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, 'skip'), child: Text(tr('sync.first_sync_skip'))),
+          OutlinedButton.icon(onPressed: () => Navigator.pop(ctx, 'download'), icon: const Icon(Icons.cloud_download_outlined, size: 18), label: Text(tr('sync.download'))),
+          FilledButton.icon(onPressed: () => Navigator.pop(ctx, 'upload'), icon: const Icon(Icons.cloud_upload_outlined, size: 18), label: Text(tr('sync.upload'))),
+        ],
+      ),
+    );
+
+    if (action == null || action == 'skip' || !mounted) return;
+
+    setState(() {
+      _isSyncing = true;
+      _message = tr('sync.syncing');
+    });
+
+    final result = action == 'upload'
+        ? await widget.syncService!.uploadAll(
+            onProgress: (msg, _) {
+              if (mounted) setState(() => _message = msg);
+            },
+          )
+        : await widget.syncService!.downloadAll(
+            onProgress: (msg, _) {
+              if (mounted) setState(() => _message = msg);
+            },
+          );
+
+    if (!mounted) return;
+    setState(() {
+      _isSyncing = false;
+      if (result.hasError) {
+        _lastTestSucceeded = false;
+        _message = '${tr('sync.sync_error')}: ${result.error}';
+      } else {
+        _lastTestSucceeded = true;
+        _message = '${tr('sync.sync_success')} (${result.total}${tr('sync.items_synced')})';
+      }
+    });
   }
 
   String _formatLastSync() {
-    final raw = widget.settingsRepo.getFirebaseLastSync();
-    if (raw.isEmpty) return tr('sync.never');
-    final dt = DateTime.tryParse(raw);
-    if (dt == null) return tr('sync.never');
+    final lastSync = widget.settingsRepository.getPocketBaseLastSync();
+    if (lastSync.isEmpty) return tr('sync.never');
+    final date = DateTime.tryParse(lastSync);
+    if (date == null) return lastSync;
     final now = DateTime.now();
-    final diff = now.difference(dt);
+    final diff = now.difference(date);
     if (diff.inMinutes < 1) return tr('sync.last_sync_just_now');
     if (diff.inHours < 1) return '${diff.inMinutes} min';
     if (diff.inDays < 1) return '${diff.inHours}h ${diff.inMinutes % 60}min';
-    return '${dt.day}.${dt.month}.${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+    return '${date.day}.${date.month}.${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _openAuthDialog() async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (_) => _FirebaseAuthDialog(syncService: _service),
-    );
-    if (result == true && mounted) {
-      setState(() {});
-      // Start listeners after successful sign in
-      final svc = _service;
-      if (svc != null && svc.isSignedIn) {
-        svc.startListeners();
-      }
-    }
-  }
-
-  Future<void> _signOut() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(tr('sync.sign_out')),
-        content: Text(tr('sync.confirm_sign_out')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            child: Text(tr('sync.sign_out')),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    await _service?.signOut();
-    if (mounted) setState(() {});
-  }
-
-  Widget _buildStatusChip() {
-    final IconData icon;
-    final Color color;
-    final String label;
-
+  ({String label, Color color, IconData icon}) _statusStyle(BuildContext context) {
     switch (_status) {
-      case SyncStatus.disabled:
-        icon = Icons.cloud_off;
-        color = Colors.grey;
-        label = tr('sync.status_disabled');
       case SyncStatus.connecting:
-        icon = Icons.cloud_sync;
-        color = Colors.orange;
-        label = tr('sync.status_connecting');
+        return (label: tr('sync.status_connecting'), color: Colors.orange, icon: Icons.cloud_sync);
       case SyncStatus.connected:
-        icon = Icons.cloud_done;
-        color = Colors.green;
-        label = tr('sync.status_connected');
+        return (label: tr('sync.status_connected'), color: Colors.green, icon: Icons.cloud_done);
       case SyncStatus.error:
-        icon = Icons.cloud_off;
-        color = Colors.red;
-        label = tr('sync.status_error');
+        return (label: tr('sync.status_error'), color: Colors.red, icon: Icons.cloud_off);
+      case SyncStatus.disabled:
+        return (label: tr('sync.status_disabled'), color: Theme.of(context).colorScheme.outline, icon: Icons.cloud_off);
     }
+  }
 
-    return Chip(
-      avatar: Icon(icon, size: 18, color: color),
-      label: Text(label, style: TextStyle(fontSize: 12, color: color)),
-      backgroundColor: color.withValues(alpha: 0.1),
-      side: BorderSide(color: color.withValues(alpha: 0.3)),
-      padding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
-    );
+  String _sourceLabel() {
+    switch (_source) {
+      case PocketBaseConfigSource.settingsOverride:
+        return tr('sync.source_settings');
+      case PocketBaseConfigSource.bundledAsset:
+        return tr('sync.source_file');
+      case null:
+        return tr('sync.source_none');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final signedIn = _isSignedIn;
+    final style = _statusStyle(context);
+    final syncService = widget.syncService;
 
-    if (_service == null) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: ListTile(
-            leading: const Icon(Icons.cloud_off, color: Colors.grey),
-            title: Text(tr('sync.firebase_not_available')),
-            subtitle: Text(tr('sync.firebase_not_configured_hint'), style: theme.textTheme.bodySmall),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            tr('sync.title'),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary),
           ),
         ),
-      );
-    }
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Auth & Status row
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(signedIn ? Icons.person : Icons.person_off, color: signedIn ? Colors.green : theme.colorScheme.onSurfaceVariant),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(signedIn ? _userEmail ?? '' : tr('sync.not_signed_in'), overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyLarge),
-                        const SizedBox(height: 4),
-                        _buildStatusChip(),
-                      ],
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(tr('sync.subtitle'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${tr('sync.current_source')}: ${_sourceLabel()}',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
+                          ),
+                          if (syncService?.userEmail case final userEmail?) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              '${tr('sync.active_user')}: $userEmail',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Chip(
+                      avatar: Icon(style.icon, size: 18, color: style.color),
+                      label: Text(style.label, style: TextStyle(color: style.color)),
+                      backgroundColor: style.color.withValues(alpha: 0.1),
+                      side: BorderSide(color: style.color.withValues(alpha: 0.3)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _urlController,
+                  enabled: !_isBusy,
+                  decoration: InputDecoration(labelText: tr('sync.server_url'), border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.dns_outlined)),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _emailController,
+                  enabled: !_isBusy,
+                  decoration: InputDecoration(labelText: tr('sync.email'), border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.email_outlined)),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _passwordController,
+                  enabled: !_isBusy,
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: tr('sync.password'),
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      onPressed: _isBusy ? null : () => setState(() => _obscurePassword = !_obscurePassword),
+                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  signedIn
-                      ? TextButton.icon(
-                          onPressed: _signOut,
-                          icon: const Icon(Icons.logout, size: 18),
-                          label: Text(tr('sync.sign_out')),
-                          style: TextButton.styleFrom(foregroundColor: Colors.red),
-                        )
-                      : FilledButton.icon(onPressed: _openAuthDialog, icon: const Icon(Icons.login, size: 18), label: Text(tr('sync.sign_in'))),
+                ),
+                const SizedBox(height: 12),
+                Text(tr('sync.override_hint'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
+                if (_message != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: (_lastTestSucceeded == false ? Colors.red : (_lastTestSucceeded == true ? Colors.green : Theme.of(context).colorScheme.surfaceContainerHighest))
+                          .withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: (_lastTestSucceeded == false ? Colors.red : (_lastTestSucceeded == true ? Colors.green : Theme.of(context).colorScheme.outline)).withValues(
+                          alpha: 0.25,
+                        ),
+                      ),
+                    ),
+                    child: Text(_message!),
+                  ),
                 ],
-              ),
-            ),
-
-            if (signedIn) ...[
-              const Divider(),
-
-              // Last sync
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Row(
+                if (_isBusy) ...[const SizedBox(height: 12), const LinearProgressIndicator()],
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    Icon(Icons.schedule, size: 16, color: theme.colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 8),
-                    Text('${tr('sync.last_sync')}: ${_formatLastSync()}', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                    FilledButton.icon(onPressed: _isBusy ? null : _testConnection, icon: const Icon(Icons.network_check, size: 18), label: Text(tr('sync.test_connection'))),
+                    OutlinedButton.icon(onPressed: _isBusy ? null : _saveOverride, icon: const Icon(Icons.save_outlined, size: 18), label: Text(tr('sync.save_override'))),
+                    TextButton.icon(onPressed: _isBusy ? null : _clearOverride, icon: const Icon(Icons.restart_alt, size: 18), label: Text(tr('sync.use_file_default'))),
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
-
-              // Sync status message
-              if (_syncMessage != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Text(
-                    _syncMessage!,
-                    style: theme.textTheme.bodySmall?.copyWith(color: _syncMessage!.contains('error') || _syncMessage!.contains('Chyba') ? Colors.red : Colors.green),
+                // ── Sync actions (only when connected) ──
+                if (_status == SyncStatus.connected) ...[
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  Text(tr('sync.sync_actions'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text(tr('sync.sync_actions_hint'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      FilledButton.icon(onPressed: _isBusy ? null : _uploadAll, icon: const Icon(Icons.cloud_upload_outlined, size: 18), label: Text(tr('sync.upload'))),
+                      OutlinedButton.icon(onPressed: _isBusy ? null : _downloadAll, icon: const Icon(Icons.cloud_download_outlined, size: 18), label: Text(tr('sync.download'))),
+                    ],
                   ),
-                ),
-
-              // Progress indicator
-              if (_isSyncing) const Padding(padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: LinearProgressIndicator()),
-
-              const SizedBox(height: 8),
-
-              // Action buttons
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _isSyncing ? null : _doUpload,
-                        icon: const Icon(Icons.cloud_upload, size: 18),
-                        label: Text(tr('sync.upload'), style: const TextStyle(fontSize: 12)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _isSyncing ? null : _doDownload,
-                        icon: const Icon(Icons.cloud_download, size: 18),
-                        label: Text(tr('sync.download'), style: const TextStyle(fontSize: 12)),
-                      ),
+                  if (syncService != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '${tr('sync.last_sync')}: ${_formatLastSync()}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(height: 4),
-
-              // Hint
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Text(tr('sync.real_time_hint'), style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Firebase Auth Dialog
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _FirebaseAuthDialog extends StatefulWidget {
-  final FirebaseSyncService? syncService;
-
-  const _FirebaseAuthDialog({required this.syncService});
-
-  @override
-  State<_FirebaseAuthDialog> createState() => _FirebaseAuthDialogState();
-}
-
-class _FirebaseAuthDialogState extends State<_FirebaseAuthDialog> {
-  final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
-  bool _isLoading = false;
-  String? _errorMessage;
-  bool _obscurePassword = true;
-
-  @override
-  void dispose() {
-    _emailCtrl.dispose();
-    _passwordCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _signIn() async {
-    if (!_validate()) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    final error = await widget.syncService?.signIn(_emailCtrl.text.trim(), _passwordCtrl.text);
-    if (!mounted) return;
-    if (error != null) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = error;
-      });
-    } else {
-      Navigator.pop(context, true);
-    }
-  }
-
-  Future<void> _signUp() async {
-    if (!_validate()) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    final error = await widget.syncService?.signUp(_emailCtrl.text.trim(), _passwordCtrl.text);
-    if (!mounted) return;
-    if (error != null) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = error;
-      });
-    } else {
-      Navigator.pop(context, true);
-    }
-  }
-
-  bool _validate() {
-    if (_emailCtrl.text.trim().isEmpty || _passwordCtrl.text.isEmpty) {
-      setState(() => _errorMessage = tr('sync.fill_all_fields'));
-      return false;
-    }
-    return true;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(tr('sync.firebase_auth')),
-      content: SizedBox(
-        width: 380,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _emailCtrl,
-              decoration: InputDecoration(
-                labelText: tr('sync.email'),
-                hintText: 'user@example.com',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.email_outlined),
-              ),
-              keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
-              enabled: !_isLoading,
+                ],
+              ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordCtrl,
-              decoration: InputDecoration(
-                labelText: tr('sync.password'),
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.lock_outline),
-                suffixIcon: IconButton(
-                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                ),
-              ),
-              obscureText: _obscurePassword,
-              textInputAction: TextInputAction.done,
-              enabled: !_isLoading,
-              onSubmitted: (_) => _signIn(),
-            ),
-            if (_errorMessage != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SelectableText(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 13)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            if (_isLoading) ...[const SizedBox(height: 16), const LinearProgressIndicator()],
-          ],
+          ),
         ),
-      ),
-      actions: [
-        TextButton(onPressed: _isLoading ? null : () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
-        OutlinedButton(onPressed: _isLoading ? null : _signUp, child: Text(tr('sync.sign_up'))),
-        FilledButton(onPressed: _isLoading ? null : _signIn, child: Text(tr('sync.sign_in'))),
       ],
     );
   }
