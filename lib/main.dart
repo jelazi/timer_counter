@@ -47,7 +47,7 @@ Future<void> main() async {
   GoogleFonts.config.allowRuntimeFetching = false;
 
   // ── Hive ────────────────────────────────────────────────────────────────
-  await Hive.initFlutter();
+  await Hive.initFlutter('timer_counter');
 
   // Register Hive Adapters
   Hive.registerAdapter(CategoryModelAdapter());

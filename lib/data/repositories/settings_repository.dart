@@ -273,17 +273,9 @@ class SettingsRepository {
   bool getWorkScheduleEnabled(int weekday) => _box.get('${AppConstants.workSchedulePrefix}_${weekday}_enabled', defaultValue: _defaultSchedule[weekday]!.$3) as bool;
   Future<void> setWorkScheduleEnabled(int weekday, bool enabled) => _box.put('${AppConstants.workSchedulePrefix}_${weekday}_enabled', enabled);
 
-  /// Get today's expected working hours (0 if not a work day)
+  /// Get today's expected working hours (0 if not a work day), considering day overrides
   double getTodayExpectedHours() {
-    final weekday = DateTime.now().weekday; // 1=Monday
-    if (!getWorkScheduleEnabled(weekday)) return 0;
-    final start = getWorkScheduleStart(weekday);
-    final end = getWorkScheduleEnd(weekday);
-    final startParts = start.split(':');
-    final endParts = end.split(':');
-    final startMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
-    final endMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
-    return (endMinutes - startMinutes) / 60.0;
+    return getExpectedHoursForDate(DateTime.now());
   }
 
   /// Get expected working hours for a specific weekday
@@ -296,6 +288,95 @@ class SettingsRepository {
     final startMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
     final endMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
     return (endMinutes - startMinutes) / 60.0;
+  }
+
+  // === Day Overrides (per specific date) ===
+  // 'off' = vacation/day off (normally a work day but won't work)
+  // 'work' = extra work day (normally not a work day but will work)
+
+  static String _dayOverrideKey(DateTime date) => '${AppConstants.dayOverridePrefix}_${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  /// Get override for a specific date. Returns 'off', 'work', or null (no override).
+  String? getDayOverride(DateTime date) {
+    return _box.get(_dayOverrideKey(date)) as String?;
+  }
+
+  /// Set or remove override for a specific date.
+  Future<void> setDayOverride(DateTime date, String? type) async {
+    final key = _dayOverrideKey(date);
+    if (type == null) {
+      await _box.delete(key);
+    } else {
+      await _box.put(key, type);
+    }
+  }
+
+  /// Get all day overrides for a specific month.
+  Map<DateTime, String> getDayOverridesForMonth(int year, int month) {
+    final result = <DateTime, String>{};
+    final daysInMonth = DateTime(year, month + 1, 0).day;
+    for (int day = 1; day <= daysInMonth; day++) {
+      final date = DateTime(year, month, day);
+      final override = getDayOverride(date);
+      if (override != null) {
+        result[date] = override;
+      }
+    }
+    return result;
+  }
+
+  /// Get all day overrides (for backup). Returns map of 'YYYY-MM-DD' → 'off'/'work'.
+  Map<String, String> getAllDayOverrides() {
+    final result = <String, String>{};
+    final prefix = '${AppConstants.dayOverridePrefix}_';
+    for (final key in _box.keys) {
+      if (key is String && key.startsWith(prefix)) {
+        final value = _box.get(key);
+        if (value is String) {
+          result[key.substring(prefix.length)] = value;
+        }
+      }
+    }
+    return result;
+  }
+
+  /// Restore all day overrides from backup. Input: map of 'YYYY-MM-DD' → 'off'/'work'.
+  Future<void> restoreAllDayOverrides(Map<String, String> overrides) async {
+    // Clear existing overrides first
+    final prefix = '${AppConstants.dayOverridePrefix}_';
+    final keysToDelete = _box.keys.where((k) => k is String && k.startsWith(prefix)).toList();
+    for (final key in keysToDelete) {
+      await _box.delete(key);
+    }
+    // Set new overrides
+    for (final entry in overrides.entries) {
+      await _box.put('$prefix${entry.key}', entry.value);
+    }
+  }
+
+  /// Check if a specific date is a work day (considering overrides).
+  bool isWorkDay(DateTime date) {
+    final override = getDayOverride(date);
+    if (override == 'off') return false;
+    if (override == 'work') return true;
+    return getWorkScheduleEnabled(date.weekday);
+  }
+
+  /// Get expected working hours for a specific date (considering overrides).
+  double getExpectedHoursForDate(DateTime date) {
+    final override = getDayOverride(date);
+    if (override == 'off') return 0;
+    if (override == 'work') {
+      // For extra work days, use the hours from the weekday schedule (even if disabled)
+      final start = getWorkScheduleStart(date.weekday);
+      final end = getWorkScheduleEnd(date.weekday);
+      final startParts = start.split(':');
+      final endParts = end.split(':');
+      final startMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
+      final endMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
+      return (endMinutes - startMinutes) / 60.0;
+    }
+    return getExpectedHoursForDay(date.weekday);
   }
 
   /// Load complete invoice settings from Hive

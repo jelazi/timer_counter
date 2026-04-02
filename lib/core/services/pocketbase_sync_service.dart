@@ -25,7 +25,7 @@ import '../../data/repositories/time_entry_repository.dart';
 enum SyncStatus { disabled, connecting, connected, error }
 
 /// Event emitted when a remote change updates a local collection.
-enum SyncCollection { categories, projects, tasks, timeEntries, runningTimers, monthlyTargets }
+enum SyncCollection { categories, projects, tasks, timeEntries, runningTimers, monthlyTargets, dayOverrides }
 
 /// Callback for reporting sync progress.
 typedef SyncProgressCallback = void Function(String message, double progress);
@@ -56,6 +56,7 @@ class SyncResult {
   final int categoriesSynced;
   final int runningTimersSynced;
   final int monthlyTargetsSynced;
+  final int dayOverridesSynced;
   final String? error;
 
   const SyncResult({
@@ -65,11 +66,12 @@ class SyncResult {
     this.categoriesSynced = 0,
     this.runningTimersSynced = 0,
     this.monthlyTargetsSynced = 0,
+    this.dayOverridesSynced = 0,
     this.error,
   });
 
   bool get hasError => error != null;
-  int get total => projectsSynced + tasksSynced + timeEntriesSynced + categoriesSynced + runningTimersSynced + monthlyTargetsSynced;
+  int get total => projectsSynced + tasksSynced + timeEntriesSynced + categoriesSynced + runningTimersSynced + monthlyTargetsSynced + dayOverridesSynced;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -220,6 +222,7 @@ class PocketBaseSyncService {
       await _subscribeTimeEntries();
       await _subscribeRunningTimers();
       await _subscribeMonthlyTargets();
+      await _subscribeDayOverrides();
 
       _setStatus(SyncStatus.connected);
       _lastError = null;
@@ -240,6 +243,7 @@ class PocketBaseSyncService {
       await _pb.collection('time_entries').unsubscribe();
       await _pb.collection('running_timers').unsubscribe();
       await _pb.collection('monthly_targets').unsubscribe();
+      await _pb.collection('day_overrides').unsubscribe();
     } catch (e) {
       debugPrint('[PocketBaseSync] Error stopping listeners: $e');
     }
@@ -316,6 +320,17 @@ class PocketBaseSyncService {
     await _deleteRecord('monthly_targets', id);
   }
 
+  Future<void> pushDayOverride(DateTime date, String type) async {
+    if (!isSignedIn) return;
+    final dateKey = _dateKey(date);
+    await _upsertRecord('day_overrides', dateKey, {'item_id': dateKey, 'date': dateKey, 'override_type': type});
+  }
+
+  Future<void> deleteDayOverride(DateTime date) async {
+    if (!isSignedIn) return;
+    await _deleteRecord('day_overrides', _dateKey(date));
+  }
+
   // ═════════════════════════════════════════════════════════════════════════
   // BULK — initial upload / download
   // ═════════════════════════════════════════════════════════════════════════
@@ -349,6 +364,12 @@ class PocketBaseSyncService {
       final targets = _monthlyTargetRepo.getAll();
       await _replaceRemote('monthly_targets', {for (final m in targets) m.id: _monthlyTargetToMap(m)});
 
+      onProgress?.call('Day overrides…', 0.96);
+      final dayOverrides = _settingsRepo.getAllDayOverrides();
+      await _replaceRemote('day_overrides', {
+        for (final entry in dayOverrides.entries) entry.key: {'item_id': entry.key, 'date': entry.key, 'override_type': entry.value},
+      });
+
       _settingsRepo.setPocketBaseLastSync(DateTime.now().toIso8601String());
       onProgress?.call('Done', 1.0);
       return SyncResult(
@@ -358,6 +379,7 @@ class PocketBaseSyncService {
         timeEntriesSynced: entries.length,
         runningTimersSynced: timers.length,
         monthlyTargetsSynced: targets.length,
+        dayOverridesSynced: dayOverrides.length,
       );
     } catch (e) {
       return SyncResult(error: e.toString());
@@ -407,6 +429,10 @@ class PocketBaseSyncService {
         (m) => m.id,
       );
 
+      onProgress?.call('Day overrides…', 0.96);
+      final remoteDayOverrides = await _downloadCollection<MapEntry<String, String>>('day_overrides', _dayOverrideFromMap);
+      await _settingsRepo.restoreAllDayOverrides({for (final entry in remoteDayOverrides) entry.key: entry.value});
+
       _settingsRepo.setPocketBaseLastSync(DateTime.now().toIso8601String());
       onProgress?.call('Done', 1.0);
       return SyncResult(
@@ -416,6 +442,7 @@ class PocketBaseSyncService {
         timeEntriesSynced: entries.length,
         runningTimersSynced: timers.length,
         monthlyTargetsSynced: targets.length,
+        dayOverridesSynced: remoteDayOverrides.length,
       );
     } catch (e) {
       return SyncResult(error: e.toString());
@@ -432,7 +459,7 @@ class PocketBaseSyncService {
   Future<int> countRemoteRecords() async {
     if (!isSignedIn) return 0;
     int total = 0;
-    for (final coll in ['categories', 'projects', 'tasks', 'time_entries', 'running_timers', 'monthly_targets']) {
+    for (final coll in ['categories', 'projects', 'tasks', 'time_entries', 'running_timers', 'monthly_targets', 'day_overrides']) {
       try {
         final result = await _pb.collection(coll).getList(filter: 'user = "$userId"', perPage: 1);
         total += result.totalItems;
@@ -450,7 +477,8 @@ class PocketBaseSyncService {
         _taskRepo.getAll().length +
         _timeEntryRepo.getAll().length +
         _runningTimerRepo.getAll().length +
-        _monthlyTargetRepo.getAll().length;
+        _monthlyTargetRepo.getAll().length +
+        _settingsRepo.getAllDayOverrides().length;
   }
 
   /// Perform smart first sync after initial connection.
@@ -550,6 +578,33 @@ class PocketBaseSyncService {
       if (_suppressListeners) return;
       _handleEvent<MonthlyHoursTargetModel>(e, _monthlyTargetFromMap, (m) => _monthlyTargetRepo.add(m), (id) => _monthlyTargetRepo.delete(id));
       _collectionChangeController.add(SyncCollection.monthlyTargets);
+    }, filter: 'user = "$userId"');
+  }
+
+  Future<void> _subscribeDayOverrides() async {
+    await _pb.collection('day_overrides').subscribe('*', (e) async {
+      if (_suppressListeners) return;
+      final record = e.record;
+      if (record == null) return;
+
+      final itemId = record.getStringValue('item_id');
+      final date = _parseDateKeyOrNull(itemId);
+      if (date == null) return;
+
+      switch (e.action) {
+        case 'create':
+        case 'update':
+          final type = record.getStringValue('override_type');
+          if (type == 'off' || type == 'work') {
+            await _settingsRepo.setDayOverride(date, type);
+            _collectionChangeController.add(SyncCollection.dayOverrides);
+          }
+          break;
+        case 'delete':
+          await _settingsRepo.setDayOverride(date, null);
+          _collectionChangeController.add(SyncCollection.dayOverrides);
+          break;
+      }
     }, filter: 'user = "$userId"');
   }
 
@@ -794,6 +849,12 @@ class PocketBaseSyncService {
     createdAt: _parseDate(m['created_at']),
   );
 
+  MapEntry<String, String> _dayOverrideFromMap(Map<String, dynamic> m) {
+    final date = m['date'] as String? ?? m['item_id'] as String? ?? '';
+    final type = m['override_type'] as String? ?? '';
+    return MapEntry(date, type);
+  }
+
   // --- Date helpers ---
   static DateTime _parseDate(dynamic value) {
     if (value is String && value.isNotEmpty) {
@@ -821,6 +882,21 @@ class PocketBaseSyncService {
     if (value is List) return value.cast<String>();
     if (value is String && value.isNotEmpty) return value.split(',');
     return [];
+  }
+
+  static String _dateKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  static DateTime? _parseDateKeyOrNull(String value) {
+    if (value.isEmpty) return null;
+    final parts = value.split('-');
+    if (parts.length != 3) return null;
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) return null;
+    return DateTime(year, month, day);
   }
 
   // Simple JSON string helpers

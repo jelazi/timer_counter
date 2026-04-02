@@ -271,6 +271,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(height: 20),
 
+                        // Day Overrides (monthly adjustments)
+                        _buildDayOverridesSection(context),
+                        const SizedBox(height: 20),
+
                         // Monthly Hours Targets
                         _buildMonthlyTargetsSection(context),
                         const SizedBox(height: 20),
@@ -638,6 +642,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildDayOverridesSection(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(context, tr('settings.day_overrides')),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: _DayOverridesCalendar(settingsRepository: context.read<SettingsRepository>(), syncService: context.read<PocketBaseSyncService?>()),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1869,6 +1888,257 @@ class _PocketBaseSettingsSectionState extends State<_PocketBaseSettingsSection> 
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _DayOverridesCalendar extends StatefulWidget {
+  final SettingsRepository settingsRepository;
+  final PocketBaseSyncService? syncService;
+
+  const _DayOverridesCalendar({required this.settingsRepository, required this.syncService});
+
+  @override
+  State<_DayOverridesCalendar> createState() => _DayOverridesCalendarState();
+}
+
+class _DayOverridesCalendarState extends State<_DayOverridesCalendar> {
+  late int _year;
+  late int _month;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _year = now.year;
+    _month = now.month;
+  }
+
+  void _previousMonth() {
+    setState(() {
+      _month--;
+      if (_month < 1) {
+        _month = 12;
+        _year--;
+      }
+    });
+  }
+
+  void _nextMonth() {
+    setState(() {
+      _month++;
+      if (_month > 12) {
+        _month = 1;
+        _year++;
+      }
+    });
+  }
+
+  Future<void> _toggleDay(DateTime date) async {
+    final repo = widget.settingsRepository;
+    final currentOverride = repo.getDayOverride(date);
+    final isNormallyWorkDay = repo.getWorkScheduleEnabled(date.weekday);
+    String? newOverride;
+
+    if (isNormallyWorkDay) {
+      // Normal work day: toggle between normal → off → normal
+      if (currentOverride == 'off') {
+        newOverride = null;
+      } else {
+        newOverride = 'off';
+      }
+    } else {
+      // Non-work day: toggle between normal → work → normal
+      if (currentOverride == 'work') {
+        newOverride = null;
+      } else {
+        newOverride = 'work';
+      }
+    }
+
+    await repo.setDayOverride(date, newOverride);
+    final syncService = widget.syncService;
+    if (syncService != null) {
+      if (newOverride == null) {
+        await syncService.deleteDayOverride(date);
+      } else {
+        await syncService.pushDayOverride(date, newOverride);
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = widget.settingsRepository;
+    final overrides = repo.getDayOverridesForMonth(_year, _month);
+    final daysInMonth = DateTime(_year, _month + 1, 0).day;
+    final firstWeekday = DateTime(_year, _month, 1).weekday; // 1=Mon
+    final locale = context.locale.languageCode;
+    final monthName = DateFormat('MMMM yyyy', locale).format(DateTime(_year, _month));
+
+    // Count work days this month
+    int workDays = 0;
+    for (int d = 1; d <= daysInMonth; d++) {
+      if (repo.isWorkDay(DateTime(_year, _month, d))) workDays++;
+    }
+
+    final dayLabels = [
+      tr('settings.monday').substring(0, 2),
+      tr('settings.tuesday').substring(0, 2),
+      tr('settings.wednesday').substring(0, 2),
+      tr('settings.thursday').substring(0, 2),
+      tr('settings.friday').substring(0, 2),
+      tr('settings.saturday').substring(0, 2),
+      tr('settings.sunday').substring(0, 2),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(tr('settings.day_overrides_desc'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+        const SizedBox(height: 12),
+        // Month navigation
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            IconButton(icon: const Icon(Icons.chevron_left), onPressed: _previousMonth),
+            Text('${monthName[0].toUpperCase()}${monthName.substring(1)}', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+            IconButton(icon: const Icon(Icons.chevron_right), onPressed: _nextMonth),
+          ],
+        ),
+        const SizedBox(height: 4),
+        // Work days count
+        Center(
+          child: Text(
+            tr('settings.work_days_count', namedArgs: {'count': workDays.toString()}),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w500),
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Day headers
+        Row(
+          children: dayLabels
+              .map(
+                (label) => Expanded(
+                  child: Center(
+                    child: Text(
+                      label,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+        const SizedBox(height: 4),
+        // Calendar grid
+        ..._buildCalendarRows(context, daysInMonth, firstWeekday, overrides),
+        const SizedBox(height: 12),
+        // Legend
+        Text(
+          tr('settings.tap_to_toggle'),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5), fontSize: 11),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 16,
+          runSpacing: 4,
+          children: [
+            _legendItem(context, Colors.green.shade100, Colors.green.shade800, tr('settings.normal_work_day')),
+            _legendItem(context, Colors.red.shade100, Colors.red.shade800, tr('settings.day_off')),
+            _legendItem(context, Colors.blue.shade100, Colors.blue.shade800, tr('settings.extra_work_day')),
+          ],
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildCalendarRows(BuildContext context, int daysInMonth, int firstWeekday, Map<DateTime, String> overrides) {
+    final rows = <Widget>[];
+    final cells = <Widget>[];
+
+    // Empty cells before first day
+    for (int i = 1; i < firstWeekday; i++) {
+      cells.add(const Expanded(child: SizedBox(height: 36)));
+    }
+
+    for (int day = 1; day <= daysInMonth; day++) {
+      final date = DateTime(_year, _month, day);
+      final override = overrides[date];
+      final isEffectiveWorkDay = widget.settingsRepository.isWorkDay(date);
+
+      Color bgColor;
+      Color textColor;
+      BoxBorder? border;
+
+      if (override == 'off') {
+        bgColor = Colors.red.shade100;
+        textColor = Colors.red.shade800;
+        border = Border.all(color: Colors.red.shade400, width: 2);
+      } else if (override == 'work') {
+        bgColor = Colors.blue.shade100;
+        textColor = Colors.blue.shade800;
+        border = Border.all(color: Colors.blue.shade400, width: 2);
+      } else if (isEffectiveWorkDay) {
+        bgColor = Colors.green.shade50;
+        textColor = Colors.green.shade800;
+      } else {
+        bgColor = Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3);
+        textColor = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4);
+      }
+
+      cells.add(
+        Expanded(
+          child: GestureDetector(
+            onTap: () {
+              _toggleDay(date);
+            },
+            child: Container(
+              height: 36,
+              margin: const EdgeInsets.all(1),
+              decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(6), border: border),
+              child: Center(
+                child: Text(
+                  '$day',
+                  style: TextStyle(fontSize: 12, fontWeight: override != null ? FontWeight.bold : FontWeight.w500, color: textColor),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      if ((firstWeekday - 1 + day) % 7 == 0 || day == daysInMonth) {
+        // Fill remaining cells in the last row
+        if (day == daysInMonth) {
+          final remaining = 7 - cells.length;
+          for (int i = 0; i < remaining; i++) {
+            cells.add(const Expanded(child: SizedBox(height: 36)));
+          }
+        }
+        rows.add(Row(children: List.from(cells)));
+        cells.clear();
+      }
+    }
+
+    return rows;
+  }
+
+  Widget _legendItem(BuildContext context, Color bgColor, Color textColor, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(3)),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11)),
       ],
     );
   }

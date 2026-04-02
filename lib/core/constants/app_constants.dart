@@ -75,6 +75,9 @@ class AppConstants {
   // Work Schedule (per weekday)
   static const String workSchedulePrefix = 'work_schedule';
 
+  // Day Overrides (per date: 'off' = vacation/holiday, 'work' = extra work day)
+  static const String dayOverridePrefix = 'day_override';
+
   // PocketBase Sync Keys
   static const String pocketBaseUrl = 'pocketbase_url';
   static const String pocketBaseEmail = 'pocketbase_email';

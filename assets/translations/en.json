@@ -204,7 +204,15 @@
         "thursday": "Thursday",
         "friday": "Friday",
         "saturday": "Saturday",
-        "sunday": "Sunday"
+        "sunday": "Sunday",
+        "day_overrides": "Monthly Day Adjustments",
+        "day_overrides_desc": "Add extra work days or mark days off (vacation) for specific months",
+        "day_off": "Day off",
+        "extra_work_day": "Extra work day",
+        "normal_work_day": "Work day",
+        "non_work_day": "Non-work day",
+        "work_days_count": "{count} work days",
+        "tap_to_toggle": "Tap a day to toggle: work day → day off, non-work day → extra work day"
     },
     "common": {
         "save": "Save",

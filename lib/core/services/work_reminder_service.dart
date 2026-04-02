@@ -162,7 +162,8 @@ class WorkReminderService {
     }
 
     final weekday = now.weekday;
-    final isWorkDay = _settingsRepo.getWorkScheduleEnabled(weekday);
+    final today = DateTime(now.year, now.month, now.day);
+    final isWorkDay = _settingsRepo.isWorkDay(today);
     if (!isWorkDay) {
       debugPrint('[WorkReminder] Not a work day (weekday=$weekday)');
       return;

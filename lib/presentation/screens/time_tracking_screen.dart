@@ -767,7 +767,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     }
 
     // Check if today is a working day and already has entries (or running timer)
-    final todayIsWorkDay = settingsRepo.getExpectedHoursForDay(today.weekday) > 0;
+    final todayIsWorkDay = settingsRepo.isWorkDay(today);
     final hasTodayEntries =
         monthEntries.any((e) {
           final entryDay = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
@@ -782,7 +782,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     final countFrom = (todayIsWorkDay && hasTodayEntries) ? today.add(const Duration(days: 1)) : today;
     int remainingWorkDays = 0;
     for (DateTime d = countFrom; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
-      if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
+      if (settingsRepo.isWorkDay(d)) {
         remainingWorkDays++;
       }
     }

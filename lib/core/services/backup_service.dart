@@ -316,6 +316,9 @@ class BackupService {
       'pocketBasePassword': _settingsRepository.getPocketBasePassword(),
       'pocketBaseEnabled': _settingsRepository.getPocketBaseEnabled(),
       'pocketBaseLastSync': _settingsRepository.getPocketBaseLastSync(),
+
+      // Day overrides
+      'dayOverrides': _settingsRepository.getAllDayOverrides(),
     };
   }
 
@@ -379,6 +382,12 @@ class BackupService {
     if (s['pocketBasePassword'] != null) await _settingsRepository.setPocketBasePassword(s['pocketBasePassword'] as String);
     if (s['pocketBaseEnabled'] != null) await _settingsRepository.setPocketBaseEnabled(s['pocketBaseEnabled'] as bool);
     if (s['pocketBaseLastSync'] != null) await _settingsRepository.setPocketBaseLastSync(s['pocketBaseLastSync'] as String);
+
+    // Day overrides
+    if (s['dayOverrides'] != null) {
+      final overrides = (s['dayOverrides'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()));
+      await _settingsRepository.restoreAllDayOverrides(overrides);
+    }
   }
 
   Future<void> _clearAllData() async {
