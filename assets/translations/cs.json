@@ -204,7 +204,15 @@
         "thursday": "Čtvrtek",
         "friday": "Pátek",
         "saturday": "Sobota",
-        "sunday": "Neděle"
+        "sunday": "Neděle",
+        "day_overrides": "Měsíční úpravy dnů",
+        "day_overrides_desc": "Přidejte extra pracovní dny nebo označte dny volna (dovolená) pro konkrétní měsíce",
+        "day_off": "Volno",
+        "extra_work_day": "Extra pracovní den",
+        "normal_work_day": "Pracovní den",
+        "non_work_day": "Nepracovní den",
+        "work_days_count": "{count} pracovních dnů",
+        "tap_to_toggle": "Klepněte na den pro přepnutí: pracovní den → volno, nepracovní den → extra pracovní den"
     },
     "common": {
         "save": "Uložit",

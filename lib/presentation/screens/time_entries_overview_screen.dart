@@ -289,7 +289,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
     // Check if today is a working day and already has entries
-    final todayIsWorkDay = settingsRepo.getExpectedHoursForDay(today.weekday) > 0;
+    final todayIsWorkDay = settingsRepo.isWorkDay(today);
     final hasTodayEntries =
         monthEntries.any((e) {
           final entryDay = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
@@ -300,7 +300,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     final countFrom = (todayIsWorkDay && hasTodayEntries) ? today.add(const Duration(days: 1)) : today;
     int remainingWorkDays = 0;
     for (DateTime d = countFrom; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
-      if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
+      if (settingsRepo.isWorkDay(d)) {
         remainingWorkDays++;
       }
     }
@@ -390,7 +390,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     final dayTotalWithRunning = dayTotal + runningDaySeconds;
 
     // Calculate daily deficit/surplus based on expected hours for this day
-    final expectedDayHours = settingsRepo.getExpectedHoursForDay(day.weekday);
+    final expectedDayHours = settingsRepo.getExpectedHoursForDate(day);
     final workedDayHours = dayTotalWithRunning / 3600.0;
     final dayDiff = workedDayHours - expectedDayHours; // positive = surplus, negative = deficit
     final hasDayExpectation = expectedDayHours > 0;

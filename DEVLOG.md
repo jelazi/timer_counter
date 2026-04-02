@@ -1,5 +1,121 @@
 # Development Log
 
+## 2026-04-02 — Fix Hive box collision crash on macOS
+
+### What was done
+- Fixed `Unhandled Exception: type 'Null' is not a subtype of type 'String' in type cast` crash in `CategoryModelAdapter.read`
+- Root cause: `Hive.initFlutter()` used `~/Documents/` as data directory (shared by all Flutter/Hive apps on the Mac), causing the timer_counter `settings` box to collide with another app's `settings.hive` file containing incompatible data
+- Fix: changed `Hive.initFlutter()` to `Hive.initFlutter('timer_counter')` which uses an isolated `~/Documents/timer_counter/` subdirectory
+
+### Changes made
+1. **main.dart**: `Hive.initFlutter()` → `Hive.initFlutter('timer_counter')`
+
+### Current state
+- App starts and runs without crash
+- All Hive boxes are now isolated in `~/Documents/timer_counter/`
+- PocketBase sync connects and works for existing collections
+- `day_overrides` collection still returns 404 (schema not deployed to server)
+
+### What is pending / next steps
+- Deploy `day_overrides` collection schema to PocketBase server (requires superuser credentials)
+
+---
+
+## 2026-04-02 — Add PocketBase sync for day overrides
+
+### What was done
+- Implemented full PocketBase sync support for monthly day overrides (`off` / `work`)
+- Day overrides now sync in both bulk operations and in real-time when toggled in Settings
+
+### Changes made
+1. **PocketBase sync service** (`pocketbase_sync_service.dart`)
+   - Added `dayOverrides` to `SyncCollection`
+   - Added `dayOverridesSynced` to `SyncResult` and included it in total count
+   - Added `pushDayOverride(date, type)` and `deleteDayOverride(date)` APIs
+   - Included `day_overrides` in:
+     - `startListeners()` / `stopListeners()`
+     - `uploadAll()` / `downloadAll()`
+     - `countRemoteRecords()` / `countLocalRecords()`
+   - Added realtime subscription `_subscribeDayOverrides()` that updates `SettingsRepository`
+   - Added mapper and date-key helpers for `day_overrides` payloads
+
+2. **Settings UI realtime sync** (`settings_screen.dart`)
+   - `_DayOverridesCalendar` now receives optional `PocketBaseSyncService`
+   - Toggling a day now updates local settings and immediately pushes/deletes remote override
+
+3. **PocketBase schema** (`pocketbase/pb_schema.json`)
+   - Added new collection `day_overrides` with fields:
+     - `item_id` (text, required)
+     - `user` (relation to `_pb_users_auth_`, required)
+     - `date` (text, required, `YYYY-MM-DD`)
+     - `override_type` (text, required, values used: `off`, `work`)
+   - Applied same auth rules pattern as other user-owned collections
+
+### Current state
+- `flutter analyze` reports only 4 pre-existing info-level issues, no new errors
+- Day overrides are now synced via PocketBase in both manual bulk sync and realtime changes
+
+### What is pending / next steps
+- Apply updated `pb_schema.json` to the target PocketBase instance (import/migration)
+
+---
+
+## 2026-04-02 — Monthly day overrides for precise average hours calculation
+
+### What was done
+- Added the ability to override specific days in any month as "day off" (vacation/holiday) or "extra work day" (normally non-work day but will work)
+- These overrides affect all average hours calculations throughout the app
+- A new calendar-based UI section in Settings allows toggling days per month
+
+### Changes made
+1. **AppConstants** (`app_constants.dart`)
+   - Added `dayOverridePrefix` constant for Hive key prefix
+
+2. **SettingsRepository** (`settings_repository.dart`)
+   - Added `getDayOverride(DateTime)` — returns 'off', 'work', or null for a date
+   - Added `setDayOverride(DateTime, String?)` — set or remove override
+   - Added `getDayOverridesForMonth(year, month)` — all overrides for a month
+   - Added `getAllDayOverrides()` / `restoreAllDayOverrides()` — for backup
+   - Added `isWorkDay(DateTime)` — checks override first, falls back to weekly schedule
+   - Added `getExpectedHoursForDate(DateTime)` — override-aware expected hours
+   - Updated `getTodayExpectedHours()` to delegate to `getExpectedHoursForDate()`
+
+3. **Settings UI** (`settings_screen.dart`)
+   - Added `_buildDayOverridesSection()` and `_DayOverridesCalendar` widget
+   - Month navigation (previous/next), visual calendar grid
+   - Color-coded days: green=work day, red=day off, blue=extra work day
+   - Tap to toggle: work day ↔ day off, non-work day ↔ extra work day
+   - Shows total work days count per month
+   - Legend explaining colors
+
+4. **Calculation updates** — all sites now use `isWorkDay(date)` instead of `getExpectedHoursForDay(weekday)`:
+   - `time_tracking_screen.dart` — monthly daily needed calculation
+   - `time_entries_overview_screen.dart` — remaining work days & daily expected hours
+   - `statistics_screen.dart` — average daily hours & monthly targets progress
+   - `work_reminder_service.dart` — work day detection for reminders
+
+5. **Backup service** (`backup_service.dart`)
+   - Day overrides included in export (`dayOverrides` key)
+   - Day overrides restored from backup
+
+6. **Translations** (`en.json`, `cs.json`)
+   - Added: day_overrides, day_overrides_desc, day_off, extra_work_day, normal_work_day, non_work_day, work_days_count, tap_to_toggle
+
+### How it works
+- Day overrides are stored in the Hive settings box with key pattern `day_override_YYYY-MM-DD`
+- Values: `off` (vacation — removes a normally scheduled work day) or `work` (adds an extra work day on a normally non-work day)
+- All average/remaining hours calculations now check overrides before falling back to weekly schedule
+
+### Current state
+- `flutter analyze` — 4 info-level issues (all pre-existing), no errors
+- macOS build fails due to signing certificate (pre-existing, not code-related)
+
+### What is pending / next steps
+- Fix macOS signing certificate issue
+- Consider PocketBase sync for day overrides if needed
+
+---
+
 ## 2026-03-13 — Smart first sync & manual upload/download
 
 ### What was done

@@ -699,7 +699,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       final countUpTo = today.isBefore(monthEnd) ? today : monthEnd;
       int workingDays = 0;
       for (DateTime d = monthStart; !d.isAfter(countUpTo); d = d.add(const Duration(days: 1))) {
-        if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
+        if (settingsRepo.isWorkDay(d)) {
           workingDays++;
         }
       }
@@ -776,7 +776,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     // Check if today is a working day and already has entries
-    final todayIsWorkDay = settingsRepo.getExpectedHoursForDay(today.weekday) > 0;
+    final todayIsWorkDay = settingsRepo.isWorkDay(today);
     final hasTodayEntries =
         entries.any((e) {
           final entryDay = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
@@ -789,7 +789,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final countFrom = (todayIsWorkDay && hasTodayEntries && baseCountFrom == today) ? today.add(const Duration(days: 1)) : baseCountFrom;
     int remainingWorkDays = 0;
     for (DateTime d = countFrom; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
-      if (settingsRepo.getExpectedHoursForDay(d.weekday) > 0) {
+      if (settingsRepo.isWorkDay(d)) {
         remainingWorkDays++;
       }
     }
