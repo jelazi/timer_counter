@@ -1,0 +1,651 @@
+[
+    {
+        "id": "_pb_users_auth_",
+        "name": "users",
+        "type": "auth",
+        "system": false,
+        "listRule": "id = @request.auth.id",
+        "viewRule": "id = @request.auth.id",
+        "createRule": "",
+        "updateRule": "id = @request.auth.id",
+        "deleteRule": "id = @request.auth.id",
+        "fields": [
+            {
+                "id": "users_name0",
+                "name": "name",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "users_avatar",
+                "name": "avatar",
+                "type": "file",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false,
+                "maxSelect": 1,
+                "maxSize": 5242880,
+                "mimeTypes": [
+                    "image/jpeg",
+                    "image/png",
+                    "image/svg+xml",
+                    "image/gif",
+                    "image/webp"
+                ],
+                "thumbs": null,
+                "protected": false
+            }
+        ]
+    },
+    {
+        "id": "tc_categories",
+        "name": "categories",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\"",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "cat_item_id",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "cat_user_re",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "cat_name_fi",
+                "name": "name",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "cat_colorvl",
+                "name": "color_value",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cat_creatd0",
+                "name": "created_at",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            }
+        ]
+    },
+    {
+        "id": "tc_projects",
+        "name": "projects",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\"",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "prj_itemid0",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "prj_user_re",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "prj_name_fi",
+                "name": "name",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "prj_cat_id0",
+                "name": "category_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "prj_colorv0",
+                "name": "color_value",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "prj_h_rate0",
+                "name": "hourly_rate",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "prj_pltime0",
+                "name": "planned_time_hours",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "prj_plbudg0",
+                "name": "planned_budget",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "prj_stdate0",
+                "name": "start_date",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "prj_dudate0",
+                "name": "due_date",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "prj_notes00",
+                "name": "notes",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "prj_archvd0",
+                "name": "is_archived",
+                "type": "bool",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "prj_billab0",
+                "name": "is_billable",
+                "type": "bool",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "prj_creatd0",
+                "name": "created_at",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            }
+        ]
+    },
+    {
+        "id": "tc_tasks0000",
+        "name": "tasks",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\"",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "tsk_itemid0",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "tsk_user_re",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "tsk_prj_id0",
+                "name": "project_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "tsk_name_fi",
+                "name": "name",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "tsk_h_rate0",
+                "name": "hourly_rate",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "tsk_billab0",
+                "name": "is_billable",
+                "type": "bool",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "tsk_notes00",
+                "name": "notes",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "tsk_archvd0",
+                "name": "is_archived",
+                "type": "bool",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "tsk_creatd0",
+                "name": "created_at",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "tsk_colorv0",
+                "name": "color_value",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            }
+        ]
+    },
+    {
+        "id": "tc_time_ent0",
+        "name": "time_entries",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\"",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "te_item_id0",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "te_user_re0",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "te_prj_idf0",
+                "name": "project_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "te_tsk_idf0",
+                "name": "task_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "te_st_time0",
+                "name": "start_time",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "te_en_time0",
+                "name": "end_time",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "te_dur_sec0",
+                "name": "duration_seconds",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "te_notes_f0",
+                "name": "notes",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "te_creat_a0",
+                "name": "created_at",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "te_billabl0",
+                "name": "is_billable",
+                "type": "bool",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            }
+        ]
+    },
+    {
+        "id": "tc_run_timr0",
+        "name": "running_timers",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\"",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "rt_item_id0",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "rt_user_re0",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "rt_prj_idf0",
+                "name": "project_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "rt_tsk_idf0",
+                "name": "task_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "rt_st_time0",
+                "name": "start_time",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "rt_notes_f0",
+                "name": "notes",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            }
+        ]
+    },
+    {
+        "id": "tc_mo_targz0",
+        "name": "monthly_targets",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\"",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "mt_item_id0",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "mt_user_re0",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "mt_name_fi0",
+                "name": "name",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "mt_tgt_hrs0",
+                "name": "target_hours",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "mt_prj_ids0",
+                "name": "project_ids",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "mt_creat_a0",
+                "name": "created_at",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            }
+        ]
+    },
+    {
+        "id": "tc_day_ovr0",
+        "name": "day_overrides",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\"",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "do_item_id0",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "do_user_rel0",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "do_date_key0",
+                "name": "date",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "do_type_val0",
+                "name": "override_type",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            }
+        ]
+    }
+]
