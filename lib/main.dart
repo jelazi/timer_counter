@@ -197,7 +197,7 @@ Future<SystemTrayService> _initDesktopShell({required SettingsRepository setting
     minimumSize: Size(AppConstants.minWindowWidth, AppConstants.minWindowHeight),
     center: true,
     backgroundColor: Colors.transparent,
-    titleBarStyle: TitleBarStyle.hidden,
+    titleBarStyle: Platform.isWindows ? TitleBarStyle.normal : TitleBarStyle.hidden,
     title: 'Timer Counter',
   );
 
