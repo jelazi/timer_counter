@@ -1,5 +1,32 @@
 # Development Log
 
+## 2026-05-29 — Windows/new-user readiness audit and PocketBase setup guide
+
+### What was done
+- Audited the app for Windows readiness, PocketBase configuration, and user-specific defaults.
+- Removed user-specific text from the About dialog.
+- Replaced personal invoice defaults with blank neutral defaults in `SettingsRepository` and `InvoiceSettings`.
+- Replaced local bundled PocketBase config values with placeholder values and added `lib/config/pocketbase_config.example.json` as the safe template.
+- Updated Windows executable metadata from `com.example` to `Timer Counter`.
+- Changed `.gitignore` so `pocketbase/pb_schema.json` can be kept with the repo while other PocketBase data stays ignored.
+- Added a complete new-user PocketBase setup and Windows build guide in `docs/POCKETBASE_SETUP.md`.
+- Updated README PocketBase section to point to the new guide and list all 7 synced collections, including `day_overrides`.
+- Removed stale generated `pocketbase_config.json` asset copies from ignored build outputs.
+
+### What was fixed
+- Prevented shipping a specific user's PocketBase URL/email/password in future builds by resetting `lib/config/pocketbase_config.json` to placeholders.
+- Prevented a different user from seeing personal invoice defaults such as issuer name, email, bank details, and project description.
+- Fixed outdated PocketBase documentation that still mentioned only 6 app collections.
+
+### Current state
+- `flutter analyze` reports 4 existing info-level issues and no errors.
+- Source/app files no longer contain the audited personal identifiers or old PocketBase server values.
+- Windows build was not run on this macOS machine; it should be built and smoke-tested on Windows.
+
+### Pending / next steps
+- On a Windows machine, run `flutter build windows --release` and verify system tray, launch at startup, file export/import, PDF generation, and PocketBase sync.
+- For each new user/customer, create a fresh PocketBase app user and configure the app through Settings -> PocketBase or a dedicated local `lib/config/pocketbase_config.json`.
+
 ## 2026-04-02 — Fix Hive box collision crash on macOS
 
 ### What was done

@@ -76,16 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text('Flutter + Dart', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.person_outline, size: 16, color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5)),
-                    const SizedBox(width: 8),
-                    Text('jelazi', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5))),
-                  ],
-                ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text('© ${DateTime.now().year}', style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.4))),
               ],
             );

@@ -171,30 +171,30 @@ class SettingsRepository {
   Future<void> setSelectedCustomerIndex(int index) => _box.put(AppConstants.invoiceSelectedCustomerIndex, index);
 
   // Invoice description
-  String getInvoiceDescription() => _box.get(AppConstants.invoiceDescription, defaultValue: 'Vývoj aplikace Artemis') as String;
+  String getInvoiceDescription() => _box.get(AppConstants.invoiceDescription, defaultValue: '') as String;
   Future<void> setInvoiceDescription(String desc) => _box.put(AppConstants.invoiceDescription, desc);
 
   // Bank info
   String getInvoiceBankName() => _box.get(AppConstants.invoiceBankName, defaultValue: '') as String;
   Future<void> setInvoiceBankName(String v) => _box.put(AppConstants.invoiceBankName, v);
 
-  String getInvoiceBankCode() => _box.get(AppConstants.invoiceBankCode, defaultValue: '6210') as String;
+  String getInvoiceBankCode() => _box.get(AppConstants.invoiceBankCode, defaultValue: '') as String;
   Future<void> setInvoiceBankCode(String v) => _box.put(AppConstants.invoiceBankCode, v);
 
   String getInvoiceSwift() => _box.get(AppConstants.invoiceSwift, defaultValue: '') as String;
   Future<void> setInvoiceSwift(String v) => _box.put(AppConstants.invoiceSwift, v);
 
-  String getInvoiceAccountNumber() => _box.get(AppConstants.invoiceAccountNumber, defaultValue: '670100-2200840281') as String;
+  String getInvoiceAccountNumber() => _box.get(AppConstants.invoiceAccountNumber, defaultValue: '') as String;
   Future<void> setInvoiceAccountNumber(String v) => _box.put(AppConstants.invoiceAccountNumber, v);
 
-  String getInvoiceIban() => _box.get(AppConstants.invoiceIban, defaultValue: 'CZ2862106701002200840281') as String;
+  String getInvoiceIban() => _box.get(AppConstants.invoiceIban, defaultValue: '') as String;
   Future<void> setInvoiceIban(String v) => _box.put(AppConstants.invoiceIban, v);
 
   // Issuer
-  String getInvoiceIssuerName() => _box.get(AppConstants.invoiceIssuerName, defaultValue: 'Lubomír Žižka') as String;
+  String getInvoiceIssuerName() => _box.get(AppConstants.invoiceIssuerName, defaultValue: '') as String;
   Future<void> setInvoiceIssuerName(String v) => _box.put(AppConstants.invoiceIssuerName, v);
 
-  String getInvoiceIssuerEmail() => _box.get(AppConstants.invoiceIssuerEmail, defaultValue: 'lzizka@gmail.com') as String;
+  String getInvoiceIssuerEmail() => _box.get(AppConstants.invoiceIssuerEmail, defaultValue: '') as String;
   Future<void> setInvoiceIssuerEmail(String v) => _box.put(AppConstants.invoiceIssuerEmail, v);
 
   // File names
