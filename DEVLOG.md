@@ -39,6 +39,41 @@
 - Verify realtime sync over SSE works in browsers (the `pocketbase` Dart package uses standard EventSource — should work without changes).
 - Translate the new `LoginScreen` strings (currently hard-coded English) via `easy_localization` keys.
 
+## 2026-05-29 — Add Windows installer build automation
+
+### What was done
+- Added `inno_setup.iss` for building a Timer Counter Windows installer with Inno Setup.
+- Added `windows_build.bat` to build the Flutter Windows release executable.
+- Added `deploy_windows.bat` to run the Windows build, compile the Inno installer, stage the installer, create a ZIP, and reveal the output in Explorer.
+- Ignored generated installer output directories (`Output/` and `deploy/output/`) in `.gitignore`.
+
+### What was fixed
+- Added a repeatable Windows packaging flow inspired by the `active-staff` Windows build/deploy scripts.
+
+### Current state
+- Installer output is configured as `Output/setup-Timer-Counter-<version>.exe` and staged under `deploy/output/windows/<timestamp>/`.
+- Scripts read the app version from `pubspec.yaml` and pass the semantic version without the Flutter build suffix to Inno Setup.
+- `windows_build.bat` was run and produced the Windows release output under `build/windows/x64/runner/Release/`.
+- `inno_setup.iss` was compiled with Inno Setup 6 and produced `Output/setup-Timer-Counter-1.0.6.exe`.
+
+### Pending / next steps
+- Run the generated installer and verify install, launch, uninstall, tray icon, and close-to-tray behavior.
+
+## 2026-05-29 — Restore native Windows title bar controls
+
+### What was done
+- Updated desktop window options so Windows uses the native system title bar.
+- Kept the existing hidden title bar behavior for non-Windows desktop platforms.
+
+### What was fixed
+- Restored the standard Windows minimize, maximize, and close buttons for the Timer Counter window.
+
+### Current state
+- Windows app windows should now look and behave like normal desktop application windows.
+
+### Pending / next steps
+- Run `flutter run -d windows` and verify the title bar buttons are visible and close-to-tray behavior still works.
+
 ## 2026-05-29 — Fix Windows system tray startup crash (Bad Arguments)
 
 ### What was done
