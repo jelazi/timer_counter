@@ -58,7 +58,7 @@ class SystemTrayService {
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    await _systemTray.initSystemTray(title: 'Timer Counter', iconPath: _getIconPath(), toolTip: 'Timer Counter - Time Tracking');
+    await _systemTray.initSystemTray(title: 'Timer Counter', iconPath: _resolveIconPath(), toolTip: 'Timer Counter - Time Tracking');
 
     final menu = Menu();
     await menu.buildFrom([MenuItemLabel(label: 'Show', onClicked: (_) => _showWindow()), MenuSeparator(), MenuItemLabel(label: 'Quit', onClicked: (_) => _quitApp())]);
@@ -76,13 +76,29 @@ class SystemTrayService {
     _isInitialized = true;
   }
 
-  String _getIconPath() {
-    if (Platform.isMacOS) {
-      return 'assets/icons/app_icon.png';
-    } else if (Platform.isWindows) {
-      return 'assets/icons/app_icon.ico';
+  String _resolveIconPath() {
+    final cwd = Directory.current.path;
+    final candidates = <String>[];
+
+    if (Platform.isWindows) {
+      candidates
+        ..add('assets/icons/app_icon.ico')
+        ..add('windows/runner/resources/app_icon.ico');
     }
-    return 'assets/icons/app_icon.png';
+
+    candidates
+      ..add('assets/icons/app_icon.png')
+      ..add('assets/icons/app_icon.jpg');
+
+    for (final relative in candidates) {
+      final absolute = '$cwd${Platform.pathSeparator}$relative';
+      if (File(absolute).existsSync()) {
+        return absolute;
+      }
+    }
+
+    // Last fallback keeps previous behavior for environments with custom layout.
+    return Platform.isWindows ? 'windows/runner/resources/app_icon.ico' : 'assets/icons/app_icon.png';
   }
 
   Future<void> _showWindow() async {

@@ -39,6 +39,24 @@
 - Verify realtime sync over SSE works in browsers (the `pocketbase` Dart package uses standard EventSource — should work without changes).
 - Translate the new `LoginScreen` strings (currently hard-coded English) via `easy_localization` keys.
 
+## 2026-05-29 — Fix Windows system tray startup crash (Bad Arguments)
+
+### What was done
+- Fixed Windows startup crash in tray initialization by hardening icon path resolution in `SystemTrayService`.
+- Replaced direct icon lookup with `_resolveIconPath()` that checks multiple candidates and returns an absolute existing path.
+- Added missing `assets/icons/app_icon.ico` by copying the existing `windows/runner/resources/app_icon.ico` so Flutter asset-based tray icon path is valid.
+
+### What was fixed
+- Resolved `PlatformException(Bad Arguments)` thrown by `SystemTray.initSystemTray` during app startup on Windows.
+- Root cause was a non-existent icon path (`assets/icons/app_icon.ico`) being passed to the tray plugin.
+
+### Current state
+- Analyzer reports no errors in changed startup/tray files.
+- Desktop startup should proceed without tray initialization exception on Windows.
+
+### Pending / next steps
+- Run a Windows smoke test (`flutter run -d windows`) and verify tray icon appears, context menu opens, and close-to-tray behavior still works.
+
 ## 2026-05-29 — Windows/new-user readiness audit and PocketBase setup guide
 
 ### What was done
