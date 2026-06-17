@@ -1,5 +1,44 @@
 # Development Log
 
+## 2026-06-12 — Flutter Web target with mandatory PocketBase login
+
+### What was done
+- Enabled Flutter Web as a supported target. On the web the app requires the user to sign in with PocketBase email/password before any UI is shown; desktop/mobile behavior is unchanged.
+- Added new `LoginScreen` (`lib/presentation/screens/login_screen.dart`) — email/password form with validation, password visibility toggle, autofill hints, error display.
+- Added new `AuthGate` (`lib/presentation/widgets/auth_gate.dart`) that wraps the home screen. On native platforms it returns `HomeScreen` directly. On web it watches a new `authStateStream` from `PocketBaseSyncService` and switches between `LoginScreen` and `HomeScreen`. If web build has no PB URL it shows `_MissingConfigScreen`.
+- Extended `PocketBaseSyncService`:
+  - New broadcast `Stream<bool> authStateStream` (emits on sign in / sign out).
+  - `signIn(...)` now emits `true` after persisting auth.
+  - `signOut({bool clearLocal = false})` rewritten — clears auth, optionally wipes all local synced data, emits `false`.
+  - New `clearLocalData()` — clears Hive boxes for categories/projects/tasks/time_entries/running_timers/monthly_targets/day_overrides and resets `pocketBaseLastSync`.
+- `PocketBaseConfig`: added enum value `compileTimeDefine` and static `resolveServerUrl(SettingsRepository)` priority: `--dart-define=POCKETBASE_URL` → bundled config (rejecting `example.com`) → user settings.
+- Refactored `lib/main.dart`:
+  - Replaced `Platform.isAndroid || Platform.isIOS` with `PlatformUtils.isMobile`.
+  - Extracted `_initPocketBaseSyncService` (web branch resolves URL from `--dart-define` and never auto-signs in) and `_initDesktopShell` (system tray, launch-at-startup, windowManager, work reminder — only on desktop).
+- `lib/app/app.dart` now uses `AuthGate(syncService: pocketBaseSyncService)` as `MaterialApp.home` instead of `HomeScreen`.
+- `SettingsScreen` gated for web:
+  - System section (launch-at-startup, minimize-to-tray) hidden unless `PlatformUtils.isDesktop`.
+  - Reminders section hidden unless desktop.
+  - PocketBase URL/Email/Password override fields and Test/Save/Clear buttons hidden on web (URL comes from `--dart-define`). New "Sign out" button shown on web when signed in; confirms then calls `signOut(clearLocal: true)`.
+- Added `deleteAll()` to `TaskRepository`, `ProjectRepository`, `TimeEntryRepository`.
+- Conditional import for SQLite: renamed `tyme_data_import_service.dart` → `tyme_data_import_service_io.dart`; added `tyme_data_import_service_stub.dart` (web stub throwing `UnsupportedError`); new `tyme_data_import_service.dart` is a conditional re-export based on `dart.library.js_interop`. This was required because `package:sqlite3` pulls in `dart:ffi` which cannot compile to JS/Wasm.
+- Updated `web/index.html` and `web/manifest.json` description; `manifest.json` orientation set to `any`.
+
+### What was fixed
+- `flutter build web --release` now compiles cleanly. Previous failure was `package:ffi` `external` members not allowed by `dart2js`, triggered transitively by `sqlite3` imported in `tyme_data_import_service.dart`.
+
+### Current state
+- `flutter analyze` reports the same 4 pre-existing info-level issues, no new errors.
+- `flutter build web --release` builds successfully to `build/web/`. Wasm dry-run prints warnings for `dart:ffi` in transitive packages (`win32`, `ffi`) — these only affect a future `--wasm` build, not the standard JS build.
+- Native (macOS/Windows/iOS/Android) bootstrap path is unchanged: PocketBase still auto-signs in using bundled or user-supplied credentials.
+
+### Pending / next steps
+- Smoke-test the web build against a real PocketBase server. Build command: `flutter build web --release --dart-define=POCKETBASE_URL=https://your-pb.example.com`.
+- In the PocketBase admin UI, enable CORS for the web origin and pre-create user accounts (no self-service registration in the app).
+- Deploy `build/web/` via the existing `firebase.json` (or any static host).
+- Verify realtime sync over SSE works in browsers (the `pocketbase` Dart package uses standard EventSource — should work without changes).
+- Translate the new `LoginScreen` strings (currently hard-coded English) via `easy_localization` keys.
+
 ## 2026-05-29 — Windows/new-user readiness audit and PocketBase setup guide
 
 ### What was done

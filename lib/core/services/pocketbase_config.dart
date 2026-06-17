@@ -6,7 +6,12 @@ import 'package:pocketbase/pocketbase.dart';
 
 import '../../data/repositories/settings_repository.dart';
 
-enum PocketBaseConfigSource { bundledAsset, settingsOverride }
+enum PocketBaseConfigSource { bundledAsset, settingsOverride, compileTimeDefine }
+
+/// Build-time URL passed via `--dart-define=POCKETBASE_URL=https://pb.example.com`.
+/// Primarily used for web builds where the URL is fixed per deployment but
+/// credentials must come from the user via the login screen.
+const String _kPocketBaseUrlDefine = String.fromEnvironment('POCKETBASE_URL');
 
 class PocketBaseConnectionResult {
   final bool isSuccess;
@@ -77,6 +82,33 @@ class PocketBaseConfig {
     final override = fromSettings(settingsRepository);
     if (override != null) return override;
     return loadBundled();
+  }
+
+  /// Returns the PocketBase server URL to use on web/auth-only contexts.
+  ///
+  /// Priority:
+  ///   1. `--dart-define=POCKETBASE_URL=...` (recommended for web builds)
+  ///   2. URL field from bundled `lib/config/pocketbase_config.json` asset
+  ///   3. URL from user settings override
+  ///
+  /// Returns `null` if no URL is configured \u2014 caller should show an error.
+  static Future<String?> resolveServerUrl(SettingsRepository settingsRepository) async {
+    final fromDefine = _kPocketBaseUrlDefine.trim();
+    if (fromDefine.isNotEmpty) return fromDefine;
+
+    try {
+      final raw = await rootBundle.loadString('lib/config/pocketbase_config.json');
+      final map = json.decode(raw) as Map<String, dynamic>;
+      final url = (map['url'] as String?)?.trim() ?? '';
+      if (url.isNotEmpty && !url.contains('example.com')) return url;
+    } catch (_) {
+      // Bundled config missing or invalid \u2014 fall through to settings.
+    }
+
+    final settingsUrl = settingsRepository.getPocketBaseUrl().trim();
+    if (settingsUrl.isNotEmpty) return settingsUrl;
+
+    return null;
   }
 
   static Future<PocketBaseConnectionResult> testConnection({required String url, required String email, required String password}) async {

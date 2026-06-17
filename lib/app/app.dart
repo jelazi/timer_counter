@@ -28,7 +28,7 @@ import '../presentation/blocs/task/task_event.dart';
 import '../presentation/blocs/timer/timer_bloc.dart';
 import '../presentation/blocs/timer/timer_event.dart';
 import '../presentation/blocs/timer/timer_state.dart';
-import '../presentation/screens/home_screen.dart';
+import '../presentation/widgets/auth_gate.dart';
 import 'system_tray_service.dart';
 
 class TymeApp extends StatelessWidget {
@@ -98,7 +98,7 @@ class TymeApp extends StatelessWidget {
           BlocProvider<SettingsBloc>(create: (context) => SettingsBloc(settingsRepository: settingsRepository)..add(LoadSettings())),
           BlocProvider<StandaloneInvoiceBloc>(create: (context) => StandaloneInvoiceBloc(repository: standaloneInvoiceRepository)..add(const LoadStandaloneInvoices())),
         ],
-        child: _AppWithTheme(settingsRepository: settingsRepository, systemTrayService: systemTrayService),
+        child: _AppWithTheme(settingsRepository: settingsRepository, systemTrayService: systemTrayService, pocketBaseSyncService: pocketBaseSyncService),
       ),
     );
   }
@@ -107,8 +107,9 @@ class TymeApp extends StatelessWidget {
 class _AppWithTheme extends StatelessWidget {
   final SettingsRepository settingsRepository;
   final SystemTrayService? systemTrayService;
+  final PocketBaseSyncService? pocketBaseSyncService;
 
-  const _AppWithTheme({required this.settingsRepository, this.systemTrayService});
+  const _AppWithTheme({required this.settingsRepository, this.systemTrayService, this.pocketBaseSyncService});
 
   @override
   Widget build(BuildContext context) {
@@ -142,7 +143,7 @@ class _AppWithTheme extends StatelessWidget {
                 _updateSystemTray(context, timerState);
               }
             },
-            child: const HomeScreen(),
+            child: AuthGate(syncService: pocketBaseSyncService),
           ),
         );
       },

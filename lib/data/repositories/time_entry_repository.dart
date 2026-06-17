@@ -82,6 +82,10 @@ class TimeEntryRepository {
     }
   }
 
+  Future<void> deleteAll() async {
+    await _box.clear();
+  }
+
   /// Get total duration in seconds for a given date range
   int getTotalDurationForRange(DateTime start, DateTime end) {
     final entries = getByDateRange(start, end);

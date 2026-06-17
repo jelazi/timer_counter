@@ -97,6 +97,12 @@ class PocketBaseSyncService {
   /// Emitted when a PocketBase subscription updates a local Hive collection.
   Stream<SyncCollection> get onCollectionChanged => _collectionChangeController.stream;
 
+  final _authStateController = StreamController<bool>.broadcast();
+
+  /// Emits `true` after a successful sign-in and `false` after sign-out.
+  /// Used by the web `AuthGate` to switch between login screen and home.
+  Stream<bool> get authStateStream => _authStateController.stream;
+
   SyncStatus _currentStatus = SyncStatus.disabled;
   SyncStatus get currentStatus => _currentStatus;
 
@@ -174,6 +180,7 @@ class PocketBaseSyncService {
       _setStatus(SyncStatus.connecting);
       await _pb.collection('users').authWithPassword(email, password);
       _saveAuthState();
+      _authStateController.add(true);
       return null;
     } on ClientException catch (e) {
       _lastError = e.response['message']?.toString() ?? e.toString();
@@ -187,13 +194,33 @@ class PocketBaseSyncService {
   }
 
   /// Sign out and stop all listeners.
-  Future<void> signOut() async {
+  ///
+  /// When [clearLocal] is true, all synced Hive boxes are wiped — important on
+  /// shared browsers so the next user doesn't see leftover data.
+  Future<void> signOut({bool clearLocal = false}) async {
     await stopListeners();
     _pb.authStore.clear();
     _settingsRepo.setPocketBaseAuthToken('');
     _settingsRepo.setPocketBaseAuthModel('');
+    if (clearLocal) {
+      await clearLocalData();
+    }
     _lastError = null;
     _setStatus(SyncStatus.disabled);
+    _authStateController.add(false);
+  }
+
+  /// Wipe all synced Hive collections and the `lastSync` marker.
+  /// Does NOT touch user preferences (theme, language, work schedule, etc.).
+  Future<void> clearLocalData() async {
+    await _categoryRepo.deleteAll();
+    await _projectRepo.deleteAll();
+    await _taskRepo.deleteAll();
+    await _timeEntryRepo.deleteAll();
+    await _runningTimerRepo.stopAll();
+    await _monthlyTargetRepo.deleteAll();
+    await _settingsRepo.restoreAllDayOverrides({});
+    await _settingsRepo.setPocketBaseLastSync('');
   }
 
   void _saveAuthState() {
