@@ -1,7 +1,10 @@
+import 'dart:io' show Platform;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../core/utils/platform_utils.dart';
 import '../blocs/settings/settings_bloc.dart';
@@ -125,12 +128,15 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────────────────────────────────────
 
   Widget _buildDesktopLayout(BuildContext context) {
+    final isWindows = Platform.isWindows;
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.only(top: 28),
-        child: Row(
-          children: [
-            NavigationRail(
+      body: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.only(top: isWindows ? 30 : 28),
+            child: Row(
+              children: [
+                NavigationRail(
               selectedIndex: _selectedIndex,
               onDestinationSelected: (index) => setState(() => _selectedIndex = index),
               extended: MediaQuery.of(context).size.width > 1200,
@@ -196,6 +202,18 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(child: _screens[_selectedIndex]),
           ],
         ),
+      ),
+          if (isWindows)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: WindowCaption(
+                brightness: Theme.of(context).brightness,
+                title: const SizedBox(),
+              ),
+            ),
+        ],
       ),
     );
   }

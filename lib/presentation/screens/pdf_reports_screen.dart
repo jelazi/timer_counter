@@ -30,6 +30,7 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
   late int _selectedYear;
   late int _selectedMonth;
   bool _isGenerating = false;
+  bool _perProject = false;
   List<String>? _generatedFiles;
   String? _errorMessage;
   List<String> _selectedProjectIds = [];
@@ -156,7 +157,7 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
         _monthEnd,
         outputDir,
         invoiceSettings: invoiceSettings,
-        projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds,
+        projectIds: null,
       );
 
       // Save the time-based invoice to the tracking system
@@ -180,12 +181,10 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
   /// If an invoice for the same month + customer + projects already exists, overwrite it.
   Future<void> _saveTimeBasedInvoice(InvoiceSettings invoiceSettings, PdfReportService service) async {
     final invoiceRepo = context.read<StandaloneInvoiceRepository>();
-    final projectIds = _selectedProjectIds.isEmpty
-        ? context.read<ProjectRepository>().getAll().where((p) => !p.isArchived).map((p) => p.id).toList()
-        : List<String>.from(_selectedProjectIds);
+    final projectIds = context.read<ProjectRepository>().getAll().where((p) => !p.isArchived).map((p) => p.id).toList();
 
     // Use the same calculation as the PDF report to ensure amounts match
-    final totals = service.getInvoiceTotals(_monthStart, _monthEnd, projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds);
+    final totals = service.getInvoiceTotals(_monthStart, _monthEnd, projectIds: null);
     final totalHours = totals.totalHours;
     final hourlyRate = totals.hourlyRate;
 
@@ -253,9 +252,126 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
     }
   }
 
-  Future<void> _previewPdf(String type) async {
+  Future<void> _generatePdfsPerProject() async {
+    final projectRepo = context.read<ProjectRepository>();
+    final timeEntryRepo = context.read<TimeEntryRepository>();
+
+    final outputDir = await FilePicker.platform.getDirectoryPath(dialogTitle: tr('pdf_reports.select_output_dir'));
+    if (outputDir == null) return;
+
+    final projects = (_selectedProjectIds.isEmpty ? projectRepo.getAll().where((p) => !p.isArchived) : projectRepo.getAll().where((p) => _selectedProjectIds.contains(p.id))).where((project) => timeEntryRepo.getByDateRange(_monthStart, _monthEnd).any((e) => e.projectId == project.id)).toList();
+
+    if (projects.isEmpty) return;
+
+    if (!mounted) return;
+    setState(() {
+      _isGenerating = true;
+      _generatedFiles = null;
+      _errorMessage = null;
+    });
+
+    try {
+      final service = PdfReportService(
+        timeEntryRepo: timeEntryRepo,
+        projectRepo: projectRepo,
+        taskRepo: context.read<TaskRepository>(),
+      );
+      final invoiceSettings = _loadInvoiceSettings();
+      final allPaths = <String>[];
+
+      for (final project in projects) {
+        final projectDir = '$outputDir/${project.name}';
+        await Directory(projectDir).create(recursive: true);
+
+        final paths = await service.generateAllReports(
+          _monthStart,
+          _monthEnd,
+          projectDir,
+          invoiceSettings: invoiceSettings,
+          projectIds: [project.id],
+        );
+        allPaths.addAll(paths);
+
+        if (mounted) {
+          await _saveTimeBasedInvoiceForProject(project.id, invoiceSettings, service);
+        }
+      }
+
+      setState(() {
+        _isGenerating = false;
+        _generatedFiles = allPaths;
+      });
+    } catch (e) {
+      setState(() {
+        _isGenerating = false;
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
+  Future<void> _saveTimeBasedInvoiceForProject(String projectId, InvoiceSettings invoiceSettings, PdfReportService service) async {
+    final invoiceRepo = context.read<StandaloneInvoiceRepository>();
+    final projectRepo = context.read<ProjectRepository>();
+    final projectName = projectRepo.getById(projectId)?.name ?? projectId;
+
+    final totals = service.getInvoiceTotals(_monthStart, _monthEnd, projectIds: [projectId]);
+
+    var existing = invoiceRepo.findTimeBasedInvoice(month: _selectedMonth, year: _selectedYear, projectId: projectId);
+
+    final now = DateTime.now();
+    final issueDate = DateTime(_selectedYear, _selectedMonth + 1, 0);
+    final dueDate = issueDate.add(const Duration(days: 14));
+
+    final invoiceNumber = existing != null ? existing.invoiceNumber : invoiceRepo.getNextTimeBasedInvoiceNumber(_selectedMonth);
+
+    final invoice = StandaloneInvoiceModel(
+      id: existing?.id ?? const Uuid().v4(),
+      invoiceNumber: invoiceNumber,
+      issueDate: issueDate,
+      dueDate: dueDate,
+      taxDate: DateTime(_selectedYear, _selectedMonth + 1, 0),
+      supplierJson: invoiceSettings.supplier.toJson(),
+      customerJson: invoiceSettings.customer.toJson(),
+      lineItems: [
+        InvoiceLineItem(
+          description: '${invoiceSettings.description} – $projectName',
+          quantity: totals.totalHours,
+          unit: 'hod',
+          unitPrice: totals.hourlyRate,
+          discountPercent: 0,
+        ),
+      ],
+      bankName: invoiceSettings.bankName,
+      bankCode: invoiceSettings.bankCode,
+      swift: invoiceSettings.swift,
+      accountNumber: invoiceSettings.accountNumber,
+      iban: invoiceSettings.iban,
+      issuerName: invoiceSettings.issuerName,
+      issuerEmail: invoiceSettings.issuerEmail,
+      notes: 'Auto-generated for $projectName (${_czechMonths[_selectedMonth]} $_selectedYear)',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      invoiceType: 'time_based',
+      sourceProjectIds: [projectId],
+    );
+
+    if (existing != null) {
+      await invoiceRepo.update(invoice);
+    } else {
+      await invoiceRepo.add(invoice);
+    }
+
+    if (mounted) {
+      context.read<StandaloneInvoiceBloc>().add(const LoadStandaloneInvoices());
+    }
+  }
+
+  Future<void> _previewPdf(String type, {String? projectId}) async {
     final invoiceSettings = _loadInvoiceSettings();
     final service = PdfReportService(timeEntryRepo: context.read<TimeEntryRepository>(), projectRepo: context.read<ProjectRepository>(), taskRepo: context.read<TaskRepository>());
+    final effectiveProjectIds = projectId != null
+        ? [projectId]
+        : (_perProject && _selectedProjectIds.isNotEmpty ? _selectedProjectIds : null);
 
     try {
       Uint8List bytes;
@@ -264,15 +380,15 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
 
       switch (type) {
         case 'report':
-          bytes = await service.generateReportPdf(_monthStart, _monthEnd, moveAnglictina: false, projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds);
+          bytes = await service.generateReportPdf(_monthStart, _monthEnd, moveAnglictina: false, projectIds: effectiveProjectIds);
           filename = '${invoiceSettings.reportFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf';
           break;
         case 'rezijni':
-          bytes = await service.generateReportPdf(_monthStart, _monthEnd, moveAnglictina: true, projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds);
+          bytes = await service.generateReportPdf(_monthStart, _monthEnd, moveAnglictina: true, projectIds: effectiveProjectIds);
           filename = '${invoiceSettings.reportRezijniFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf';
           break;
         case 'invoice':
-          bytes = await service.generateInvoicePdf(_monthStart, _monthEnd, invoiceSettings: invoiceSettings, projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds);
+          bytes = await service.generateInvoicePdf(_monthStart, _monthEnd, invoiceSettings: invoiceSettings, projectIds: effectiveProjectIds);
           filename = '${invoiceSettings.invoiceFilename.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear')}.pdf';
           break;
         default:
@@ -290,6 +406,139 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
     }
   }
 
+  Widget _buildPerProjectOutputSection(BuildContext context, List allProjects, TimeEntryRepository timeEntryRepo, InvoiceSettings invoiceSettings, PdfReportService pdfService) {
+    final monthName = _czechMonthsLower[_selectedMonth] ?? '$_selectedMonth';
+    String resolveFilename(String pattern) => pattern.replaceAll('{month}', monthName).replaceAll('{year}', '$_selectedYear');
+
+    final selectedProjects = _selectedProjectIds.isEmpty ? List.from(allProjects) : allProjects.where((p) => _selectedProjectIds.contains(p.id)).toList();
+    final projectsWithEntries = selectedProjects.where((project) => timeEntryRepo.getByDateRange(_monthStart, _monthEnd).any((e) => e.projectId == project.id)).toList();
+
+    if (projectsWithEntries.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Text(tr('pdf_reports.no_entries'), style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.orange)),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Výstup pro každý projekt', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text('Soubory budou uloženy do podsložek pojmenovaných podle projektu',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+            const SizedBox(height: 16),
+
+            // Combined preview for all selected projects
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.layers, size: 16, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Kombinovaný náhled (${projectsWithEntries.length} ${projectsWithEntries.length == 1 ? 'projekt' : projectsWithEntries.length < 5 ? 'projekty' : 'projektů'})',
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _FileInfoRow(
+                    icon: Icons.table_chart,
+                    filename: '${resolveFilename(invoiceSettings.reportFilename)}.pdf',
+                    description: tr('pdf_reports.report_desc'),
+                    onPreview: () => _previewPdf('report'),
+                  ),
+                  const SizedBox(height: 4),
+                  _FileInfoRow(
+                    icon: Icons.table_chart_outlined,
+                    filename: '${resolveFilename(invoiceSettings.reportRezijniFilename)}.pdf',
+                    description: tr('pdf_reports.report_rezijni_desc'),
+                    onPreview: () => _previewPdf('rezijni'),
+                  ),
+                  const SizedBox(height: 4),
+                  _FileInfoRow(
+                    icon: Icons.receipt_long,
+                    filename: '${resolveFilename(invoiceSettings.invoiceFilename)}.pdf',
+                    description: tr('pdf_reports.invoice_desc'),
+                    onPreview: () => _previewPdf('invoice'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+
+            for (int idx = 0; idx < projectsWithEntries.length; idx++) ...[
+              if (idx > 0) const Divider(height: 24),
+              Builder(builder: (ctx) {
+                final project = projectsWithEntries[idx];
+                final totals = pdfService.getInvoiceTotals(_monthStart, _monthEnd, projectIds: [project.id]);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        CircleAvatar(backgroundColor: Color(project.colorValue), radius: 7),
+                        const SizedBox(width: 8),
+                        Text(project.name, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primaryContainer,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text('${totals.totalHours.toStringAsFixed(1)} h',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onPrimaryContainer, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _FileInfoRow(
+                      icon: Icons.table_chart,
+                      filename: '${project.name}/${resolveFilename(invoiceSettings.reportFilename)}.pdf',
+                      description: tr('pdf_reports.report_desc'),
+                      onPreview: () => _previewPdf('report', projectId: project.id),
+                    ),
+                    const SizedBox(height: 4),
+                    _FileInfoRow(
+                      icon: Icons.table_chart_outlined,
+                      filename: '${project.name}/${resolveFilename(invoiceSettings.reportRezijniFilename)}.pdf',
+                      description: tr('pdf_reports.report_rezijni_desc'),
+                      onPreview: () => _previewPdf('rezijni', projectId: project.id),
+                    ),
+                    const SizedBox(height: 4),
+                    _FileInfoRow(
+                      icon: Icons.receipt_long,
+                      filename: '${project.name}/${resolveFilename(invoiceSettings.invoiceFilename)}.pdf',
+                      description: tr('pdf_reports.invoice_desc'),
+                      onPreview: () => _previewPdf('invoice', projectId: project.id),
+                    ),
+                  ],
+                );
+              }),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openInvoiceSettings() {
     final settingsRepo = context.read<SettingsRepository>();
     showDialog(
@@ -304,12 +553,12 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
     final projectRepo = context.read<ProjectRepository>();
     final allProjects = projectRepo.getAll().where((p) => !p.isArchived).toList();
     var entries = timeEntryRepo.getByDateRange(_monthStart, _monthEnd);
-    if (_selectedProjectIds.isNotEmpty) {
+    if (_perProject && _selectedProjectIds.isNotEmpty) {
       entries = entries.where((e) => _selectedProjectIds.contains(e.projectId)).toList();
     }
     // Use the same minute-based calculation as the PDF invoice for consistency
     final pdfService = PdfReportService(timeEntryRepo: timeEntryRepo, projectRepo: projectRepo, taskRepo: context.read<TaskRepository>());
-    final totals = pdfService.getInvoiceTotals(_monthStart, _monthEnd, projectIds: _selectedProjectIds.isEmpty ? null : _selectedProjectIds);
+    final totals = pdfService.getInvoiceTotals(_monthStart, _monthEnd, projectIds: _perProject && _selectedProjectIds.isNotEmpty ? _selectedProjectIds : null);
     final totalHours = totals.totalHours;
     final entryCount = entries.length;
     final invoiceSettings = _loadInvoiceSettings();
@@ -500,7 +749,6 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                                   onSelected: (selected) {
                                     setState(() {
                                       if (allSelected) {
-                                        // Switching from "all" to explicit selection
                                         _selectedProjectIds = allProjects.map((p) => p.id).toList();
                                         if (!selected) {
                                           _selectedProjectIds.remove(project.id);
@@ -511,7 +759,6 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                                         } else {
                                           _selectedProjectIds.remove(project.id);
                                         }
-                                        // If all selected, switch back to empty (= all)
                                         if (_selectedProjectIds.length == allProjects.length) {
                                           _selectedProjectIds = [];
                                         }
@@ -521,6 +768,14 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                                   },
                                 );
                               }).toList(),
+                            ),
+                            const Divider(height: 24),
+                            SwitchListTile.adaptive(
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text('Generovat pro každý projekt zvlášť'),
+                              subtitle: const Text('Každý projekt dostane vlastní PDF a fakturu v podsložce'),
+                              value: _perProject,
+                              onChanged: (v) => setState(() => _perProject = v),
                             ),
                           ],
                         ),
@@ -598,46 +853,49 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Output files info
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(tr('pdf_reports.generated_files'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 12),
-                            _FileInfoRow(
-                              icon: Icons.table_chart,
-                              filename: '${_resolveFilename(invoiceSettings.reportFilename)}.pdf',
-                              description: tr('pdf_reports.report_desc'),
-                              onPreview: entryCount > 0 ? () => _previewPdf('report') : null,
-                            ),
-                            const SizedBox(height: 8),
-                            _FileInfoRow(
-                              icon: Icons.table_chart_outlined,
-                              filename: '${_resolveFilename(invoiceSettings.reportRezijniFilename)}.pdf',
-                              description: tr('pdf_reports.report_rezijni_desc'),
-                              onPreview: entryCount > 0 ? () => _previewPdf('rezijni') : null,
-                            ),
-                            const SizedBox(height: 8),
-                            _FileInfoRow(
-                              icon: Icons.receipt_long,
-                              filename: '${_resolveFilename(invoiceSettings.invoiceFilename)}.pdf',
-                              description: tr('pdf_reports.invoice_desc'),
-                              onPreview: entryCount > 0 ? () => _previewPdf('invoice') : null,
-                            ),
-                          ],
+                    // Output files info — combined or per-project
+                    if (!_perProject)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(tr('pdf_reports.generated_files'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 12),
+                              _FileInfoRow(
+                                icon: Icons.table_chart,
+                                filename: '${_resolveFilename(invoiceSettings.reportFilename)}.pdf',
+                                description: tr('pdf_reports.report_desc'),
+                                onPreview: entryCount > 0 ? () => _previewPdf('report') : null,
+                              ),
+                              const SizedBox(height: 8),
+                              _FileInfoRow(
+                                icon: Icons.table_chart_outlined,
+                                filename: '${_resolveFilename(invoiceSettings.reportRezijniFilename)}.pdf',
+                                description: tr('pdf_reports.report_rezijni_desc'),
+                                onPreview: entryCount > 0 ? () => _previewPdf('rezijni') : null,
+                              ),
+                              const SizedBox(height: 8),
+                              _FileInfoRow(
+                                icon: Icons.receipt_long,
+                                filename: '${_resolveFilename(invoiceSettings.invoiceFilename)}.pdf',
+                                description: tr('pdf_reports.invoice_desc'),
+                                onPreview: entryCount > 0 ? () => _previewPdf('invoice') : null,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ),
+                      )
+                    else
+                      _buildPerProjectOutputSection(context, allProjects, timeEntryRepo, invoiceSettings, pdfService),
                     const SizedBox(height: 24),
 
                     // Generate button
                     Row(
                       children: [
                         FilledButton.icon(
-                          onPressed: _isGenerating || entryCount == 0 ? null : _generatePdfs,
+                          onPressed: _isGenerating || entryCount == 0 ? null : (_perProject ? _generatePdfsPerProject : _generatePdfs),
                           icon: _isGenerating
                               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                               : const Icon(Icons.picture_as_pdf),

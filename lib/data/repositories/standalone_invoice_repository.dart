@@ -104,13 +104,16 @@ class StandaloneInvoiceRepository {
   }
 
   /// Find an existing time-based invoice for a given month and year.
+  /// If [projectId] is provided, matches only single-project invoices for that project.
   /// Used for dedup — if we regenerate a time-based invoice for the same month, we overwrite.
-  StandaloneInvoiceModel? findTimeBasedInvoice({required int month, required int year}) {
+  StandaloneInvoiceModel? findTimeBasedInvoice({required int month, required int year, String? projectId}) {
     try {
       return _box.values.firstWhere((inv) {
         if (inv.invoiceType != 'time_based') return false;
-        // Match by the month the invoice is FOR (issueDate)
         if (inv.issueDate.month != month || inv.issueDate.year != year) return false;
+        if (projectId != null) {
+          return inv.sourceProjectIds.length == 1 && inv.sourceProjectIds.contains(projectId);
+        }
         return true;
       });
     } catch (_) {

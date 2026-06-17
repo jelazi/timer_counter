@@ -101,82 +101,43 @@ class StandaloneInvoicesScreen extends StatelessWidget {
   }
 
   Widget _buildInvoiceList(BuildContext context, List<StandaloneInvoiceModel> invoices) {
-    return ListView.builder(
-      itemCount: invoices.length,
-      itemBuilder: (context, index) {
-        final invoice = invoices[index];
-        final totalFormatted = NumberFormat.currency(locale: 'cs', symbol: 'Kč', decimalDigits: 2).format(invoice.totalAmount);
-        final dateFormatted = DateFormat('dd.MM.yyyy').format(invoice.issueDate);
-        final customer = invoice.customerJson['name'] as String? ?? '';
+    final timeBased = invoices.where((i) => i.isTimeBased).toList();
+    final standalone = invoices.where((i) => i.isStandalone).toList();
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              child: Text(
-                '${invoice.invoiceNumber}',
-                style: TextStyle(color: Theme.of(context).colorScheme.onPrimaryContainer, fontWeight: FontWeight.bold, fontSize: 12),
-              ),
-            ),
-            title: Row(
-              children: [
-                Text(invoice.invoiceNumberFormatted, style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                if (invoice.isTimeBased)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.tertiaryContainer, borderRadius: BorderRadius.circular(4)),
-                    child: Text(tr('standalone_invoices.type_time_based'), style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onTertiaryContainer)),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(4)),
-                    child: Text(tr('standalone_invoices.type_standalone'), style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSecondaryContainer)),
-                  ),
-                const SizedBox(width: 8),
-                if (invoice.lineItems.isNotEmpty)
-                  Expanded(
-                    child: Text(invoice.lineItems.first.description, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
-                  ),
-              ],
-            ),
-            subtitle: Row(
-              children: [
-                Icon(Icons.calendar_today, size: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
-                const SizedBox(width: 4),
-                Text(dateFormatted, style: Theme.of(context).textTheme.bodySmall),
-                if (customer.isNotEmpty) ...[
-                  const SizedBox(width: 12),
-                  Icon(Icons.business, size: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(customer, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis),
-                  ),
-                ],
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(totalFormatted, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                IconButton(icon: const Icon(Icons.picture_as_pdf, size: 20), tooltip: tr('standalone_invoices.preview_pdf'), onPressed: () => _previewPdf(context, invoice)),
-                if (invoice.isStandalone) ...[
-                  IconButton(icon: const Icon(Icons.save_alt, size: 20), tooltip: tr('standalone_invoices.export_pdf'), onPressed: () => _exportPdf(context, invoice)),
-                  IconButton(icon: const Icon(Icons.edit_outlined, size: 20), tooltip: tr('common.edit'), onPressed: () => _openEditInvoice(context, invoice)),
-                ],
-                IconButton(
-                  icon: Icon(Icons.delete_outline, size: 20, color: Theme.of(context).colorScheme.error),
-                  tooltip: tr('common.delete'),
-                  onPressed: () => _deleteInvoice(context, invoice),
-                ),
-              ],
-            ),
+    return ListView(
+      children: [
+        if (timeBased.isNotEmpty) ...[
+          _SectionHeader(
+            icon: Icons.schedule,
+            title: 'Časové faktury',
+            subtitle: 'Generované automaticky z časových záznamů',
+            count: timeBased.length,
+            color: Theme.of(context).colorScheme.tertiary,
           ),
-        );
-      },
+          ...timeBased.map((invoice) => _InvoiceCard(
+            invoice: invoice,
+            onPreview: () => _previewPdf(context, invoice),
+            onDelete: () => _deleteInvoice(context, invoice),
+          )),
+          const SizedBox(height: 8),
+        ],
+        if (standalone.isNotEmpty) ...[
+          _SectionHeader(
+            icon: Icons.receipt_long,
+            title: 'Samostatné faktury',
+            subtitle: 'Ručně vytvořené faktury',
+            count: standalone.length,
+            color: Theme.of(context).colorScheme.secondary,
+          ),
+          ...standalone.map((invoice) => _InvoiceCard(
+            invoice: invoice,
+            onPreview: () => _previewPdf(context, invoice),
+            onExport: () => _exportPdf(context, invoice),
+            onEdit: () => _openEditInvoice(context, invoice),
+            onDelete: () => _deleteInvoice(context, invoice),
+          )),
+        ],
+      ],
     );
   }
 
@@ -257,5 +218,121 @@ class StandaloneInvoicesScreen extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('standalone_invoices.pdf_error')}: $e'), backgroundColor: Colors.red));
       }
     }
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final int count;
+  final Color color;
+
+  const _SectionHeader({required this.icon, required this.title, required this.subtitle, required this.count, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 4),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                      child: Text('$count', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)),
+                    ),
+                  ],
+                ),
+                Text(subtitle, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InvoiceCard extends StatelessWidget {
+  final StandaloneInvoiceModel invoice;
+  final VoidCallback onPreview;
+  final VoidCallback? onExport;
+  final VoidCallback? onEdit;
+  final VoidCallback onDelete;
+
+  const _InvoiceCard({required this.invoice, required this.onPreview, this.onExport, this.onEdit, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    final totalFormatted = NumberFormat.currency(locale: 'cs', symbol: 'Kč', decimalDigits: 2).format(invoice.totalAmount);
+    final dateFormatted = DateFormat('dd.MM.yyyy').format(invoice.issueDate);
+    final customer = invoice.customerJson['name'] as String? ?? '';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          child: Text(
+            '${invoice.invoiceNumber}',
+            style: TextStyle(color: Theme.of(context).colorScheme.onPrimaryContainer, fontWeight: FontWeight.bold, fontSize: 12),
+          ),
+        ),
+        title: Row(
+          children: [
+            Text(invoice.invoiceNumberFormatted, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            if (invoice.lineItems.isNotEmpty)
+              Expanded(
+                child: Text(invoice.lineItems.first.description, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
+              ),
+          ],
+        ),
+        subtitle: Row(
+          children: [
+            Icon(Icons.calendar_today, size: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+            const SizedBox(width: 4),
+            Text(dateFormatted, style: Theme.of(context).textTheme.bodySmall),
+            if (customer.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Icon(Icons.business, size: 12, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+              const SizedBox(width: 4),
+              Expanded(child: Text(customer, style: Theme.of(context).textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
+            ],
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(totalFormatted, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            IconButton(icon: const Icon(Icons.picture_as_pdf, size: 20), tooltip: tr('standalone_invoices.preview_pdf'), onPressed: onPreview),
+            if (onExport != null)
+              IconButton(icon: const Icon(Icons.save_alt, size: 20), tooltip: tr('standalone_invoices.export_pdf'), onPressed: onExport),
+            if (onEdit != null)
+              IconButton(icon: const Icon(Icons.edit_outlined, size: 20), tooltip: tr('common.edit'), onPressed: onEdit),
+            IconButton(
+              icon: Icon(Icons.delete_outline, size: 20, color: Theme.of(context).colorScheme.error),
+              tooltip: tr('common.delete'),
+              onPressed: onDelete,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
