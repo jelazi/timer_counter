@@ -44,4 +44,8 @@ class TaskRepository {
       await _box.delete(task.id);
     }
   }
+
+  Future<void> deleteAll() async {
+    await _box.clear();
+  }
 }

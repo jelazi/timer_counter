@@ -59,4 +59,8 @@ class ProjectRepository {
       await _box.put(id, project.copyWith(isArchived: false));
     }
   }
+
+  Future<void> deleteAll() async {
+    await _box.clear();
+  }
 }

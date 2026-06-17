@@ -24,10 +24,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  /// Desktop screens include PDF Reports and Standalone Invoices; mobile omits them.
-  List<Widget> get _screens => PlatformUtils.isDesktop
-      ? const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), PdfReportsScreen(), StandaloneInvoicesScreen(), SettingsScreen()]
-      : const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), SettingsScreen()];
+  /// Desktop and web show the full navigation set; mobile omits PDF Reports and Standalone Invoices.
+  List<Widget> get _screens => PlatformUtils.isMobile
+      ? const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), SettingsScreen()]
+      : const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), PdfReportsScreen(), StandaloneInvoicesScreen(), SettingsScreen()];
 
   @override
   void initState() {

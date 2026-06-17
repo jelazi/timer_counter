@@ -363,24 +363,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         Card(
                           child: Column(
                             children: [
-                              SwitchListTile(
-                                secondary: const Icon(Icons.launch),
-                                title: Text(tr('settings.launch_at_startup')),
-                                value: state.launchAtStartup,
-                                onChanged: (v) {
-                                  context.read<SettingsBloc>().add(ToggleLaunchAtStartup(v));
-                                },
-                              ),
-                              const Divider(height: 1),
-                              SwitchListTile(
-                                secondary: const Icon(Icons.minimize),
-                                title: Text(tr('settings.minimize_to_tray')),
-                                value: state.minimizeToTray,
-                                onChanged: (v) {
-                                  context.read<SettingsBloc>().add(ToggleMinimizeToTray(v));
-                                },
-                              ),
-                              const Divider(height: 1),
+                              if (PlatformUtils.isDesktop) ...[
+                                SwitchListTile(
+                                  secondary: const Icon(Icons.launch),
+                                  title: Text(tr('settings.launch_at_startup')),
+                                  value: state.launchAtStartup,
+                                  onChanged: (v) {
+                                    context.read<SettingsBloc>().add(ToggleLaunchAtStartup(v));
+                                  },
+                                ),
+                                const Divider(height: 1),
+                                SwitchListTile(
+                                  secondary: const Icon(Icons.minimize),
+                                  title: Text(tr('settings.minimize_to_tray')),
+                                  value: state.minimizeToTray,
+                                  onChanged: (v) {
+                                    context.read<SettingsBloc>().add(ToggleMinimizeToTray(v));
+                                  },
+                                ),
+                                const Divider(height: 1),
+                              ],
                               SwitchListTile(
                                 secondary: const Icon(Icons.layers),
                                 title: Text(tr('settings.allow_overlap_times')),
@@ -453,77 +455,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(height: 20),
 
-                        // Reminders
-                        _buildSectionTitle(context, tr('settings.reminders')),
-                        Card(
-                          child: Column(
-                            children: [
-                              // ── Remind Start ──
-                              SwitchListTile(
-                                secondary: const Icon(Icons.alarm),
-                                title: Text(tr('settings.remind_start')),
-                                subtitle: Text(tr('settings.remind_start_desc')),
-                                value: state.remindStart,
-                                onChanged: (v) {
-                                  context.read<SettingsBloc>().add(ToggleRemindStart(v));
-                                },
-                              ),
-                              if (state.remindStart) ...[
-                                _buildReminderOptions(
-                                  context,
-                                  intervalValue: state.remindStartInterval,
-                                  urgencyValue: state.remindStartUrgency,
-                                  onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStartInterval(v)),
-                                  onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStartUrgency(v)),
+                        // Reminders (desktop-only — uses native macOS notifications)
+                        if (PlatformUtils.isDesktop) ...[
+                          _buildSectionTitle(context, tr('settings.reminders')),
+                          Card(
+                            child: Column(
+                              children: [
+                                // ── Remind Start ──
+                                SwitchListTile(
+                                  secondary: const Icon(Icons.alarm),
+                                  title: Text(tr('settings.remind_start')),
+                                  subtitle: Text(tr('settings.remind_start_desc')),
+                                  value: state.remindStart,
+                                  onChanged: (v) {
+                                    context.read<SettingsBloc>().add(ToggleRemindStart(v));
+                                  },
                                 ),
-                              ],
-                              const Divider(height: 1),
-                              // ── Remind Stop ──
-                              SwitchListTile(
-                                secondary: const Icon(Icons.alarm_off),
-                                title: Text(tr('settings.remind_stop')),
-                                subtitle: Text(tr('settings.remind_stop_desc')),
-                                value: state.remindStop,
-                                onChanged: (v) {
-                                  context.read<SettingsBloc>().add(ToggleRemindStop(v));
-                                },
-                              ),
-                              if (state.remindStop) ...[
-                                _buildReminderOptions(
-                                  context,
-                                  intervalValue: state.remindStopInterval,
-                                  urgencyValue: state.remindStopUrgency,
-                                  onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStopInterval(v)),
-                                  onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStopUrgency(v)),
+                                if (state.remindStart) ...[
+                                  _buildReminderOptions(
+                                    context,
+                                    intervalValue: state.remindStartInterval,
+                                    urgencyValue: state.remindStartUrgency,
+                                    onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStartInterval(v)),
+                                    onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStartUrgency(v)),
+                                  ),
+                                ],
+                                const Divider(height: 1),
+                                // ── Remind Stop ──
+                                SwitchListTile(
+                                  secondary: const Icon(Icons.alarm_off),
+                                  title: Text(tr('settings.remind_stop')),
+                                  subtitle: Text(tr('settings.remind_stop_desc')),
+                                  value: state.remindStop,
+                                  onChanged: (v) {
+                                    context.read<SettingsBloc>().add(ToggleRemindStop(v));
+                                  },
                                 ),
-                              ],
-                              const Divider(height: 1),
-                              // ── Remind Break ──
-                              SwitchListTile(
-                                secondary: const Icon(Icons.free_breakfast),
-                                title: Text(tr('settings.remind_break')),
-                                subtitle: Text(tr('settings.remind_break_desc')),
-                                value: state.remindBreak,
-                                onChanged: (v) {
-                                  context.read<SettingsBloc>().add(ToggleRemindBreak(v));
-                                },
-                              ),
-                              if (state.remindBreak) ...[
-                                _buildReminderOptions(
-                                  context,
-                                  intervalValue: state.remindBreakInterval,
-                                  urgencyValue: state.remindBreakUrgency,
-                                  onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakInterval(v)),
-                                  onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakUrgency(v)),
-                                  showBreakAfter: true,
-                                  breakAfterValue: state.remindBreakAfter,
-                                  onBreakAfterChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakAfter(v)),
+                                if (state.remindStop) ...[
+                                  _buildReminderOptions(
+                                    context,
+                                    intervalValue: state.remindStopInterval,
+                                    urgencyValue: state.remindStopUrgency,
+                                    onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStopInterval(v)),
+                                    onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStopUrgency(v)),
+                                  ),
+                                ],
+                                const Divider(height: 1),
+                                // ── Remind Break ──
+                                SwitchListTile(
+                                  secondary: const Icon(Icons.free_breakfast),
+                                  title: Text(tr('settings.remind_break')),
+                                  subtitle: Text(tr('settings.remind_break_desc')),
+                                  value: state.remindBreak,
+                                  onChanged: (v) {
+                                    context.read<SettingsBloc>().add(ToggleRemindBreak(v));
+                                  },
                                 ),
+                                if (state.remindBreak) ...[
+                                  _buildReminderOptions(
+                                    context,
+                                    intervalValue: state.remindBreakInterval,
+                                    urgencyValue: state.remindBreakUrgency,
+                                    onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakInterval(v)),
+                                    onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakUrgency(v)),
+                                    showBreakAfter: true,
+                                    breakAfterValue: state.remindBreakAfter,
+                                    onBreakAfterChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakAfter(v)),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
+                          const SizedBox(height: 20),
+                        ],
 
                         // About
                         _buildSectionTitle(context, tr('settings.about')),
@@ -1589,6 +1593,35 @@ class _PocketBaseSettingsSectionState extends State<_PocketBaseSettingsSection> 
     return null;
   }
 
+  /// Web sign out — clears auth + local Hive boxes so the next user doesn't
+  /// inherit cached data in the same browser.
+  Future<void> _signOutWeb(PocketBaseSyncService syncService) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign out'),
+        content: const Text('You will be signed out and all locally cached data will be removed from this browser.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('common.cancel'))),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _isSaving = true;
+      _message = 'Signing out…';
+    });
+    await syncService.signOut(clearLocal: true);
+    if (!mounted) return;
+    // AuthGate listens to authStateStream and will switch to the LoginScreen.
+  }
+
   Future<void> _uploadAll() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1744,6 +1777,8 @@ class _PocketBaseSettingsSectionState extends State<_PocketBaseSettingsSection> 
         return tr('sync.source_settings');
       case PocketBaseConfigSource.bundledAsset:
         return tr('sync.source_file');
+      case PocketBaseConfigSource.compileTimeDefine:
+        return tr('sync.source_file');
       case null:
         return tr('sync.source_none');
     }
@@ -1802,34 +1837,36 @@ class _PocketBaseSettingsSectionState extends State<_PocketBaseSettingsSection> 
                   ],
                 ),
                 const SizedBox(height: 16),
-                TextField(
-                  controller: _urlController,
-                  enabled: !_isBusy,
-                  decoration: InputDecoration(labelText: tr('sync.server_url'), border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.dns_outlined)),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _emailController,
-                  enabled: !_isBusy,
-                  decoration: InputDecoration(labelText: tr('sync.email'), border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.email_outlined)),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _passwordController,
-                  enabled: !_isBusy,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: tr('sync.password'),
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      onPressed: _isBusy ? null : () => setState(() => _obscurePassword = !_obscurePassword),
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                if (!PlatformUtils.isWeb) ...[
+                  TextField(
+                    controller: _urlController,
+                    enabled: !_isBusy,
+                    decoration: InputDecoration(labelText: tr('sync.server_url'), border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.dns_outlined)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _emailController,
+                    enabled: !_isBusy,
+                    decoration: InputDecoration(labelText: tr('sync.email'), border: const OutlineInputBorder(), prefixIcon: const Icon(Icons.email_outlined)),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _passwordController,
+                    enabled: !_isBusy,
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      labelText: tr('sync.password'),
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        onPressed: _isBusy ? null : () => setState(() => _obscurePassword = !_obscurePassword),
+                        icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Text(tr('sync.override_hint'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
+                  const SizedBox(height: 12),
+                  Text(tr('sync.override_hint'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7))),
+                ],
                 if (_message != null) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -1854,9 +1891,18 @@ class _PocketBaseSettingsSectionState extends State<_PocketBaseSettingsSection> 
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    FilledButton.icon(onPressed: _isBusy ? null : _testConnection, icon: const Icon(Icons.network_check, size: 18), label: Text(tr('sync.test_connection'))),
-                    OutlinedButton.icon(onPressed: _isBusy ? null : _saveOverride, icon: const Icon(Icons.save_outlined, size: 18), label: Text(tr('sync.save_override'))),
-                    TextButton.icon(onPressed: _isBusy ? null : _clearOverride, icon: const Icon(Icons.restart_alt, size: 18), label: Text(tr('sync.use_file_default'))),
+                    if (!PlatformUtils.isWeb) ...[
+                      FilledButton.icon(onPressed: _isBusy ? null : _testConnection, icon: const Icon(Icons.network_check, size: 18), label: Text(tr('sync.test_connection'))),
+                      OutlinedButton.icon(onPressed: _isBusy ? null : _saveOverride, icon: const Icon(Icons.save_outlined, size: 18), label: Text(tr('sync.save_override'))),
+                      TextButton.icon(onPressed: _isBusy ? null : _clearOverride, icon: const Icon(Icons.restart_alt, size: 18), label: Text(tr('sync.use_file_default'))),
+                    ],
+                    if (PlatformUtils.isWeb && syncService != null && syncService.isSignedIn)
+                      FilledButton.icon(
+                        onPressed: _isBusy ? null : () => _signOutWeb(syncService),
+                        style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+                        icon: const Icon(Icons.logout, size: 18),
+                        label: const Text('Sign out'),
+                      ),
                   ],
                 ),
                 // ── Sync actions (only when connected) ──

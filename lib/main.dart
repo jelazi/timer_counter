@@ -1,6 +1,7 @@
-import 'dart:io';
+import 'dart:io' show Platform;
 
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -38,12 +39,12 @@ Future<void> main() async {
   await EasyLocalization.ensureInitialized();
   await initializeDateFormatting();
 
-  // Force portrait orientation on mobile devices
-  if (Platform.isAndroid || Platform.isIOS) {
+  // Force portrait orientation on mobile devices.
+  if (PlatformUtils.isMobile) {
     await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
   }
 
-  // Use bundled fonts — don't fetch from network
+  // Use bundled fonts — don't fetch from network.
   GoogleFonts.config.allowRuntimeFetching = false;
 
   // ── Hive ────────────────────────────────────────────────────────────────
@@ -78,76 +79,26 @@ Future<void> main() async {
   await standaloneInvoiceRepository.init();
 
   // ── PocketBase Sync Service ────────────────────────────────────────────
-  // Config-file driven: if lib/config/pocketbase_config.json exists with
-  // real credentials, sync is enabled. Otherwise it stays null (no sync).
-  PocketBaseSyncService? pocketBaseSyncService;
-  final pbConfig = await PocketBaseConfig.loadEffective(settingsRepository);
-  if (pbConfig != null) {
-    pocketBaseSyncService = PocketBaseSyncService(
-      serverUrl: pbConfig.url,
-      categoryRepo: categoryRepository,
-      projectRepo: projectRepository,
-      taskRepo: taskRepository,
-      timeEntryRepo: timeEntryRepository,
-      runningTimerRepo: runningTimerRepository,
-      monthlyTargetRepo: monthlyHoursTargetRepository,
-      settingsRepo: settingsRepository,
-    );
-    // Auto sign-in, start listeners, and smart first sync
-    final error = await pocketBaseSyncService.signIn(pbConfig.email, pbConfig.password);
-    if (error == null) {
-      await pocketBaseSyncService.startListeners();
-      // Smart first sync — auto upload/download on first connection
-      final (action, result) = await pocketBaseSyncService.smartFirstSync();
-      debugPrint('[PocketBase] Smart first sync: $action, ${result?.total ?? 0} items');
-    } else {
-      debugPrint('[PocketBase] Auto sign-in failed: $error');
-    }
-  }
+  // Desktop/mobile: try to auto sign-in from bundled config / settings override.
+  // Web: build the service without credentials — user signs in via LoginScreen.
+  final pocketBaseSyncService = await _initPocketBaseSyncService(
+    categoryRepository: categoryRepository,
+    projectRepository: projectRepository,
+    taskRepository: taskRepository,
+    timeEntryRepository: timeEntryRepository,
+    runningTimerRepository: runningTimerRepository,
+    monthlyHoursTargetRepository: monthlyHoursTargetRepository,
+    settingsRepository: settingsRepository,
+  );
 
   // ── Desktop Window Manager & System Tray ───────────────────────────────
   SystemTrayService? systemTrayService;
   if (PlatformUtils.isDesktop) {
-    await windowManager.ensureInitialized();
-
-    final windowOptions = WindowOptions(
-      size: Size(AppConstants.defaultWindowWidth, AppConstants.defaultWindowHeight),
-      minimumSize: Size(AppConstants.minWindowWidth, AppConstants.minWindowHeight),
-      center: true,
-      backgroundColor: Colors.transparent,
-      titleBarStyle: TitleBarStyle.hidden,
-      title: 'Timer Counter',
-    );
-
-    // Prevent close BEFORE showing — ensures X hides to tray
-    await windowManager.setPreventClose(true);
-
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
-
-    // Setup launch at startup
-    String appPath = Platform.resolvedExecutable;
-    // On macOS, use the .app bundle path instead of the inner executable
-    if (Platform.isMacOS) {
-      final contentsIndex = appPath.indexOf('/Contents/');
-      if (contentsIndex != -1) {
-        appPath = appPath.substring(0, contentsIndex);
-      }
-    }
-    launchAtStartup.setup(appName: 'Timer Counter', appPath: appPath);
-
-    // System Tray
-    systemTrayService = SystemTrayService();
-    await systemTrayService.initialize();
-
-    // Desktop window handler (close-to-tray, minimize-to-tray)
-    DesktopWindowHandler(settingsRepo: settingsRepository);
+    systemTrayService = await _initDesktopShell(settingsRepository: settingsRepository);
   }
 
-  // ── Work Reminder Notifications ────────────────────────────────────────
-  if (Platform.isMacOS) {
+  // ── Work Reminder Notifications (macOS only) ───────────────────────────
+  if (!kIsWeb && Platform.isMacOS) {
     final workReminderService = WorkReminderService(settingsRepo: settingsRepository, timerRepo: runningTimerRepository, timeEntryRepo: timeEntryRepository);
     workReminderService.start();
   }
@@ -171,4 +122,110 @@ Future<void> main() async {
       ),
     ),
   );
+}
+
+/// Build the PocketBase sync service and, on non-web platforms, attempt an
+/// automatic sign-in using the bundled config or settings override.
+///
+/// On web, only the server URL is resolved (via `--dart-define` or bundled
+/// config); credentials must always be entered by the user on the login screen.
+/// Returns `null` if no PocketBase URL is configured at all.
+Future<PocketBaseSyncService?> _initPocketBaseSyncService({
+  required CategoryRepository categoryRepository,
+  required ProjectRepository projectRepository,
+  required TaskRepository taskRepository,
+  required TimeEntryRepository timeEntryRepository,
+  required RunningTimerRepository runningTimerRepository,
+  required MonthlyHoursTargetRepository monthlyHoursTargetRepository,
+  required SettingsRepository settingsRepository,
+}) async {
+  PocketBaseSyncService? service;
+
+  if (kIsWeb) {
+    final url = await PocketBaseConfig.resolveServerUrl(settingsRepository);
+    if (url == null) {
+      debugPrint('[PocketBase] No server URL configured for web build. Pass --dart-define=POCKETBASE_URL=...');
+      return null;
+    }
+    service = PocketBaseSyncService(
+      serverUrl: url,
+      categoryRepo: categoryRepository,
+      projectRepo: projectRepository,
+      taskRepo: taskRepository,
+      timeEntryRepo: timeEntryRepository,
+      runningTimerRepo: runningTimerRepository,
+      monthlyTargetRepo: monthlyHoursTargetRepository,
+      settingsRepo: settingsRepository,
+    );
+    // If a token was persisted (e.g. AsyncAuthStore in the future), listeners
+    // could be started here. For now we always require explicit login on web.
+    return service;
+  }
+
+  final pbConfig = await PocketBaseConfig.loadEffective(settingsRepository);
+  if (pbConfig == null) return null;
+
+  service = PocketBaseSyncService(
+    serverUrl: pbConfig.url,
+    categoryRepo: categoryRepository,
+    projectRepo: projectRepository,
+    taskRepo: taskRepository,
+    timeEntryRepo: timeEntryRepository,
+    runningTimerRepo: runningTimerRepository,
+    monthlyTargetRepo: monthlyHoursTargetRepository,
+    settingsRepo: settingsRepository,
+  );
+
+  final error = await service.signIn(pbConfig.email, pbConfig.password);
+  if (error == null) {
+    await service.startListeners();
+    final (action, result) = await service.smartFirstSync();
+    debugPrint('[PocketBase] Smart first sync: $action, ${result?.total ?? 0} items');
+  } else {
+    debugPrint('[PocketBase] Auto sign-in failed: $error');
+  }
+  return service;
+}
+
+/// Initialize window manager, system tray, launch-at-startup, and the close-
+/// to-tray handler. Only called on desktop platforms.
+Future<SystemTrayService> _initDesktopShell({required SettingsRepository settingsRepository}) async {
+  await windowManager.ensureInitialized();
+
+  final windowOptions = WindowOptions(
+    size: Size(AppConstants.defaultWindowWidth, AppConstants.defaultWindowHeight),
+    minimumSize: Size(AppConstants.minWindowWidth, AppConstants.minWindowHeight),
+    center: true,
+    backgroundColor: Colors.transparent,
+    titleBarStyle: TitleBarStyle.hidden,
+    title: 'Timer Counter',
+  );
+
+  // Prevent close BEFORE showing — ensures X hides to tray.
+  await windowManager.setPreventClose(true);
+
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
+
+  // Setup launch at startup.
+  String appPath = Platform.resolvedExecutable;
+  // On macOS, use the .app bundle path instead of the inner executable.
+  if (Platform.isMacOS) {
+    final contentsIndex = appPath.indexOf('/Contents/');
+    if (contentsIndex != -1) {
+      appPath = appPath.substring(0, contentsIndex);
+    }
+  }
+  launchAtStartup.setup(appName: 'Timer Counter', appPath: appPath);
+
+  // System Tray.
+  final systemTrayService = SystemTrayService();
+  await systemTrayService.initialize();
+
+  // Desktop window handler (close-to-tray, minimize-to-tray).
+  DesktopWindowHandler(settingsRepo: settingsRepository);
+
+  return systemTrayService;
 }
