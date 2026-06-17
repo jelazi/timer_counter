@@ -38,6 +38,9 @@ if not exist "assets\icons\app_icon.ico" (
     )
 )
 
+call :ensure_app_not_running
+if errorlevel 1 goto :fail
+
 echo Running "flutter clean"...
 call flutter clean
 if errorlevel 1 goto :fail
@@ -81,6 +84,34 @@ exit /b 0
 where %~1 >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Required command not found on PATH: %~1
+    exit /b 1
+)
+exit /b 0
+
+:ensure_app_not_running
+tasklist /FI "IMAGENAME eq %APP_EXE%" 2>NUL | find /I "%APP_EXE%" >NUL
+if errorlevel 1 exit /b 0
+
+echo %APP_NAME% is currently running and may lock the build directory.
+if defined NONINTERACTIVE_BUILD (
+    echo Stopping %APP_EXE% for non-interactive build...
+    taskkill /F /IM "%APP_EXE%" >nul 2>&1
+    if errorlevel 1 (
+        echo [ERROR] Failed to stop %APP_EXE%.
+        exit /b 1
+    )
+    exit /b 0
+)
+
+set "STOP_CHOICE="
+set /p STOP_CHOICE=Stop running %APP_NAME% now? [y/N]: 
+if /i not "!STOP_CHOICE!"=="Y" (
+    echo [ERROR] Build cancelled because %APP_NAME% is still running.
+    exit /b 1
+)
+taskkill /F /IM "%APP_EXE%" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Failed to stop %APP_EXE%.
     exit /b 1
 )
 exit /b 0
