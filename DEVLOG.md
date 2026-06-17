@@ -39,6 +39,27 @@
 - Verify realtime sync over SSE works in browsers (the `pocketbase` Dart package uses standard EventSource — should work without changes).
 - Translate the new `LoginScreen` strings (currently hard-coded English) via `easy_localization` keys.
 
+## 2026-05-29 — Fix packaged Windows white screen after windows_build.bat
+
+### What was done
+- Updated `SystemTrayService` icon resolution to support packaged Flutter Windows assets under `data/flutter_assets/assets/icons/` next to the release executable.
+- Kept project-root icon paths for `flutter run` and development workflows.
+- Made system tray initialization non-fatal so a tray/plugin/icon problem cannot block `runApp()` and leave a white startup window.
+- Updated `windows_build.bat` to stop a running `timer_counter.exe` before `flutter clean` so stale white-screen/test instances do not lock the build directory.
+
+### What was fixed
+- Fixed the difference where `flutter run --release` worked from the project root, but the executable produced by `windows_build.bat` opened to a white screen when started from `build/windows/x64/runner/Release/`.
+- Root cause was tray initialization running before `runApp()` and resolving icons only relative to the current working directory, not relative to the packaged executable.
+
+### Current state
+- `SystemTrayService` has no analyzer errors.
+- `windows_build.bat` was re-run and produced a new `build/windows/x64/runner/Release/timer_counter.exe` with the packaged icon-path fix.
+- The rebuilt release executable was launched from the `Release` directory and Windows reported the `Timer Counter` window process as responsive.
+- `Output/setup-Timer-Counter-1.0.6.exe` was rebuilt with Inno Setup against the fixed release output.
+
+### Pending / next steps
+- Visually confirm the rebuilt release window renders the full UI and tray icon on your Windows desktop.
+
 ## 2026-05-29 — Add Windows installer build automation
 
 ### What was done
