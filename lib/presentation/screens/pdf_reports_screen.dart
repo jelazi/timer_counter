@@ -539,6 +539,158 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
     );
   }
 
+  String _pluralProjects(int n) {
+    if (n == 1) return 'projekt';
+    if (n < 5) return 'projekty';
+    return 'projektů';
+  }
+
+  Widget _buildSummaryCard(
+    BuildContext context,
+    List allProjects,
+    TimeEntryRepository timeEntryRepo,
+    PdfReportService pdfService,
+    double totalHours,
+    int entryCount,
+  ) {
+    final monthName = DateFormat('MMMM', context.locale.languageCode).format(DateTime(_selectedYear, _selectedMonth));
+    final periodLabel = '${monthName[0].toUpperCase()}${monthName.substring(1)} $_selectedYear';
+
+    if (!_perProject) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tr('pdf_reports.period_summary'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _SummaryTile(icon: Icons.access_time, label: tr('pdf_reports.total_hours'), value: '${totalHours.toStringAsFixed(1)} h', color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 24),
+                  _SummaryTile(icon: Icons.list_alt, label: tr('pdf_reports.entries_count'), value: '$entryCount', color: Theme.of(context).colorScheme.secondary),
+                  const SizedBox(width: 24),
+                  _SummaryTile(icon: Icons.calendar_today, label: tr('pdf_reports.period'), value: periodLabel, color: Theme.of(context).colorScheme.tertiary),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Per-project summary
+    final allMonthEntries = timeEntryRepo.getByDateRange(_monthStart, _monthEnd);
+    final projectsWithEntries = allProjects.where((p) => allMonthEntries.any((e) => e.projectId == p.id)).toList();
+    final allTotals = pdfService.getInvoiceTotals(_monthStart, _monthEnd, projectIds: null);
+    final hasSelection = _selectedProjectIds.isNotEmpty;
+    final selectedTotals = hasSelection ? pdfService.getInvoiceTotals(_monthStart, _monthEnd, projectIds: _selectedProjectIds) : allTotals;
+    final selectedEntryCount = hasSelection
+        ? allMonthEntries.where((e) => _selectedProjectIds.contains(e.projectId)).length
+        : allMonthEntries.length;
+    final allEntryCount = allMonthEntries.length;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(tr('pdf_reports.period_summary'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.tertiaryContainer, borderRadius: BorderRadius.circular(8)),
+                  child: Text(periodLabel, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: Theme.of(context).colorScheme.onTertiaryContainer, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (projectsWithEntries.isEmpty)
+              Text(tr('pdf_reports.no_entries'), style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.orange))
+            else ...[
+              // Per-project rows
+              ...projectsWithEntries.map((project) {
+                final isSelected = !hasSelection || _selectedProjectIds.contains(project.id);
+                final t = pdfService.getInvoiceTotals(_monthStart, _monthEnd, projectIds: [project.id]);
+                final projectEntryCount = allMonthEntries.where((e) => e.projectId == project.id).length;
+                return Opacity(
+                  opacity: isSelected ? 1.0 : 0.4,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        CircleAvatar(backgroundColor: Color(project.colorValue), radius: 6),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(project.name, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal))),
+                        const SizedBox(width: 16),
+                        Text('$projectEntryCount záz.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55))),
+                        const SizedBox(width: 16),
+                        SizedBox(
+                          width: 64,
+                          child: Text(
+                            '${t.totalHours.toStringAsFixed(1)} h',
+                            textAlign: TextAlign.right,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold, color: isSelected ? Theme.of(context).colorScheme.primary : null),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const Divider(height: 20),
+              // Selected total (only when explicit selection exists)
+              if (hasSelection) ...[
+                Row(
+                  children: [
+                    Icon(Icons.check_box_outlined, size: 16, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Vybrané (${_selectedProjectIds.length} ${_pluralProjects(_selectedProjectIds.length)})',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.primary),
+                      ),
+                    ),
+                    Text('$selectedEntryCount záz.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      width: 64,
+                      child: Text('${selectedTotals.totalHours.toStringAsFixed(1)} h', textAlign: TextAlign.right, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+              ],
+              // All projects total
+              Row(
+                children: [
+                  Icon(Icons.layers, size: 16, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Celkem (${projectsWithEntries.length} ${_pluralProjects(projectsWithEntries.length)})',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Text('$allEntryCount záz.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+                  const SizedBox(width: 16),
+                  SizedBox(
+                    width: 64,
+                    child: Text('${allTotals.totalHours.toStringAsFixed(1)} h', textAlign: TextAlign.right, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openInvoiceSettings() {
     final settingsRepo = context.read<SettingsRepository>();
     showDialog(
@@ -672,40 +824,7 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
                     const SizedBox(height: 16),
 
                     // Period summary card
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(tr('pdf_reports.period_summary'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                _SummaryTile(
-                                  icon: Icons.access_time,
-                                  label: tr('pdf_reports.total_hours'),
-                                  value: '${totalHours.toStringAsFixed(1)} h',
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                const SizedBox(width: 24),
-                                _SummaryTile(icon: Icons.list_alt, label: tr('pdf_reports.entries_count'), value: '$entryCount', color: Theme.of(context).colorScheme.secondary),
-                                const SizedBox(width: 24),
-                                _SummaryTile(
-                                  icon: Icons.calendar_today,
-                                  label: tr('pdf_reports.period'),
-                                  value: () {
-                                    final monthName = DateFormat('MMMM', context.locale.languageCode).format(DateTime(_selectedYear, _selectedMonth));
-                                    return '${monthName[0].toUpperCase()}${monthName.substring(1)} $_selectedYear';
-                                  }(),
-                                  color: Theme.of(context).colorScheme.tertiary,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    _buildSummaryCard(context, allProjects, timeEntryRepo, pdfService, totalHours, entryCount),
                     const SizedBox(height: 16),
 
                     // Project filter
