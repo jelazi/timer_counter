@@ -39,6 +39,80 @@
 - Verify realtime sync over SSE works in browsers (the `pocketbase` Dart package uses standard EventSource — should work without changes).
 - Translate the new `LoginScreen` strings (currently hard-coded English) via `easy_localization` keys.
 
+## 2026-05-29 — Fix packaged Windows white screen after windows_build.bat
+
+### What was done
+- Updated `SystemTrayService` icon resolution to support packaged Flutter Windows assets under `data/flutter_assets/assets/icons/` next to the release executable.
+- Kept project-root icon paths for `flutter run` and development workflows.
+- Made system tray initialization non-fatal so a tray/plugin/icon problem cannot block `runApp()` and leave a white startup window.
+- Updated `windows_build.bat` to stop a running `timer_counter.exe` before `flutter clean` so stale white-screen/test instances do not lock the build directory.
+
+### What was fixed
+- Fixed the difference where `flutter run --release` worked from the project root, but the executable produced by `windows_build.bat` opened to a white screen when started from `build/windows/x64/runner/Release/`.
+- Root cause was tray initialization running before `runApp()` and resolving icons only relative to the current working directory, not relative to the packaged executable.
+
+### Current state
+- `SystemTrayService` has no analyzer errors.
+- `windows_build.bat` was re-run and produced a new `build/windows/x64/runner/Release/timer_counter.exe` with the packaged icon-path fix.
+- The rebuilt release executable was launched from the `Release` directory and Windows reported the `Timer Counter` window process as responsive.
+- `Output/setup-Timer-Counter-1.0.6.exe` was rebuilt with Inno Setup against the fixed release output.
+
+### Pending / next steps
+- Visually confirm the rebuilt release window renders the full UI and tray icon on your Windows desktop.
+
+## 2026-05-29 — Add Windows installer build automation
+
+### What was done
+- Added `inno_setup.iss` for building a Timer Counter Windows installer with Inno Setup.
+- Added `windows_build.bat` to build the Flutter Windows release executable.
+- Added `deploy_windows.bat` to run the Windows build, compile the Inno installer, stage the installer, create a ZIP, and reveal the output in Explorer.
+- Ignored generated installer output directories (`Output/` and `deploy/output/`) in `.gitignore`.
+
+### What was fixed
+- Added a repeatable Windows packaging flow inspired by the `active-staff` Windows build/deploy scripts.
+
+### Current state
+- Installer output is configured as `Output/setup-Timer-Counter-<version>.exe` and staged under `deploy/output/windows/<timestamp>/`.
+- Scripts read the app version from `pubspec.yaml` and pass the semantic version without the Flutter build suffix to Inno Setup.
+- `windows_build.bat` was run and produced the Windows release output under `build/windows/x64/runner/Release/`.
+- `inno_setup.iss` was compiled with Inno Setup 6 and produced `Output/setup-Timer-Counter-1.0.6.exe`.
+
+### Pending / next steps
+- Run the generated installer and verify install, launch, uninstall, tray icon, and close-to-tray behavior.
+
+## 2026-05-29 — Restore native Windows title bar controls
+
+### What was done
+- Updated desktop window options so Windows uses the native system title bar.
+- Kept the existing hidden title bar behavior for non-Windows desktop platforms.
+
+### What was fixed
+- Restored the standard Windows minimize, maximize, and close buttons for the Timer Counter window.
+
+### Current state
+- Windows app windows should now look and behave like normal desktop application windows.
+
+### Pending / next steps
+- Run `flutter run -d windows` and verify the title bar buttons are visible and close-to-tray behavior still works.
+
+## 2026-05-29 — Fix Windows system tray startup crash (Bad Arguments)
+
+### What was done
+- Fixed Windows startup crash in tray initialization by hardening icon path resolution in `SystemTrayService`.
+- Replaced direct icon lookup with `_resolveIconPath()` that checks multiple candidates and returns an absolute existing path.
+- Added missing `assets/icons/app_icon.ico` by copying the existing `windows/runner/resources/app_icon.ico` so Flutter asset-based tray icon path is valid.
+
+### What was fixed
+- Resolved `PlatformException(Bad Arguments)` thrown by `SystemTray.initSystemTray` during app startup on Windows.
+- Root cause was a non-existent icon path (`assets/icons/app_icon.ico`) being passed to the tray plugin.
+
+### Current state
+- Analyzer reports no errors in changed startup/tray files.
+- Desktop startup should proceed without tray initialization exception on Windows.
+
+### Pending / next steps
+- Run a Windows smoke test (`flutter run -d windows`) and verify tray icon appears, context menu opens, and close-to-tray behavior still works.
+
 ## 2026-05-29 — Windows/new-user readiness audit and PocketBase setup guide
 
 ### What was done
