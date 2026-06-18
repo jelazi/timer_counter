@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -11,6 +13,7 @@ class TaskBloc extends Bloc<TaskEvent, TaskState> {
   final TaskRepository _taskRepository;
   final TimeEntryRepository _timeEntryRepository;
   final PocketBaseSyncService? _syncService;
+  StreamSubscription<SyncCollection>? _syncSubscription;
 
   TaskBloc({required TaskRepository taskRepository, required TimeEntryRepository timeEntryRepository, PocketBaseSyncService? syncService})
     : _taskRepository = taskRepository,
@@ -22,6 +25,35 @@ class TaskBloc extends Bloc<TaskEvent, TaskState> {
     on<AddTask>(_onAddTask);
     on<UpdateTask>(_onUpdateTask);
     on<DeleteTask>(_onDeleteTask);
+    on<TasksSyncedExternally>(_onTasksSyncedExternally);
+
+    _startSyncListener();
+  }
+
+  /// Reload tasks when a PocketBase subscription updates the local store.
+  void _startSyncListener() {
+    if (_syncService == null) return;
+    _syncSubscription = _syncService.onCollectionChanged.listen((col) {
+      if (col == SyncCollection.tasks) {
+        add(const TasksSyncedExternally());
+      }
+    });
+  }
+
+  /// Reload preserving the current view (single project or all tasks).
+  void _onTasksSyncedExternally(TasksSyncedExternally event, Emitter<TaskState> emit) {
+    final currentState = state;
+    if (currentState is TaskLoaded && currentState.projectId != null) {
+      emit(TaskLoaded(tasks: _taskRepository.getByProject(currentState.projectId!), projectId: currentState.projectId));
+    } else {
+      emit(TaskLoaded(tasks: _taskRepository.getAll()));
+    }
+  }
+
+  @override
+  Future<void> close() {
+    _syncSubscription?.cancel();
+    return super.close();
   }
 
   void _onLoadTasks(LoadTasks event, Emitter<TaskState> emit) {

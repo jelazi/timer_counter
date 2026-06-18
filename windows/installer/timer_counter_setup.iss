@@ -1,5 +1,5 @@
 #define AppName "Timer Counter"
-#define AppVersion "1.0.6"
+#define AppVersion "1.0.7"
 #define AppPublisher "***REMOVED***"
 #define AppURL "https://github.com/jelazi/timer_counter"
 #define AppExeName "timer_counter.exe"

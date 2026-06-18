@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -13,6 +15,7 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
   final TaskRepository _taskRepository;
   final TimeEntryRepository _timeEntryRepository;
   final PocketBaseSyncService? _syncService;
+  StreamSubscription<SyncCollection>? _syncSubscription;
 
   ProjectBloc({
     required ProjectRepository projectRepository,
@@ -31,6 +34,23 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     on<ArchiveProject>(_onArchiveProject);
     on<UnarchiveProject>(_onUnarchiveProject);
     on<FilterProjects>(_onFilterProjects);
+    on<ProjectsSyncedExternally>(_onProjectsSyncedExternally);
+
+    _startSyncListener();
+  }
+
+  /// Reload projects when a PocketBase subscription updates the local store.
+  void _startSyncListener() {
+    if (_syncService == null) return;
+    _syncSubscription = _syncService.onCollectionChanged.listen((col) {
+      if (col == SyncCollection.projects) {
+        add(const ProjectsSyncedExternally());
+      }
+    });
+  }
+
+  void _onProjectsSyncedExternally(ProjectsSyncedExternally event, Emitter<ProjectState> emit) {
+    _emitFilteredState(emit);
   }
 
   void _onLoadProjects(LoadProjects event, Emitter<ProjectState> emit) {
@@ -130,6 +150,12 @@ class ProjectBloc extends Bloc<ProjectEvent, ProjectState> {
     } catch (e) {
       emit(ProjectError(e.toString()));
     }
+  }
+
+  @override
+  Future<void> close() {
+    _syncSubscription?.cancel();
+    return super.close();
   }
 
   void _emitFilteredState(Emitter<ProjectState> emit) {

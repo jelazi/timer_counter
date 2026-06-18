@@ -45,3 +45,9 @@ class DeleteTask extends TaskEvent {
   @override
   List<Object?> get props => [taskId, projectId];
 }
+
+/// Emitted internally when a PocketBase subscription updates the local
+/// tasks collection, so the UI reloads with the remote changes.
+class TasksSyncedExternally extends TaskEvent {
+  const TasksSyncedExternally();
+}

@@ -104,7 +104,7 @@ class TymeApp extends StatelessWidget {
   }
 }
 
-class _AppWithTheme extends StatelessWidget {
+class _AppWithTheme extends StatefulWidget {
   final SettingsRepository settingsRepository;
   final SystemTrayService? systemTrayService;
   final PocketBaseSyncService? pocketBaseSyncService;
@@ -112,10 +112,36 @@ class _AppWithTheme extends StatelessWidget {
   const _AppWithTheme({required this.settingsRepository, this.systemTrayService, this.pocketBaseSyncService});
 
   @override
+  State<_AppWithTheme> createState() => _AppWithThemeState();
+}
+
+class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Mobile suspends the real-time SSE connection while backgrounded, so on
+    // resume we reconnect and pull anything changed while we were away.
+    if (state == AppLifecycleState.resumed) {
+      widget.pocketBaseSyncService?.resync();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return BlocBuilder<SettingsBloc, dynamic>(
       builder: (context, state) {
-        final themeMode = settingsRepository.getThemeMode();
+        final themeMode = widget.settingsRepository.getThemeMode();
         ThemeMode mode;
         switch (themeMode) {
           case 'light':
@@ -139,11 +165,11 @@ class _AppWithTheme extends StatelessWidget {
           locale: context.locale,
           home: BlocListener<TimerBloc, TimerState>(
             listener: (context, timerState) {
-              if (PlatformUtils.isDesktop && systemTrayService != null) {
+              if (PlatformUtils.isDesktop && widget.systemTrayService != null) {
                 _updateSystemTray(context, timerState);
               }
             },
-            child: AuthGate(syncService: pocketBaseSyncService),
+            child: AuthGate(syncService: widget.pocketBaseSyncService),
           ),
         );
       },
@@ -151,8 +177,8 @@ class _AppWithTheme extends StatelessWidget {
   }
 
   void _updateSystemTray(BuildContext context, TimerState timerState) {
-    if (systemTrayService == null) return;
-    final trayService = systemTrayService!;
+    if (widget.systemTrayService == null) return;
+    final trayService = widget.systemTrayService!;
     final projectRepo = context.read<ProjectRepository>();
     final taskRepo = context.read<TaskRepository>();
 
