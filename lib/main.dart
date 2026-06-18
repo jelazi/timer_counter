@@ -181,6 +181,13 @@ Future<PocketBaseSyncService?> _initPocketBaseSyncService({
     await service.startListeners();
     final (action, result) = await service.smartFirstSync();
     debugPrint('[PocketBase] Smart first sync: $action, ${result?.total ?? 0} items');
+    // On a cold start of an already-synced install, real-time subscriptions
+    // alone miss anything changed while the app was closed. Pull the current
+    // remote state once so the UI starts up with fresh data.
+    if (action == SmartSyncAction.alreadySynced) {
+      final catchUp = await service.downloadAll();
+      debugPrint('[PocketBase] Startup catch-up: ${catchUp.total} items${catchUp.hasError ? ' (error: ${catchUp.error})' : ''}');
+    }
   } else {
     debugPrint('[PocketBase] Auto sign-in failed: $error');
   }

@@ -1,5 +1,5 @@
 #define AppName "Timer Counter"
-#define AppVersion "1.0.6"
+#define AppVersion "1.0.7"
 #define AppPublisher "Medutech s.r.o."
 #define AppURL "https://medutech.cz"
 #define AppExeName "timer_counter.exe"

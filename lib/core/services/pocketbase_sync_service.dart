@@ -283,6 +283,35 @@ class PocketBaseSyncService {
     _statusController.add(s);
   }
 
+  /// Reconnect real-time subscriptions and pull any changes missed while
+  /// disconnected.
+  ///
+  /// Mobile platforms suspend the SSE connection when the app is backgrounded,
+  /// and PocketBase does not replay events that happened while disconnected. So
+  /// on resume we must re-subscribe AND explicitly pull the current remote
+  /// state, then notify listening blocs to reload from the local store.
+  Future<void> resync() async {
+    if (!isSignedIn) return;
+    debugPrint('[PocketBaseSync] Resync triggered');
+
+    // Re-establish subscriptions — the previous connection may be dead.
+    await stopListeners();
+    await startListeners();
+
+    // SSE does not replay missed events, so pull the current remote state.
+    final result = await downloadAll();
+    if (result.hasError) {
+      debugPrint('[PocketBaseSync] Resync download error: ${result.error}');
+      return;
+    }
+
+    // Notify blocs so they reload from the freshly updated local store.
+    for (final c in SyncCollection.values) {
+      _collectionChangeController.add(c);
+    }
+    debugPrint('[PocketBaseSync] Resync complete: ${result.total} items');
+  }
+
   // ═════════════════════════════════════════════════════════════════════════
   // PUSH — write single record to PocketBase
   // ═════════════════════════════════════════════════════════════════════════

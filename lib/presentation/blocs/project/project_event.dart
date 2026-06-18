@@ -53,6 +53,12 @@ class UnarchiveProject extends ProjectEvent {
   List<Object?> get props => [projectId];
 }
 
+/// Emitted internally when a PocketBase subscription updates the local
+/// projects collection, so the UI reloads with the remote changes.
+class ProjectsSyncedExternally extends ProjectEvent {
+  const ProjectsSyncedExternally();
+}
+
 class FilterProjects extends ProjectEvent {
   final String? categoryId;
   final bool showArchived;

@@ -36,3 +36,9 @@ class DeleteCategory extends CategoryEvent {
   @override
   List<Object?> get props => [categoryId];
 }
+
+/// Emitted internally when a PocketBase subscription updates the local
+/// categories collection, so the UI reloads with the remote changes.
+class CategoriesSyncedExternally extends CategoryEvent {
+  const CategoriesSyncedExternally();
+}
