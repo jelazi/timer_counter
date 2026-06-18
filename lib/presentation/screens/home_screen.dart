@@ -133,7 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: Stack(
         children: [
           Padding(
-            padding: EdgeInsets.only(top: isWindows ? 30 : 28),
+            padding: EdgeInsets.only(top: isWindows ? kWindowCaptionHeight : 28),
             child: Row(
               children: [
                 NavigationRail(
@@ -208,6 +208,10 @@ class _HomeScreenState extends State<HomeScreen> {
               top: 0,
               left: 0,
               right: 0,
+              // Constrain the height — without it WindowCaption's inner
+              // `height: double.infinity` expands to fill the whole window and
+              // its DragToMoveArea swallows every click.
+              height: kWindowCaptionHeight,
               child: WindowCaption(
                 brightness: Theme.of(context).brightness,
                 title: const SizedBox(),
