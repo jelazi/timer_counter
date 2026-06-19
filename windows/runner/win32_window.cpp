@@ -178,6 +178,23 @@ Win32Window::MessageHandler(HWND hwnd,
                             UINT const message,
                             WPARAM const wparam,
                             LPARAM const lparam) noexcept {
+  // Registered message broadcast by a second instance that wants this already
+  // running instance to surface its window (it may be hidden in the tray or
+  // minimized). Registered messages share a unique value system-wide, so only
+  // this application reacts to it.
+  static const UINT kShowMeMessage =
+      ::RegisterWindowMessage(L"TimerCounter_ShowMeMessage");
+  if (message == kShowMeMessage && kShowMeMessage != 0) {
+    if (::IsIconic(window_handle_)) {
+      ::ShowWindow(window_handle_, SW_RESTORE);
+    } else {
+      ::ShowWindow(window_handle_, SW_SHOW);
+    }
+    ::SetForegroundWindow(window_handle_);
+    ::SetActiveWindow(window_handle_);
+    return 0;
+  }
+
   switch (message) {
     case WM_DESTROY:
       window_handle_ = nullptr;
