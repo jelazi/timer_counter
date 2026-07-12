@@ -14,8 +14,12 @@ import 'app/app.dart';
 import 'app/desktop_window_handler.dart';
 import 'app/system_tray_service.dart';
 import 'core/constants/app_constants.dart';
+import 'core/services/backup_service.dart';
+import 'core/services/daily_snapshot_service.dart';
+import 'core/services/deletion_journal_service.dart';
 import 'core/services/pocketbase_config.dart';
 import 'core/services/pocketbase_sync_service.dart';
+import 'core/services/snapshot_diff_service.dart';
 import 'core/services/work_reminder_service.dart';
 import 'core/utils/platform_utils.dart';
 import 'data/models/category_model.dart';
@@ -78,6 +82,46 @@ Future<void> main() async {
   final standaloneInvoiceRepository = StandaloneInvoiceRepository();
   await standaloneInvoiceRepository.init();
 
+  // ── Deletion Journal ───────────────────────────────────────────────────
+  // Attached before anything can delete, so no deletion goes unrecorded.
+  final deletionJournal = DeletionJournalService();
+  await deletionJournal.init();
+  categoryRepository.attachJournal(deletionJournal);
+  projectRepository.attachJournal(deletionJournal);
+  taskRepository.attachJournal(deletionJournal);
+  timeEntryRepository.attachJournal(deletionJournal);
+  monthlyHoursTargetRepository.attachJournal(deletionJournal);
+  standaloneInvoiceRepository.attachJournal(deletionJournal);
+
+  final backupService = BackupService(
+    timeEntryRepository: timeEntryRepository,
+    projectRepository: projectRepository,
+    taskRepository: taskRepository,
+    categoryRepository: categoryRepository,
+    settingsRepository: settingsRepository,
+    runningTimerRepository: runningTimerRepository,
+    monthlyTargetRepository: monthlyHoursTargetRepository,
+    standaloneInvoiceRepository: standaloneInvoiceRepository,
+  );
+
+  final snapshotService = DailySnapshotService(backupService: backupService, settingsRepository: settingsRepository);
+  await snapshotService.init();
+
+  final snapshotDiffService = SnapshotDiffService(
+    categoryRepository: categoryRepository,
+    projectRepository: projectRepository,
+    taskRepository: taskRepository,
+    timeEntryRepository: timeEntryRepository,
+    monthlyTargetRepository: monthlyHoursTargetRepository,
+    standaloneInvoiceRepository: standaloneInvoiceRepository,
+  );
+
+  // ── Local snapshot — MUST run before sync ──────────────────────────────
+  // Sync reconciliation can delete local records. Capturing the last-known-good
+  // state first means a bad sync always has an intact snapshot to recover from;
+  // snapshotting afterwards would just record the damage.
+  await snapshotService.takeSnapshotIfDue();
+
   // ── PocketBase Sync Service ────────────────────────────────────────────
   // Desktop/mobile: try to auto sign-in from bundled config / settings override.
   // Web: build the service without credentials — user signs in via LoginScreen.
@@ -89,6 +133,7 @@ Future<void> main() async {
     runningTimerRepository: runningTimerRepository,
     monthlyHoursTargetRepository: monthlyHoursTargetRepository,
     settingsRepository: settingsRepository,
+    deletionJournal: deletionJournal,
   );
 
   // ── Desktop Window Manager & System Tray ───────────────────────────────
@@ -119,6 +164,10 @@ Future<void> main() async {
         standaloneInvoiceRepository: standaloneInvoiceRepository,
         systemTrayService: systemTrayService,
         pocketBaseSyncService: pocketBaseSyncService,
+        backupService: backupService,
+        snapshotService: snapshotService,
+        snapshotDiffService: snapshotDiffService,
+        deletionJournal: deletionJournal,
       ),
     ),
   );
@@ -138,6 +187,7 @@ Future<PocketBaseSyncService?> _initPocketBaseSyncService({
   required RunningTimerRepository runningTimerRepository,
   required MonthlyHoursTargetRepository monthlyHoursTargetRepository,
   required SettingsRepository settingsRepository,
+  required DeletionJournalService deletionJournal,
 }) async {
   PocketBaseSyncService? service;
 
@@ -156,7 +206,7 @@ Future<PocketBaseSyncService?> _initPocketBaseSyncService({
       runningTimerRepo: runningTimerRepository,
       monthlyTargetRepo: monthlyHoursTargetRepository,
       settingsRepo: settingsRepository,
-    );
+    )..attachJournal(deletionJournal);
     // If a token was persisted (e.g. AsyncAuthStore in the future), listeners
     // could be started here. For now we always require explicit login on web.
     return service;
@@ -174,7 +224,7 @@ Future<PocketBaseSyncService?> _initPocketBaseSyncService({
     runningTimerRepo: runningTimerRepository,
     monthlyTargetRepo: monthlyHoursTargetRepository,
     settingsRepo: settingsRepository,
-  );
+  )..attachJournal(deletionJournal);
 
   final error = await service.signIn(pbConfig.email, pbConfig.password);
   if (error == null) {

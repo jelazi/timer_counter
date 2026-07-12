@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/backup_service.dart';
+import '../../core/services/daily_snapshot_service.dart';
 import '../../core/services/pocketbase_config.dart';
 import '../../core/services/pocketbase_sync_service.dart';
 import '../../core/services/tyme_data_import_service.dart';
@@ -21,7 +22,6 @@ import '../../data/models/monthly_hours_target_model.dart';
 import '../../data/repositories/category_repository.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
 import '../../data/repositories/project_repository.dart';
-import '../../data/repositories/running_timer_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
@@ -30,6 +30,7 @@ import '../blocs/settings/settings_event.dart';
 import '../blocs/settings/settings_state.dart';
 import '../blocs/timer/timer_bloc.dart';
 import '../blocs/timer/timer_event.dart';
+import 'backup_history_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -454,6 +455,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
+
+                        // Automatic local snapshots (not available on web — no filesystem)
+                        if (!PlatformUtils.isWeb) ...[
+                          _buildSectionTitle(context, tr('settings.snapshot_section')),
+                          const _SnapshotSettingsSection(),
+                          const SizedBox(height: 20),
+                        ],
 
                         // Reminders (desktop-only — uses native macOS notifications)
                         if (PlatformUtils.isDesktop) ...[
@@ -910,14 +918,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final filename = 'timer_counter_backup_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.json';
 
-      final backupService = BackupService(
-        timeEntryRepository: context.read<TimeEntryRepository>(),
-        projectRepository: context.read<ProjectRepository>(),
-        taskRepository: context.read<TaskRepository>(),
-        categoryRepository: context.read<CategoryRepository>(),
-        settingsRepository: context.read<SettingsRepository>(),
-        runningTimerRepository: context.read<RunningTimerRepository>(),
-      );
+      final backupService = context.read<BackupService>();
 
       if (PlatformUtils.isMobile) {
         // On mobile, write to temp dir then share
@@ -967,14 +968,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (result == null || result.files.single.path == null || !context.mounted) return;
 
     try {
-      final backupService = BackupService(
-        timeEntryRepository: context.read<TimeEntryRepository>(),
-        projectRepository: context.read<ProjectRepository>(),
-        taskRepository: context.read<TaskRepository>(),
-        categoryRepository: context.read<CategoryRepository>(),
-        settingsRepository: context.read<SettingsRepository>(),
-        runningTimerRepository: context.read<RunningTimerRepository>(),
-      );
+      final backupService = context.read<BackupService>();
 
       final restoreResult = await backupService.restoreBackup(result.files.single.path!);
       if (!context.mounted) return;
@@ -1044,14 +1038,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (confirmedAgain != true || !context.mounted) return;
 
     try {
-      final backupService = BackupService(
-        timeEntryRepository: context.read<TimeEntryRepository>(),
-        projectRepository: context.read<ProjectRepository>(),
-        taskRepository: context.read<TaskRepository>(),
-        categoryRepository: context.read<CategoryRepository>(),
-        settingsRepository: context.read<SettingsRepository>(),
-        runningTimerRepository: context.read<RunningTimerRepository>(),
-      );
+      final backupService = context.read<BackupService>();
 
       await backupService.deleteAllData();
       if (context.mounted) {
@@ -2212,6 +2199,71 @@ class _WorkTimeButton extends StatelessWidget {
           time,
           style: TextStyle(fontWeight: FontWeight.w500, color: enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)),
         ),
+      ),
+    );
+  }
+}
+
+/// Frequency and retention of the automatic local snapshots, plus the entry
+/// point to the snapshot history and deletion log.
+class _SnapshotSettingsSection extends StatefulWidget {
+  const _SnapshotSettingsSection();
+
+  @override
+  State<_SnapshotSettingsSection> createState() => _SnapshotSettingsSectionState();
+}
+
+class _SnapshotSettingsSectionState extends State<_SnapshotSettingsSection> {
+  @override
+  Widget build(BuildContext context) {
+    final settingsRepo = context.read<SettingsRepository>();
+    final frequency = SnapshotFrequency.parse(settingsRepo.getSnapshotFrequency());
+    final retention = settingsRepo.getSnapshotRetentionDays();
+
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.schedule),
+            title: Text(tr('settings.snapshot_frequency')),
+            subtitle: Text(tr('settings.snapshot_frequency_desc')),
+            trailing: DropdownButton<SnapshotFrequency>(
+              value: frequency,
+              underline: const SizedBox.shrink(),
+              items: SnapshotFrequency.values.map((f) => DropdownMenuItem(value: f, child: Text(tr(f.translationKey)))).toList(),
+              onChanged: (value) async {
+                if (value == null) return;
+                await settingsRepo.setSnapshotFrequency(value.name);
+                if (mounted) setState(() {});
+              },
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.auto_delete_outlined),
+            title: Text(tr('settings.snapshot_retention')),
+            trailing: DropdownButton<int>(
+              value: AppConstants.snapshotRetentionOptions.contains(retention) ? retention : AppConstants.defaultSnapshotRetentionDays,
+              underline: const SizedBox.shrink(),
+              items: AppConstants.snapshotRetentionOptions
+                  .map((days) => DropdownMenuItem(value: days, child: Text(tr('settings.snapshot_retention_days', namedArgs: {'days': '$days'}))))
+                  .toList(),
+              onChanged: (value) async {
+                if (value == null) return;
+                await settingsRepo.setSnapshotRetentionDays(value);
+                if (mounted) setState(() {});
+              },
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.history),
+            title: Text(tr('settings.backup_history')),
+            subtitle: Text(tr('settings.backup_history_desc')),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BackupHistoryScreen())),
+          ),
+        ],
       ),
     );
   }

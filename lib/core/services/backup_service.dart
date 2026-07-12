@@ -3,28 +3,37 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../data/models/category_model.dart';
 import '../../data/models/invoice_settings.dart';
+import '../../data/models/monthly_hours_target_model.dart';
 import '../../data/models/project_model.dart';
+import '../../data/models/standalone_invoice_model.dart';
 import '../../data/models/task_model.dart';
 import '../../data/models/time_entry_model.dart';
 import '../../data/repositories/category_repository.dart';
+import '../../data/repositories/monthly_hours_target_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/running_timer_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../data/repositories/standalone_invoice_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
 
 /// Service for full backup and restore of all application data including settings.
 class BackupService {
+  /// Bumped to 2 when monthly targets and standalone invoices were added to the
+  /// payload. Version 1 files restore fine — their missing keys read as empty.
+  static const int backupVersion = 2;
+
   final TimeEntryRepository _timeEntryRepository;
   final ProjectRepository _projectRepository;
   final TaskRepository _taskRepository;
   final CategoryRepository _categoryRepository;
   final SettingsRepository _settingsRepository;
   final RunningTimerRepository _runningTimerRepository;
+  final MonthlyHoursTargetRepository _monthlyTargetRepository;
+  final StandaloneInvoiceRepository _standaloneInvoiceRepository;
 
   BackupService({
     required TimeEntryRepository timeEntryRepository,
@@ -33,93 +42,42 @@ class BackupService {
     required CategoryRepository categoryRepository,
     required SettingsRepository settingsRepository,
     required RunningTimerRepository runningTimerRepository,
+    required MonthlyHoursTargetRepository monthlyTargetRepository,
+    required StandaloneInvoiceRepository standaloneInvoiceRepository,
   }) : _timeEntryRepository = timeEntryRepository,
        _projectRepository = projectRepository,
        _taskRepository = taskRepository,
        _categoryRepository = categoryRepository,
        _settingsRepository = settingsRepository,
-       _runningTimerRepository = runningTimerRepository;
+       _runningTimerRepository = runningTimerRepository,
+       _monthlyTargetRepository = monthlyTargetRepository,
+       _standaloneInvoiceRepository = standaloneInvoiceRepository;
 
-  /// Export a full backup of all application data to JSON.
-  /// Includes: categories, projects, tasks, time entries, and all settings.
-  Future<String> exportBackup({String? outputPath}) async {
-    final categories = _categoryRepository.getAll();
-    final projects = _projectRepository.getAll();
-    final tasks = _taskRepository.getAll();
-    final timeEntries = _timeEntryRepository.getAll();
-
-    final backup = {
-      'backup_version': 1,
+  /// Serialize the complete local dataset.
+  ///
+  /// Shared by the manual export and the automatic daily snapshots, so both
+  /// always capture exactly the same thing.
+  Map<String, dynamic> buildBackupMap() {
+    return {
+      'backup_version': backupVersion,
       'backup_date': DateTime.now().toIso8601String(),
       'app_version': '1.0.0',
-
-      // ── Categories ──
-      'categories': categories.map((c) => {'id': c.id, 'name': c.name, 'colorValue': c.colorValue, 'createdAt': c.createdAt.toIso8601String()}).toList(),
-
-      // ── Projects ──
-      'projects': projects
-          .map(
-            (p) => {
-              'id': p.id,
-              'name': p.name,
-              'categoryId': p.categoryId,
-              'colorValue': p.colorValue,
-              'hourlyRate': p.hourlyRate,
-              'plannedTimeHours': p.plannedTimeHours,
-              'plannedBudget': p.plannedBudget,
-              'startDate': p.startDate?.toIso8601String(),
-              'dueDate': p.dueDate?.toIso8601String(),
-              'notes': p.notes,
-              'isArchived': p.isArchived,
-              'isBillable': p.isBillable,
-              'createdAt': p.createdAt.toIso8601String(),
-            },
-          )
-          .toList(),
-
-      // ── Tasks ──
-      'tasks': tasks
-          .map(
-            (t) => {
-              'id': t.id,
-              'projectId': t.projectId,
-              'name': t.name,
-              'hourlyRate': t.hourlyRate,
-              'isBillable': t.isBillable,
-              'notes': t.notes,
-              'isArchived': t.isArchived,
-              'createdAt': t.createdAt.toIso8601String(),
-              'colorValue': t.colorValue,
-            },
-          )
-          .toList(),
-
-      // ── Time Entries ──
-      'time_entries': timeEntries
-          .map(
-            (e) => {
-              'id': e.id,
-              'projectId': e.projectId,
-              'taskId': e.taskId,
-              'startTime': e.startTime.toIso8601String(),
-              'endTime': e.endTime?.toIso8601String(),
-              'durationSeconds': e.durationSeconds,
-              'notes': e.notes,
-              'createdAt': e.createdAt.toIso8601String(),
-              'isBillable': e.isBillable,
-            },
-          )
-          .toList(),
-
-      // ── Settings ──
+      'categories': _categoryRepository.getAll().map((c) => c.toJson()).toList(),
+      'projects': _projectRepository.getAll().map((p) => p.toJson()).toList(),
+      'tasks': _taskRepository.getAll().map((t) => t.toJson()).toList(),
+      'time_entries': _timeEntryRepository.getAll().map((e) => e.toJson()).toList(),
+      'monthly_targets': _monthlyTargetRepository.getAll().map((m) => m.toJson()).toList(),
+      'standalone_invoices': _standaloneInvoiceRepository.getAll().map((i) => i.toJson()).toList(),
       'settings': _exportSettings(),
     };
+  }
 
-    final jsonOutput = const JsonEncoder.withIndent('  ').convert(backup);
+  /// Export a full backup of all application data to JSON.
+  Future<String> exportBackup({String? outputPath}) async {
+    final jsonOutput = const JsonEncoder.withIndent('  ').convert(buildBackupMap());
 
     final filePath = outputPath ?? await _getDefaultBackupPath();
-    final file = File(filePath);
-    await file.writeAsString(jsonOutput);
+    await File(filePath).writeAsString(jsonOutput);
 
     return filePath;
   }
@@ -132,119 +90,74 @@ class BackupService {
         return const BackupRestoreResult(error: 'File not found');
       }
 
-      final content = await file.readAsString();
-      final jsonData = jsonDecode(content);
+      final jsonData = jsonDecode(await file.readAsString());
 
       if (jsonData is! Map<String, dynamic>) {
         return const BackupRestoreResult(error: 'Invalid backup format');
       }
 
-      // Check for backup_version key to distinguish from regular export
+      // Distinguishes a backup from a plain data export.
       if (!jsonData.containsKey('backup_version')) {
         return const BackupRestoreResult(error: 'Not a backup file (missing backup_version)');
       }
 
-      // Clear all existing data
       await _clearAllData();
 
-      int catCount = 0, projCount = 0, taskCount = 0, entryCount = 0;
-
-      // ── Restore Categories ──
-      final categories = jsonData['categories'] as List<dynamic>? ?? [];
-      for (final c in categories) {
-        if (c is! Map<String, dynamic>) continue;
-        await _categoryRepository.add(
-          CategoryModel(
-            id: c['id'] as String? ?? const Uuid().v4(),
-            name: c['name'] as String? ?? '',
-            colorValue: c['colorValue'] as int? ?? 0xFF6366F1,
-            createdAt: DateTime.tryParse(c['createdAt'] as String? ?? '') ?? DateTime.now(),
-          ),
-        );
-        catCount++;
-      }
-
-      // ── Restore Projects ──
-      final projects = jsonData['projects'] as List<dynamic>? ?? [];
-      for (final p in projects) {
-        if (p is! Map<String, dynamic>) continue;
-        await _projectRepository.add(
-          ProjectModel(
-            id: p['id'] as String? ?? const Uuid().v4(),
-            name: p['name'] as String? ?? '',
-            categoryId: p['categoryId'] as String?,
-            colorValue: p['colorValue'] as int? ?? 0xFF6366F1,
-            hourlyRate: (p['hourlyRate'] as num?)?.toDouble() ?? 0.0,
-            plannedTimeHours: (p['plannedTimeHours'] as num?)?.toDouble() ?? 0.0,
-            plannedBudget: (p['plannedBudget'] as num?)?.toDouble() ?? 0.0,
-            startDate: p['startDate'] != null ? DateTime.tryParse(p['startDate'] as String) : null,
-            dueDate: p['dueDate'] != null ? DateTime.tryParse(p['dueDate'] as String) : null,
-            notes: p['notes'] as String? ?? '',
-            isArchived: p['isArchived'] as bool? ?? false,
-            isBillable: p['isBillable'] as bool? ?? true,
-            createdAt: DateTime.tryParse(p['createdAt'] as String? ?? '') ?? DateTime.now(),
-          ),
-        );
-        projCount++;
-      }
-
-      // ── Restore Tasks ──
-      final tasks = jsonData['tasks'] as List<dynamic>? ?? [];
-      for (final t in tasks) {
-        if (t is! Map<String, dynamic>) continue;
-        await _taskRepository.add(
-          TaskModel(
-            id: t['id'] as String? ?? const Uuid().v4(),
-            projectId: t['projectId'] as String? ?? '',
-            name: t['name'] as String? ?? '',
-            hourlyRate: (t['hourlyRate'] as num?)?.toDouble(),
-            isBillable: t['isBillable'] as bool? ?? true,
-            notes: t['notes'] as String? ?? '',
-            isArchived: t['isArchived'] as bool? ?? false,
-            createdAt: DateTime.tryParse(t['createdAt'] as String? ?? '') ?? DateTime.now(),
-            colorValue: t['colorValue'] as int? ?? 0xFF6366F1,
-          ),
-        );
-        taskCount++;
-      }
-
-      // ── Restore Time Entries ──
-      final entries = jsonData['time_entries'] as List<dynamic>? ?? [];
-      for (final e in entries) {
-        if (e is! Map<String, dynamic>) continue;
-        await _timeEntryRepository.add(
-          TimeEntryModel(
-            id: e['id'] as String? ?? const Uuid().v4(),
-            projectId: e['projectId'] as String? ?? '',
-            taskId: e['taskId'] as String? ?? '',
-            startTime: DateTime.tryParse(e['startTime'] as String? ?? '') ?? DateTime.now(),
-            endTime: e['endTime'] != null ? DateTime.tryParse(e['endTime'] as String) : null,
-            durationSeconds: e['durationSeconds'] as int? ?? 0,
-            notes: e['notes'] as String? ?? '',
-            createdAt: DateTime.tryParse(e['createdAt'] as String? ?? '') ?? DateTime.now(),
-            isBillable: e['isBillable'] as bool? ?? true,
-          ),
-        );
-        entryCount++;
-      }
-
-      // ── Restore Settings ──
-      final settings = jsonData['settings'] as Map<String, dynamic>?;
-      if (settings != null) {
-        await _restoreSettings(settings);
-      }
-
-      return BackupRestoreResult(
-        categoriesRestored: catCount,
-        projectsRestored: projCount,
-        tasksRestored: taskCount,
-        entriesRestored: entryCount,
-        settingsRestored: settings != null,
-      );
+      final result = await applyBackupMap(jsonData);
+      return result;
     } catch (e) {
       debugPrint('Backup restore error: $e');
       return BackupRestoreResult(error: e.toString());
     }
+  }
+
+  /// Write the contents of a backup/snapshot map into the repositories.
+  ///
+  /// Does NOT clear existing data first — callers decide whether this is a
+  /// wholesale restore or a merge (as the snapshot recovery flow needs).
+  Future<BackupRestoreResult> applyBackupMap(Map<String, dynamic> jsonData) async {
+    int catCount = 0, projCount = 0, taskCount = 0, entryCount = 0, targetCount = 0, invoiceCount = 0;
+
+    for (final c in _mapsIn(jsonData['categories'])) {
+      await _categoryRepository.add(CategoryModel.fromJson(c));
+      catCount++;
+    }
+    for (final p in _mapsIn(jsonData['projects'])) {
+      await _projectRepository.add(ProjectModel.fromJson(p));
+      projCount++;
+    }
+    for (final t in _mapsIn(jsonData['tasks'])) {
+      await _taskRepository.add(TaskModel.fromJson(t));
+      taskCount++;
+    }
+    for (final e in _mapsIn(jsonData['time_entries'])) {
+      await _timeEntryRepository.add(TimeEntryModel.fromJson(e));
+      entryCount++;
+    }
+    // Absent in version 1 backups.
+    for (final m in _mapsIn(jsonData['monthly_targets'])) {
+      await _monthlyTargetRepository.add(MonthlyHoursTargetModel.fromJson(m));
+      targetCount++;
+    }
+    for (final i in _mapsIn(jsonData['standalone_invoices'])) {
+      await _standaloneInvoiceRepository.add(StandaloneInvoiceModel.fromJson(i));
+      invoiceCount++;
+    }
+
+    final settings = jsonData['settings'] as Map<String, dynamic>?;
+    if (settings != null) {
+      await _restoreSettings(settings);
+    }
+
+    return BackupRestoreResult(
+      categoriesRestored: catCount,
+      projectsRestored: projCount,
+      tasksRestored: taskCount,
+      entriesRestored: entryCount,
+      targetsRestored: targetCount,
+      invoicesRestored: invoiceCount,
+      settingsRestored: settings != null,
+    );
   }
 
   /// Delete all application data (categories, projects, tasks, time entries, running timers).
@@ -260,6 +173,13 @@ class BackupService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+
+  Iterable<Map<String, dynamic>> _mapsIn(dynamic value) sync* {
+    if (value is! List) return;
+    for (final item in value) {
+      if (item is Map) yield item.cast<String, dynamic>();
+    }
+  }
 
   Map<String, dynamic> _exportSettings() {
     return {
@@ -391,26 +311,16 @@ class BackupService {
   }
 
   Future<void> _clearAllData() async {
-    // Stop running timers
     await _runningTimerRepository.stopAll();
 
-    // Clear in reverse dependency order
-    final allEntries = _timeEntryRepository.getAll();
-    for (final entry in allEntries) {
-      await _timeEntryRepository.delete(entry.id);
-    }
-    final allTasks = _taskRepository.getAll();
-    for (final task in allTasks) {
-      await _taskRepository.delete(task.id);
-    }
-    final allProjects = _projectRepository.getAll();
-    for (final project in allProjects) {
-      await _projectRepository.delete(project.id);
-    }
-    final allCategories = _categoryRepository.getAll();
-    for (final category in allCategories) {
-      await _categoryRepository.delete(category.id);
-    }
+    // `deleteAll` journals every record as a bulk clear, so a restore that turns
+    // out to be the wrong file can still be undone from the deletion journal.
+    await _timeEntryRepository.deleteAll();
+    await _taskRepository.deleteAll();
+    await _projectRepository.deleteAll();
+    await _categoryRepository.deleteAll();
+    await _monthlyTargetRepository.deleteAll();
+    await _standaloneInvoiceRepository.deleteAll();
   }
 
   Future<void> _clearSettings() async {
@@ -450,12 +360,23 @@ class BackupRestoreResult {
   final int projectsRestored;
   final int tasksRestored;
   final int entriesRestored;
+  final int targetsRestored;
+  final int invoicesRestored;
   final bool settingsRestored;
   final String? error;
 
-  const BackupRestoreResult({this.categoriesRestored = 0, this.projectsRestored = 0, this.tasksRestored = 0, this.entriesRestored = 0, this.settingsRestored = false, this.error});
+  const BackupRestoreResult({
+    this.categoriesRestored = 0,
+    this.projectsRestored = 0,
+    this.tasksRestored = 0,
+    this.entriesRestored = 0,
+    this.targetsRestored = 0,
+    this.invoicesRestored = 0,
+    this.settingsRestored = false,
+    this.error,
+  });
 
   bool get hasError => error != null;
 
-  int get total => categoriesRestored + projectsRestored + tasksRestored + entriesRestored;
+  int get total => categoriesRestored + projectsRestored + tasksRestored + entriesRestored + targetsRestored + invoicesRestored;
 }

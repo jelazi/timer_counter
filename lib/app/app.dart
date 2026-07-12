@@ -1,9 +1,15 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:provider/provider.dart';
 
+import '../core/services/backup_service.dart';
+import '../core/services/daily_snapshot_service.dart';
+import '../core/services/deletion_journal_service.dart';
 import '../core/services/pocketbase_sync_service.dart';
+import '../core/services/snapshot_diff_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/utils/platform_utils.dart';
 import '../core/utils/time_formatter.dart';
@@ -28,6 +34,7 @@ import '../presentation/blocs/task/task_event.dart';
 import '../presentation/blocs/timer/timer_bloc.dart';
 import '../presentation/blocs/timer/timer_event.dart';
 import '../presentation/blocs/timer/timer_state.dart';
+import '../presentation/screens/backup_history_screen.dart';
 import '../presentation/widgets/auth_gate.dart';
 import 'system_tray_service.dart';
 
@@ -42,6 +49,10 @@ class TymeApp extends StatelessWidget {
   final StandaloneInvoiceRepository standaloneInvoiceRepository;
   final SystemTrayService? systemTrayService;
   final PocketBaseSyncService? pocketBaseSyncService;
+  final BackupService backupService;
+  final DailySnapshotService snapshotService;
+  final SnapshotDiffService snapshotDiffService;
+  final DeletionJournalService deletionJournal;
 
   const TymeApp({
     super.key,
@@ -53,6 +64,10 @@ class TymeApp extends StatelessWidget {
     required this.settingsRepository,
     required this.monthlyHoursTargetRepository,
     required this.standaloneInvoiceRepository,
+    required this.backupService,
+    required this.snapshotService,
+    required this.snapshotDiffService,
+    required this.deletionJournal,
     this.systemTrayService,
     this.pocketBaseSyncService,
   });
@@ -71,6 +86,10 @@ class TymeApp extends StatelessWidget {
         Provider<StandaloneInvoiceRepository>.value(value: standaloneInvoiceRepository),
         if (systemTrayService != null) Provider<SystemTrayService>.value(value: systemTrayService!),
         Provider<PocketBaseSyncService?>.value(value: pocketBaseSyncService),
+        Provider<BackupService>.value(value: backupService),
+        Provider<DailySnapshotService>.value(value: snapshotService),
+        Provider<SnapshotDiffService>.value(value: snapshotDiffService),
+        Provider<DeletionJournalService>.value(value: deletionJournal),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -98,7 +117,12 @@ class TymeApp extends StatelessWidget {
           BlocProvider<SettingsBloc>(create: (context) => SettingsBloc(settingsRepository: settingsRepository)..add(LoadSettings())),
           BlocProvider<StandaloneInvoiceBloc>(create: (context) => StandaloneInvoiceBloc(repository: standaloneInvoiceRepository)..add(const LoadStandaloneInvoices())),
         ],
-        child: _AppWithTheme(settingsRepository: settingsRepository, systemTrayService: systemTrayService, pocketBaseSyncService: pocketBaseSyncService),
+        child: _AppWithTheme(
+          settingsRepository: settingsRepository,
+          systemTrayService: systemTrayService,
+          pocketBaseSyncService: pocketBaseSyncService,
+          snapshotService: snapshotService,
+        ),
       ),
     );
   }
@@ -108,22 +132,33 @@ class _AppWithTheme extends StatefulWidget {
   final SettingsRepository settingsRepository;
   final SystemTrayService? systemTrayService;
   final PocketBaseSyncService? pocketBaseSyncService;
+  final DailySnapshotService snapshotService;
 
-  const _AppWithTheme({required this.settingsRepository, this.systemTrayService, this.pocketBaseSyncService});
+  const _AppWithTheme({required this.settingsRepository, required this.snapshotService, this.systemTrayService, this.pocketBaseSyncService});
 
   @override
   State<_AppWithTheme> createState() => _AppWithThemeState();
 }
 
 class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserver {
+  /// Lets the guard banner reach a Scaffold no matter which screen is on top.
+  final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
+
+  StreamSubscription<SyncGuardReport>? _guardSubscription;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Sync refused to apply a mass deletion. Never silently swallow this — it
+    // means the local and remote stores disagree about data that still exists.
+    _guardSubscription = widget.pocketBaseSyncService?.onGuardTriggered.listen(_showGuardWarning);
   }
 
   @override
   void dispose() {
+    _guardSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -133,8 +168,36 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
     // Mobile suspends the real-time SSE connection while backgrounded, so on
     // resume we reconnect and pull anything changed while we were away.
     if (state == AppLifecycleState.resumed) {
-      widget.pocketBaseSyncService?.resync();
+      _resumeAndResync();
     }
+  }
+
+  /// Snapshot first, then sync — the app can run for days without restarting,
+  /// so this is the only chance to capture a clean state before a resync that
+  /// might reconcile records away.
+  Future<void> _resumeAndResync() async {
+    await widget.snapshotService.takeSnapshotIfDue();
+    await widget.pocketBaseSyncService?.resync();
+  }
+
+  void _showGuardWarning(SyncGuardReport report) {
+    _messengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(tr('sync.guard_blocked', namedArgs: {'count': '${report.blockedDeletions}', 'collection': report.collection})),
+        backgroundColor: Colors.orange.shade800,
+        duration: const Duration(seconds: 10),
+        action: SnackBarAction(
+          label: tr('sync.guard_review'),
+          textColor: Colors.white,
+          onPressed: () {
+            final context = _messengerKey.currentContext;
+            if (context != null) {
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BackupHistoryScreen()));
+            }
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -157,6 +220,7 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
         return MaterialApp(
           title: 'Timer Counter',
           debugShowCheckedModeBanner: false,
+          scaffoldMessengerKey: _messengerKey,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: mode,

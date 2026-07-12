@@ -1,6 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:hive_ce/hive.dart';
 
+import '../../core/utils/json_utils.dart';
+
 part 'project_model.g.dart';
 
 @HiveType(typeId: 1)
@@ -94,6 +96,38 @@ class ProjectModel extends Equatable {
       createdAt: createdAt ?? this.createdAt,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'categoryId': categoryId,
+    'colorValue': colorValue,
+    'hourlyRate': hourlyRate,
+    'plannedTimeHours': plannedTimeHours,
+    'plannedBudget': plannedBudget,
+    'startDate': startDate?.toIso8601String(),
+    'dueDate': dueDate?.toIso8601String(),
+    'notes': notes,
+    'isArchived': isArchived,
+    'isBillable': isBillable,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory ProjectModel.fromJson(Map<String, dynamic> json) => ProjectModel(
+    id: parseString(json['id']),
+    name: parseString(json['name']),
+    categoryId: json['categoryId'] == null ? null : parseString(json['categoryId']),
+    colorValue: parseInt(json['colorValue']),
+    hourlyRate: parseDouble(json['hourlyRate']),
+    plannedTimeHours: parseDouble(json['plannedTimeHours']),
+    plannedBudget: parseDouble(json['plannedBudget']),
+    startDate: parseDateOrNull(json['startDate']),
+    dueDate: parseDateOrNull(json['dueDate']),
+    notes: parseString(json['notes']),
+    isArchived: parseBool(json['isArchived']),
+    isBillable: parseBool(json['isBillable'], fallback: true),
+    createdAt: parseDate(json['createdAt']),
+  );
 
   @override
   List<Object?> get props => [id, name, categoryId, colorValue, hourlyRate, plannedTimeHours, plannedBudget, startDate, dueDate, notes, isArchived, isBillable, createdAt];

@@ -1,5 +1,50 @@
 # Development Log
 
+## 2026-07-12 — fix: stop sync from silently deleting local data; add daily snapshots and a deletion journal
+
+### What was fixed
+
+The user lost several days of time entries without deleting anything. This turned out to be a reproducible bug in `PocketBaseSyncService`, not a fluke:
+
+1. `downloadAll()` runs on **every app resume** (`resync()` from `didChangeAppLifecycleState` in `lib/app/app.dart`) and on startup (`main.dart`).
+2. It called `_replaceLocal()`, which **deletes every local record whose id is absent from the downloaded remote list**.
+3. `_downloadCollection()` had no integrity check. It paginated with `while(true)` / `break` on `items.length < 200` and never verified the result against the server's `totalItems`. A network fault mid-pagination threw only *after* earlier collections had already been reconciled against a truncated download; and a short read that returned no error at all silently trimmed local data to match.
+4. A later `uploadAll()` → `_replaceRemote()` then deleted the now-"orphaned" records server-side too, so the data was gone on both sides.
+
+Three fixes, applied together:
+
+**1. Sync (`lib/core/services/pocketbase_sync_service.dart`)**
+- `_downloadCollection()` now compares the collected record count against `ResultList.totalItems` and throws `StateError` on mismatch. A short read can no longer masquerade as "the server has fewer records".
+- `downloadAll()` rewritten into two strict phases: phase 1 fetches all 7 collections into memory (any failure → `SyncResult(error:)` with **zero writes to Hive**); phase 2 applies them. Previously collections were applied as they streamed in.
+- New `SyncGuard.blocks()` refuses implausible reconcile deletions: an empty remote while local holds data (the failed-fetch signature), or a deletion batch over 30 % of the collection with an absolute floor of 10 (so deleting 2 of 3 projects still works). Applied to both `_replaceLocal()` and `_replaceRemote()` — a corrupted local store must not wipe a healthy server either.
+- Blocked reconciles are published on a new `Stream<SyncGuardReport> onGuardTriggered`; `app.dart` shows an orange SnackBar with a "Review" action instead of losing data silently.
+
+**2. Daily snapshots**
+- New `lib/core/services/daily_snapshot_service.dart` — writes a full JSON copy of the dataset to `getApplicationSupportDirectory()/snapshots/snapshot_YYYY-MM-DD.json`. Frequency is configurable (off / every launch / daily / weekly, default daily); retention is configurable (default 30 days) plus first-of-month snapshots kept for 12 months.
+- **Ordering is load-bearing:** `takeSnapshotIfDue()` runs in `main.dart` *before* `_initPocketBaseSyncService()`, and in `app.dart` *before* `resync()`. A snapshot taken after sync would only record the damage. Because at most one snapshot is written per day, a post-sync corrupted state cannot overwrite the good snapshot taken earlier that day.
+- New `lib/core/services/snapshot_diff_service.dart` — compares a snapshot against the live store by id, groups missing time entries by tracked day, and restores them. Parent projects/tasks are always restored even when their day isn't selected, otherwise a recovered entry would point at a deleted project. Restore optionally pushes back to PocketBase (user choice in the UI), since a local-only restore would just be deleted by the next reconcile.
+
+**3. Deletion journal**
+- New `lib/core/services/deletion_journal_service.dart` — append-only JSONL at `getApplicationSupportDirectory()/journal/deletions-YYYY-MM.jsonl`, one line per deleted record with its **full payload** and a `DeleteSource` (`userAction` / `cascade` / `syncRealtime` / `syncReconcile` / `bulkClear`). Anything deleted is reconstructable even if it never made it into a snapshot. 6-month retention.
+- Hooked in at the **repository** level (all 6 repos' `delete()` / `deleteAll()` / `deleteBy*()`), not at call sites — that's the single chokepoint every deletion passes through, so nothing can be missed. Sync attributes its own deletions via `journal.withSource(...)`.
+- Running timers are deliberately **not** journalled: stopping a timer is a normal delete on every single stop and would drown the log in noise.
+
+### What was done (supporting changes)
+- Added `toJson()` / `fromJson()` to `CategoryModel`, `ProjectModel`, `TaskModel`, `TimeEntryModel`, `MonthlyHoursTargetModel`, `StandaloneInvoiceModel` with the camelCase keys the existing backup format already used (so backup files stay compatible). Serialization had been hand-duplicated across `backup_service`, `tyme_export_service` and `pocketbase_sync_service`; backup/snapshot/journal now share one implementation. New `lib/core/utils/json_utils.dart` holds lenient parse helpers — a malformed field must never cost the rest of a record.
+- `BackupService`: extracted `buildBackupMap()` (shared with snapshots), added the previously **missing** `monthly_targets` and `standalone_invoices` to the payload (invoices don't sync to PocketBase at all, so they were the most exposed data in the app), bumped `backup_version` to 2 with v1 files still restoring. It was being constructed ad-hoc 3× inside `settings_screen.dart`; now built once in `main.dart` and provided via `Provider<BackupService>`.
+- New `lib/presentation/screens/backup_history_screen.dart` — two tabs: snapshot list (compare against current data → per-day diff of what's missing → selective restore with an "also upload to server" switch) and the deletion log (each entry showing what deleted it, with per-record restore).
+- Settings gained an "Automatic local snapshots" section (frequency, retention, link to the new screen). New keys in `app_constants.dart` + accessors in `settings_repository.dart`. Translations added to `en.json` and `cs.json`.
+
+### Current state
+- `flutter analyze`: no new issues. 4 pre-existing infos remain in `work_reminder_service.dart` and `standalone_invoices_screen.dart` (untouched files).
+- `flutter test`: 20/20 passing. New: `test/core/services/sync_guard_test.dart` (threshold behaviour incl. the empty-remote and 30 %-boundary cases) and `test/core/services/snapshot_diff_service_test.dart` (loss detection, day grouping, selective restore, parent restoration, JSON round-trip, malformed-record tolerance).
+- Verified on macOS that the snapshot file is written to Application Support on launch.
+
+### Pending / next steps
+- Not yet exercised against a live PocketBase server: the guard path (stop the server mid-`resync()` and confirm zero local deletions) and a real recovery (delete records in the PB admin, confirm the banner + restore round-trip).
+- Web build not re-verified; the new services no-op on web via `PlatformUtils.isWeb`, but `flutter build web` should be run before release.
+- The core models still have no `updatedAt`/`deletedAt`, so there is still no true last-write-wins conflict resolution — the guards make data loss loud rather than making concurrent edits correct.
+
 ## 2026-06-12 — Flutter Web target with mandatory PocketBase login
 
 ### What was done

@@ -1,6 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:hive_ce/hive.dart';
 
+import '../../core/utils/json_utils.dart';
+
 part 'task_model.g.dart';
 
 @HiveType(typeId: 2)
@@ -68,6 +70,30 @@ class TaskModel extends Equatable {
       colorValue: colorValue ?? this.colorValue,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'projectId': projectId,
+    'name': name,
+    'hourlyRate': hourlyRate,
+    'isBillable': isBillable,
+    'notes': notes,
+    'isArchived': isArchived,
+    'createdAt': createdAt.toIso8601String(),
+    'colorValue': colorValue,
+  };
+
+  factory TaskModel.fromJson(Map<String, dynamic> json) => TaskModel(
+    id: parseString(json['id']),
+    projectId: parseString(json['projectId']),
+    name: parseString(json['name']),
+    hourlyRate: parseDoubleOrNull(json['hourlyRate']),
+    isBillable: parseBool(json['isBillable'], fallback: true),
+    notes: parseString(json['notes']),
+    isArchived: parseBool(json['isArchived']),
+    createdAt: parseDate(json['createdAt']),
+    colorValue: parseInt(json['colorValue'], fallback: 0xFF6366F1),
+  );
 
   @override
   List<Object?> get props => [

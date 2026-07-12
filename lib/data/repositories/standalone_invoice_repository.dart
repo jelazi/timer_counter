@@ -1,16 +1,21 @@
 import 'package:hive_ce/hive.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/services/deletion_journal_service.dart';
 import '../models/standalone_invoice_model.dart';
 
 class StandaloneInvoiceRepository {
   late Box<StandaloneInvoiceModel> _box;
   late Box<dynamic> _settingsBox;
+  DeletionJournalService? _journal;
 
   Future<void> init() async {
     _box = await Hive.openBox<StandaloneInvoiceModel>(AppConstants.standaloneInvoicesBox);
     _settingsBox = await Hive.openBox(AppConstants.settingsBox);
   }
+
+  /// Record every deletion made through this repository into [journal].
+  void attachJournal(DeletionJournalService journal) => _journal = journal;
 
   /// Get all invoices (both standalone and time-based), sorted by invoice number descending.
   List<StandaloneInvoiceModel> getAll() {
@@ -44,7 +49,18 @@ class StandaloneInvoiceRepository {
   }
 
   Future<void> delete(String id) async {
+    final invoice = _box.get(id);
+    if (invoice != null) {
+      _journal?.record(AppConstants.standaloneInvoicesBox, id, invoice.toJson());
+    }
     await _box.delete(id);
+  }
+
+  Future<void> deleteAll() async {
+    for (final invoice in _box.values.toList()) {
+      _journal?.record(AppConstants.standaloneInvoicesBox, invoice.id, invoice.toJson(), source: DeleteSource.bulkClear);
+    }
+    await _box.clear();
   }
 
   /// Get all invoice numbers currently in use.

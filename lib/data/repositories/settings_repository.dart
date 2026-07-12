@@ -290,6 +290,19 @@ class SettingsRepository {
     return (endMinutes - startMinutes) / 60.0;
   }
 
+  // === Local Snapshot Backups ===
+
+  /// How often an automatic local snapshot is taken: 'off', 'launch', 'daily', 'weekly'.
+  String getSnapshotFrequency() => _box.get(AppConstants.snapshotFrequency, defaultValue: AppConstants.defaultSnapshotFrequency) as String;
+  Future<void> setSnapshotFrequency(String value) => _box.put(AppConstants.snapshotFrequency, value);
+
+  int getSnapshotRetentionDays() => _box.get(AppConstants.snapshotRetentionDays, defaultValue: AppConstants.defaultSnapshotRetentionDays) as int;
+  Future<void> setSnapshotRetentionDays(int value) => _box.put(AppConstants.snapshotRetentionDays, value);
+
+  /// Date of the most recent snapshot as 'YYYY-MM-DD', or empty if none taken.
+  String getLastSnapshotDate() => _box.get(AppConstants.lastSnapshotDate, defaultValue: '') as String;
+  Future<void> setLastSnapshotDate(String value) => _box.put(AppConstants.lastSnapshotDate, value);
+
   // === Day Overrides (per specific date) ===
   // 'off' = vacation/day off (normally a work day but won't work)
   // 'work' = extra work day (normally not a work day but will work)

@@ -1,6 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:hive_ce/hive.dart';
 
+import '../../core/utils/json_utils.dart';
+
 part 'standalone_invoice_model.g.dart';
 
 /// A single line item on a standalone invoice.
@@ -195,6 +197,55 @@ class StandaloneInvoiceModel extends Equatable {
     invoiceType: invoiceType ?? this.invoiceType,
     sourceProjectIds: sourceProjectIds ?? this.sourceProjectIds,
   );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'invoiceNumber': invoiceNumber,
+    'issueDate': issueDate.toIso8601String(),
+    'dueDate': dueDate.toIso8601String(),
+    'taxDate': taxDate.toIso8601String(),
+    'supplierJson': supplierJson,
+    'customerJson': customerJson,
+    'lineItems': lineItems.map((i) => i.toJson()).toList(),
+    'bankName': bankName,
+    'bankCode': bankCode,
+    'swift': swift,
+    'accountNumber': accountNumber,
+    'iban': iban,
+    'issuerName': issuerName,
+    'issuerEmail': issuerEmail,
+    'notes': notes,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'invoiceType': invoiceType,
+    'sourceProjectIds': sourceProjectIds,
+  };
+
+  factory StandaloneInvoiceModel.fromJson(Map<String, dynamic> json) {
+    final createdAt = parseDate(json['createdAt']);
+    return StandaloneInvoiceModel(
+      id: parseString(json['id']),
+      invoiceNumber: parseInt(json['invoiceNumber']),
+      issueDate: parseDate(json['issueDate']),
+      dueDate: parseDate(json['dueDate']),
+      taxDate: parseDate(json['taxDate']),
+      supplierJson: parseMap(json['supplierJson']),
+      customerJson: parseMap(json['customerJson']),
+      lineItems: (json['lineItems'] as List?)?.whereType<Map>().map(InvoiceLineItem.fromJson).toList() ?? const [],
+      bankName: parseString(json['bankName']),
+      bankCode: parseString(json['bankCode']),
+      swift: parseString(json['swift']),
+      accountNumber: parseString(json['accountNumber']),
+      iban: parseString(json['iban']),
+      issuerName: parseString(json['issuerName']),
+      issuerEmail: parseString(json['issuerEmail']),
+      notes: parseString(json['notes']),
+      createdAt: createdAt,
+      updatedAt: parseDateOrNull(json['updatedAt']) ?? createdAt,
+      invoiceType: parseString(json['invoiceType'], fallback: 'standalone'),
+      sourceProjectIds: parseStringList(json['sourceProjectIds']),
+    );
+  }
 
   @override
   List<Object?> get props => [

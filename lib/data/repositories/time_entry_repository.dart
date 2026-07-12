@@ -1,13 +1,28 @@
 import 'package:hive_ce/hive.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/services/deletion_journal_service.dart';
 import '../models/time_entry_model.dart';
 
 class TimeEntryRepository {
   late Box<TimeEntryModel> _box;
+  DeletionJournalService? _journal;
 
   Future<void> init() async {
     _box = await Hive.openBox<TimeEntryModel>(AppConstants.timeEntriesBox);
+  }
+
+  /// Record every deletion made through this repository into [journal].
+  void attachJournal(DeletionJournalService journal) => _journal = journal;
+
+  /// Journal a record's full payload before it is removed, so it can be
+  /// reconstructed later regardless of what triggered the delete.
+  Future<void> _deleteAndJournal(String id, {DeleteSource? source}) async {
+    final entry = _box.get(id);
+    if (entry != null) {
+      _journal?.record(AppConstants.timeEntriesBox, id, entry.toJson(), source: source);
+    }
+    await _box.delete(id);
   }
 
   List<TimeEntryModel> getAll() {
@@ -65,24 +80,27 @@ class TimeEntryRepository {
   }
 
   Future<void> delete(String id) async {
-    await _box.delete(id);
+    await _deleteAndJournal(id);
   }
 
   Future<void> deleteByProject(String projectId) async {
     final entries = getByProject(projectId);
     for (final entry in entries) {
-      await _box.delete(entry.id);
+      await _deleteAndJournal(entry.id, source: DeleteSource.cascade);
     }
   }
 
   Future<void> deleteByTask(String taskId) async {
     final entries = getByTask(taskId);
     for (final entry in entries) {
-      await _box.delete(entry.id);
+      await _deleteAndJournal(entry.id, source: DeleteSource.cascade);
     }
   }
 
   Future<void> deleteAll() async {
+    for (final entry in _box.values.toList()) {
+      _journal?.record(AppConstants.timeEntriesBox, entry.id, entry.toJson(), source: DeleteSource.bulkClear);
+    }
     await _box.clear();
   }
 

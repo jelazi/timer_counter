@@ -78,6 +78,15 @@ class AppConstants {
   // Day Overrides (per date: 'off' = vacation/holiday, 'work' = extra work day)
   static const String dayOverridePrefix = 'day_override';
 
+  // Local Snapshot Backups
+  static const String snapshotFrequency = 'snapshot_frequency';
+  static const String snapshotRetentionDays = 'snapshot_retention_days';
+  static const String lastSnapshotDate = 'last_snapshot_date';
+
+  static const String defaultSnapshotFrequency = 'daily';
+  static const int defaultSnapshotRetentionDays = 30;
+  static const List<int> snapshotRetentionOptions = [7, 14, 30, 60, 90];
+
   // PocketBase Sync Keys
   static const String pocketBaseUrl = 'pocketbase_url';
   static const String pocketBaseEmail = 'pocketbase_email';

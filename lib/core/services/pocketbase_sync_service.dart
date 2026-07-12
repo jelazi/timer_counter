@@ -17,6 +17,7 @@ import '../../data/repositories/running_timer_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
+import 'deletion_journal_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enums & Result types
@@ -74,6 +75,65 @@ class SyncResult {
   int get total => projectsSynced + tasksSynced + timeEntriesSynced + categoriesSynced + runningTimersSynced + monthlyTargetsSynced + dayOverridesSynced;
 }
 
+/// A reconciliation that wanted to delete an implausible number of records and
+/// was refused.
+///
+/// Sync reconciliation treats "absent on the other side" as "deleted". That is
+/// indistinguishable from "the other side failed to report it", which is how a
+/// network fault silently destroys data. When a reconcile wants to remove a
+/// large fraction of a collection we assume the other side is wrong, keep the
+/// records, and surface this report so the user can decide.
+@immutable
+class SyncGuardReport {
+  /// Logical collection the deletions were blocked in.
+  final String collection;
+
+  /// Number of records the reconcile wanted to delete.
+  final int blockedDeletions;
+
+  /// Number of records the collection held locally at the time.
+  final int localCount;
+
+  /// Number of records the other side reported.
+  final int remoteCount;
+
+  /// True when the reconcile ran the other way (local → remote).
+  final bool remoteSide;
+
+  const SyncGuardReport({
+    required this.collection,
+    required this.blockedDeletions,
+    required this.localCount,
+    required this.remoteCount,
+    this.remoteSide = false,
+  });
+}
+
+/// Deletion thresholds above which a reconcile is treated as data loss, not intent.
+class SyncGuard {
+  SyncGuard._();
+
+  /// Never auto-delete more than this fraction of a collection.
+  static const double maxDeleteFraction = 0.3;
+
+  /// Small collections need an absolute floor: deleting 2 of 3 projects is 66 %
+  /// but perfectly normal. Below this count, fraction rules don't apply.
+  static const int minDeletesBeforeGuard = 10;
+
+  /// True when deleting [deleteCount] of [localCount] records is implausible
+  /// enough that it more likely reflects a failed fetch than a real deletion.
+  static bool blocks({required int deleteCount, required int localCount, required int remoteCount}) {
+    if (deleteCount == 0) return false;
+
+    // An empty other side while we hold data is never a legitimate reconcile —
+    // it is what a failed or unauthorized fetch looks like.
+    if (remoteCount == 0 && localCount > 0) return true;
+
+    if (deleteCount < minDeletesBeforeGuard) return false;
+    return deleteCount > localCount * maxDeleteFraction;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PocketBaseSyncService — PocketBase SDK with real-time subscriptions
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,6 +162,18 @@ class PocketBaseSyncService {
   /// Emits `true` after a successful sign-in and `false` after sign-out.
   /// Used by the web `AuthGate` to switch between login screen and home.
   Stream<bool> get authStateStream => _authStateController.stream;
+
+  final _guardController = StreamController<SyncGuardReport>.broadcast();
+
+  /// Emits whenever a reconcile was refused because it wanted to delete an
+  /// implausible number of records. The UI warns the user instead of losing data.
+  Stream<SyncGuardReport> get onGuardTriggered => _guardController.stream;
+
+  DeletionJournalService? _journal;
+
+  /// Attribute deletions performed by this service to the right source in the
+  /// deletion journal.
+  void attachJournal(DeletionJournalService journal) => _journal = journal;
 
   SyncStatus _currentStatus = SyncStatus.disabled;
   SyncStatus get currentStatus => _currentStatus;
@@ -445,49 +517,98 @@ class PocketBaseSyncService {
   }
 
   /// Download all remote data, replacing local.
+  ///
+  /// Runs in two strictly separated phases. Phase 1 fetches every collection
+  /// into memory; if any fetch fails or comes back incomplete, we return an
+  /// error **without having touched Hive**. Only once all data is in hand does
+  /// phase 2 write it.
+  ///
+  /// This ordering is the fix for a data-loss bug: reconciliation deletes local
+  /// records missing from the remote list, so applying collections as they
+  /// streamed in meant a network fault midway left the already-applied
+  /// collections reconciled against a truncated download — silently destroying
+  /// records that a later `uploadAll()` then deleted server-side too.
   Future<SyncResult> downloadAll({SyncProgressCallback? onProgress}) async {
     if (!isSignedIn) return const SyncResult(error: 'Not signed in');
     _suppressListeners = true;
     try {
+      // ── Phase 1: fetch everything. No writes. ────────────────────────────
       onProgress?.call('Categories…', 0.05);
       final cats = await _downloadCollection('categories', _categoryFromMap);
-      await _replaceLocal<CategoryModel>(cats, _categoryRepo.getAll().map((c) => c.id).toSet(), (c) => _categoryRepo.add(c), (id) => _categoryRepo.delete(id), (c) => c.id);
 
       onProgress?.call('Projects…', 0.15);
       final projs = await _downloadCollection('projects', _projectFromMap);
-      await _replaceLocal<ProjectModel>(projs, _projectRepo.getAll().map((p) => p.id).toSet(), (p) => _projectRepo.add(p), (id) => _projectRepo.delete(id), (p) => p.id);
 
       onProgress?.call('Tasks…', 0.30);
       final tasks = await _downloadCollection('tasks', _taskFromMap);
-      await _replaceLocal<TaskModel>(tasks, _taskRepo.getAll().map((t) => t.id).toSet(), (t) => _taskRepo.add(t), (id) => _taskRepo.delete(id), (t) => t.id);
 
       onProgress?.call('Time entries…', 0.50);
       final entries = await _downloadCollection('time_entries', _timeEntryFromMap);
-      await _replaceLocal<TimeEntryModel>(entries, _timeEntryRepo.getAll().map((e) => e.id).toSet(), (e) => _timeEntryRepo.add(e), (id) => _timeEntryRepo.delete(id), (e) => e.id);
 
-      onProgress?.call('Running timers…', 0.75);
+      onProgress?.call('Running timers…', 0.70);
       final timers = await _downloadCollection('running_timers', _runningTimerFromMap);
-      await _replaceLocal<RunningTimerModel>(
-        timers,
-        _runningTimerRepo.getAll().map((t) => t.id).toSet(),
-        (t) => _runningTimerRepo.start(t),
-        (id) => _runningTimerRepo.stop(id),
-        (t) => t.id,
-      );
 
-      onProgress?.call('Monthly targets…', 0.90);
+      onProgress?.call('Monthly targets…', 0.80);
       final targets = await _downloadCollection('monthly_targets', _monthlyTargetFromMap);
-      await _replaceLocal<MonthlyHoursTargetModel>(
-        targets,
-        _monthlyTargetRepo.getAll().map((m) => m.id).toSet(),
-        (m) => _monthlyTargetRepo.add(m),
-        (id) => _monthlyTargetRepo.delete(id),
-        (m) => m.id,
-      );
 
-      onProgress?.call('Day overrides…', 0.96);
+      onProgress?.call('Day overrides…', 0.85);
       final remoteDayOverrides = await _downloadCollection<MapEntry<String, String>>('day_overrides', _dayOverrideFromMap);
-      await _settingsRepo.restoreAllDayOverrides({for (final entry in remoteDayOverrides) entry.key: entry.value});
+
+      // ── Phase 2: apply. Everything is in hand, so a failure here cannot
+      // leave us reconciled against a partial download. ─────────────────────
+      onProgress?.call('Applying…', 0.90);
+      await _journalled(DeleteSource.syncReconcile, () async {
+        await _replaceLocal<CategoryModel>(
+          'categories',
+          cats,
+          _categoryRepo.getAll().map((c) => c.id).toSet(),
+          (c) => _categoryRepo.add(c),
+          (id) => _categoryRepo.delete(id),
+          (c) => c.id,
+        );
+        await _replaceLocal<ProjectModel>(
+          'projects',
+          projs,
+          _projectRepo.getAll().map((p) => p.id).toSet(),
+          (p) => _projectRepo.add(p),
+          (id) => _projectRepo.delete(id),
+          (p) => p.id,
+        );
+        await _replaceLocal<TaskModel>('tasks', tasks, _taskRepo.getAll().map((t) => t.id).toSet(), (t) => _taskRepo.add(t), (id) => _taskRepo.delete(id), (t) => t.id);
+        await _replaceLocal<TimeEntryModel>(
+          'time_entries',
+          entries,
+          _timeEntryRepo.getAll().map((e) => e.id).toSet(),
+          (e) => _timeEntryRepo.add(e),
+          (id) => _timeEntryRepo.delete(id),
+          (e) => e.id,
+        );
+        await _replaceLocal<RunningTimerModel>(
+          'running_timers',
+          timers,
+          _runningTimerRepo.getAll().map((t) => t.id).toSet(),
+          (t) => _runningTimerRepo.start(t),
+          (id) => _runningTimerRepo.stop(id),
+          (t) => t.id,
+        );
+        await _replaceLocal<MonthlyHoursTargetModel>(
+          'monthly_targets',
+          targets,
+          _monthlyTargetRepo.getAll().map((m) => m.id).toSet(),
+          (m) => _monthlyTargetRepo.add(m),
+          (id) => _monthlyTargetRepo.delete(id),
+          (m) => m.id,
+        );
+      });
+
+      // Day overrides are cheap settings keys, not records — but the same
+      // "empty remote must not wipe local" rule applies.
+      final localOverrides = _settingsRepo.getAllDayOverrides();
+      if (remoteDayOverrides.isEmpty && localOverrides.isNotEmpty) {
+        _reportGuard(SyncGuardReport(collection: 'day_overrides', blockedDeletions: localOverrides.length, localCount: localOverrides.length, remoteCount: 0));
+      } else {
+        await _settingsRepo.restoreAllDayOverrides({for (final entry in remoteDayOverrides) entry.key: entry.value});
+      }
 
       _settingsRepo.setPocketBaseLastSync(DateTime.now().toIso8601String());
       onProgress?.call('Done', 1.0);
@@ -501,10 +622,26 @@ class PocketBaseSyncService {
         dayOverridesSynced: remoteDayOverrides.length,
       );
     } catch (e) {
+      debugPrint('[PocketBaseSync] downloadAll aborted, local data untouched: $e');
       return SyncResult(error: e.toString());
     } finally {
       _suppressListeners = false;
     }
+  }
+
+  /// Attribute every deletion made inside [body] to [source] in the journal.
+  Future<void> _journalled(DeleteSource source, Future<void> Function() body) async {
+    final journal = _journal;
+    if (journal == null) return body();
+    return journal.withSource(source, body);
+  }
+
+  void _reportGuard(SyncGuardReport report) {
+    debugPrint(
+      '[PocketBaseSync] GUARD: refused to delete ${report.blockedDeletions} of ${report.localCount} '
+      '${report.collection} (remote reported ${report.remoteCount})',
+    );
+    _guardController.add(report);
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -677,7 +814,7 @@ class PocketBaseSyncService {
       case 'delete':
         final itemId = record.getStringValue('item_id');
         if (itemId.isNotEmpty) {
-          delete(itemId);
+          _journalled(DeleteSource.syncRealtime, () => delete(itemId));
         }
         break;
     }
@@ -728,6 +865,8 @@ class PocketBaseSyncService {
       page++;
     }
 
+    final remoteCountBefore = existingRecords.length;
+
     // Upsert all local items
     for (final entry in items.entries) {
       final pbId = existingRecords[entry.key];
@@ -739,38 +878,76 @@ class PocketBaseSyncService {
       }
     }
 
-    // Delete remote orphans
-    for (final pbId in existingRecords.values) {
+    // Delete remote orphans — but only if this looks like a real deletion and
+    // not a truncated/empty local store about to wipe a healthy server.
+    final orphans = existingRecords.values.toList();
+    if (SyncGuard.blocks(deleteCount: orphans.length, localCount: remoteCountBefore, remoteCount: items.length)) {
+      _reportGuard(
+        SyncGuardReport(collection: collection, blockedDeletions: orphans.length, localCount: items.length, remoteCount: remoteCountBefore, remoteSide: true),
+      );
+      return;
+    }
+
+    for (final pbId in orphans) {
       await _pb.collection(collection).delete(pbId);
     }
   }
 
   /// Download all records from a PocketBase collection for the current user.
+  ///
+  /// Verifies the collected count against the server's `totalItems`. A short
+  /// read must never be mistaken for "the server has fewer records" — that is
+  /// exactly what causes reconciliation to delete local data.
   Future<List<T>> _downloadCollection<T>(String collection, T Function(Map<String, dynamic>) fromMap) async {
     final results = <T>[];
     int page = 1;
+    int expectedTotal = -1;
     while (true) {
       final result = await _pb.collection(collection).getList(filter: 'user = "$userId"', perPage: 200, page: page);
+      if (expectedTotal < 0) expectedTotal = result.totalItems;
       for (final record in result.items) {
         results.add(fromMap(record.toJson()));
       }
       if (result.items.length < 200) break;
       page++;
     }
+
+    if (expectedTotal >= 0 && results.length != expectedTotal) {
+      throw StateError('Incomplete download of "$collection": got ${results.length} records, server reported $expectedTotal');
+    }
     return results;
   }
 
-  /// Replace local data with remote items.
-  Future<void> _replaceLocal<T>(List<T> remoteItems, Set<String> localIds, Future<void> Function(T) upsert, Future<void> Function(String) delete, String Function(T) getId) async {
+  /// Reconcile a local collection against the freshly downloaded remote list.
+  ///
+  /// Upserts are always safe. Deletions are not: a record missing from
+  /// [remoteItems] means "deleted remotely" *or* "the server failed to tell us
+  /// about it", and we cannot distinguish the two. So a suspiciously large
+  /// deletion batch is refused and reported rather than applied — see [SyncGuard].
+  Future<void> _replaceLocal<T>(
+    String collection,
+    List<T> remoteItems,
+    Set<String> localIds,
+    Future<void> Function(T) upsert,
+    Future<void> Function(String) delete,
+    String Function(T) getId,
+  ) async {
     final remoteIds = <String>{};
     for (final item in remoteItems) {
       remoteIds.add(getId(item));
       await upsert(item);
     }
-    for (final lid in localIds) {
-      if (!remoteIds.contains(lid)) {
-        await delete(lid);
-      }
+
+    final toDelete = localIds.where((id) => !remoteIds.contains(id)).toList();
+    if (SyncGuard.blocks(deleteCount: toDelete.length, localCount: localIds.length, remoteCount: remoteItems.length)) {
+      _reportGuard(
+        SyncGuardReport(collection: collection, blockedDeletions: toDelete.length, localCount: localIds.length, remoteCount: remoteItems.length),
+      );
+      return;
+    }
+
+    for (final id in toDelete) {
+      await delete(id);
     }
   }
 
@@ -976,5 +1153,7 @@ class PocketBaseSyncService {
     await stopListeners();
     await _statusController.close();
     await _collectionChangeController.close();
+    await _authStateController.close();
+    await _guardController.close();
   }
 }

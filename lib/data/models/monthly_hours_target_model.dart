@@ -1,6 +1,8 @@
 import 'package:equatable/equatable.dart';
 import 'package:hive_ce/hive.dart';
 
+import '../../core/utils/json_utils.dart';
+
 part 'monthly_hours_target_model.g.dart';
 
 @HiveType(typeId: 6)
@@ -31,6 +33,22 @@ class MonthlyHoursTargetModel extends Equatable {
       createdAt: createdAt ?? this.createdAt,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'targetHours': targetHours,
+    'projectIds': projectIds,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory MonthlyHoursTargetModel.fromJson(Map<String, dynamic> json) => MonthlyHoursTargetModel(
+    id: parseString(json['id']),
+    name: parseString(json['name']),
+    targetHours: parseDouble(json['targetHours']),
+    projectIds: parseStringList(json['projectIds']),
+    createdAt: parseDate(json['createdAt']),
+  );
 
   @override
   List<Object?> get props => [id, name, targetHours, projectIds, createdAt];
