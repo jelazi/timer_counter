@@ -62,6 +62,9 @@ class BackupService {
       'backup_version': backupVersion,
       'backup_date': DateTime.now().toIso8601String(),
       'app_version': '1.0.0',
+      // Which PocketBase account this data belongs to. A snapshot taken under
+      // one account must not be restored into (and pushed to) another.
+      'owner_id': _settingsRepository.getPocketBaseOwnerId(),
       'categories': _categoryRepository.getAll().map((c) => c.toJson()).toList(),
       'projects': _projectRepository.getAll().map((p) => p.toJson()).toList(),
       'tasks': _taskRepository.getAll().map((t) => t.toJson()).toList(),

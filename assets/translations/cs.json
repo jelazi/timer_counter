@@ -558,6 +558,7 @@
         "source_cascade": "smazáno s nadřazenou položkou",
         "source_syncRealtime": "smazala synchronizace (živá událost)",
         "source_syncReconcile": "smazala synchronizace (sesouhlasení)",
-        "source_bulkClear": "hromadné smazání"
+        "source_bulkClear": "hromadné smazání",
+        "owner_mismatch": "Tato záloha patří jinému PocketBase účtu. Lze ji obnovit lokálně, ale nenahraje se na server."
     }
 }

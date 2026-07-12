@@ -1,5 +1,36 @@
 # Development Log
 
+## 2026-07-12 (part 2) — fix: bind the local store to a PocketBase account; stop cross-account contamination
+
+### What was fixed
+
+Audit of the multi-account case (several accounts on one PocketBase server) found a real bug — and that the `SyncGuard` added earlier the same day made it *worse*.
+
+**Server side is fine.** `pocketbase/pb_schema.json` isolates every collection with `listRule`/`viewRule`/`updateRule`/`deleteRule` = `@request.auth.id != "" && user = @request.auth.id`, and every client query filters by `user = "$userId"`. No account can read or delete another's records.
+
+**Client side was broken on account switch.** The local Hive store is per-machine, but had no notion of *which account it belongs to*:
+
+1. `_applyConfigToRunningService()` (`settings_screen.dart`) calls `signOut()` **without** `clearLocal`, so account A's records stay in Hive. `signOut()` also leaves `pocketbase_last_sync` set.
+2. Signing in as B, `smartFirstSync()` sees the still-set `lastSync` marker (a **global** settings key, not per-account) and returns `alreadySynced` — skipping the empty/conflict detection entirely.
+3. The next `downloadAll()` then reconciles A's local records against B's remote:
+   - Before the guard: **silently deleted all of A's local data.**
+   - With the guard: the deletion is *blocked* (empty/small remote vs. full local), so **B now sees A's projects and time entries** in every screen.
+4. Any subsequent `uploadAll()` — or the new snapshot restore-with-push — re-creates A's records **inside B's PocketBase account**, since the client stamps `user: <signed-in user>` on everything it pushes. `createRule` was only `@request.auth.id != ""`, so the server accepted it.
+
+Fixes:
+
+- **`_bindLocalStoreToAccount()`** in `PocketBaseSyncService`, called from `signIn()`. New settings key `pocketbase_owner_id` records which PocketBase user the local store belongs to. If a *different* account signs in, the synced Hive boxes are wiped before anything can read or upload them, and `lastSync` is reset (via `clearLocalData()`) so `smartFirstSync()` runs properly for the new account. The wipe is journalled as `bulkClear`, so an accidental switch is still recoverable from the deletion journal. Blocs are reloaded by broadcasting `onCollectionChanged` for every collection; a new `onAccountSwitched` stream exposes the event. First-ever sign-in binds without wiping, so existing installs are unaffected.
+- **Snapshots and journal entries now carry `owner_id`.** `SnapshotDiffService.restoreMissing()` refuses to push a snapshot belonging to another account (`snapshot_owner_mismatch`); it can still be restored locally. `BackupHistoryScreen` shows a warning card and hides the "also upload to server" switch for a foreign snapshot, and the journal tab drops the push for foreign records. Snapshots without an `owner_id` (taken before this change, or with sync off) stay fully restorable.
+- **Server hardening:** `createRule` on all seven collections tightened from `@request.auth.id != ""` to `@request.auth.id != "" && user = @request.auth.id`, so the server rejects a record filed under someone else even if a client tries. **Requires re-importing `pocketbase/pb_schema.json` into the PocketBase admin.**
+
+### Current state
+- `flutter analyze`: no new issues (4 pre-existing infos in untouched files).
+- `flutter test`: 24/24 passing. Four new tests in `snapshot_diff_service_test.dart` cover the cross-account cases: owner recorded in the snapshot, push refused on mismatch, push allowed for the owning account, and push still allowed for legacy snapshots with no `owner_id`.
+
+### Pending / next steps
+- The account-switch path is **not** yet exercised against a live server. Manual test needed: sign in as A, sync, switch to B in settings, confirm A's data disappears locally, that B sees only their own data, and that A's records do not appear in B's PocketBase account.
+- The tightened `createRule` only takes effect after the schema is re-imported on the server.
+
 ## 2026-07-12 — fix: stop sync from silently deleting local data; add daily snapshots and a deletion journal
 
 ### What was fixed

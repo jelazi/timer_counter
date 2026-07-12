@@ -187,21 +187,34 @@ class _DiffScreenState extends State<_DiffScreen> {
   bool _pushToServer = true;
   bool _restoring = false;
 
+  /// A snapshot taken under a different PocketBase account. It can still be
+  /// restored locally, but never pushed — that would move its records into the
+  /// account that is signed in now.
+  bool _isForeignSnapshot(PocketBaseSyncService? syncService) {
+    final currentUser = syncService?.userId;
+    return currentUser != null && widget.diff.ownerId.isNotEmpty && widget.diff.ownerId != currentUser;
+  }
+
   Future<void> _restore() async {
     setState(() => _restoring = true);
 
     final syncService = context.read<PocketBaseSyncService?>();
+    final push = _pushToServer && !_isForeignSnapshot(syncService);
+
     final result = await context.read<SnapshotDiffService>().restoreMissing(
       widget.diff,
       onlyDays: _selectedDays,
-      syncService: _pushToServer ? syncService : null,
+      syncService: push ? syncService : null,
     );
 
     if (!mounted) return;
     setState(() => _restoring = false);
 
     if (result.hasError) {
-      _toast(context, tr('backup_history.restore_failed', namedArgs: {'error': result.error!}), isError: true);
+      final message = result.error == 'snapshot_owner_mismatch'
+          ? tr('backup_history.owner_mismatch')
+          : tr('backup_history.restore_failed', namedArgs: {'error': result.error!});
+      _toast(context, message, isError: true);
       return;
     }
 
@@ -214,7 +227,9 @@ class _DiffScreenState extends State<_DiffScreen> {
     final diff = widget.diff;
     final days = diff.missingDays;
     final syncService = context.read<PocketBaseSyncService?>();
-    final canPush = syncService != null && syncService.isSignedIn;
+
+    final foreignSnapshot = _isForeignSnapshot(syncService);
+    final canPush = syncService != null && syncService.isSignedIn && !foreignSnapshot;
 
     return Scaffold(
       appBar: AppBar(title: Text(DateFormat.yMMMMd(context.locale.toString()).format(diff.snapshotDate))),
@@ -292,6 +307,17 @@ class _DiffScreenState extends State<_DiffScreen> {
                 ],
 
                 const SizedBox(height: 12),
+                if (foreignSnapshot)
+                  Card(
+                    color: Theme.of(context).colorScheme.tertiaryContainer,
+                    child: ListTile(
+                      leading: Icon(Icons.person_off_outlined, color: Theme.of(context).colorScheme.onTertiaryContainer),
+                      title: Text(
+                        tr('backup_history.owner_mismatch'),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onTertiaryContainer),
+                      ),
+                    ),
+                  ),
                 if (canPush)
                   SwitchListTile(
                     value: _pushToServer,
@@ -345,10 +371,17 @@ class _JournalTabState extends State<_JournalTab> {
 
   Future<void> _restore(JournalEntry entry) async {
     final syncService = context.read<PocketBaseSyncService?>();
+
+    // The journal survives an account switch. Restoring a record deleted under a
+    // different account is fine locally, but pushing it would file it under the
+    // account signed in now.
+    final currentUser = syncService?.userId;
+    final foreign = currentUser != null && entry.ownerId.isNotEmpty && entry.ownerId != currentUser;
+
     final ok = await context.read<SnapshotDiffService>().restoreJournalledRecord(
       entry.collection,
       entry.payload,
-      syncService: syncService,
+      syncService: foreign ? null : syncService,
     );
 
     if (!mounted) return;

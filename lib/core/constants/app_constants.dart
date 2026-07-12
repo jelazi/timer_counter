@@ -96,6 +96,10 @@ class AppConstants {
   static const String pocketBaseEnabled = 'pocketbase_enabled';
   static const String pocketBaseLastSync = 'pocketbase_last_sync';
 
+  /// PocketBase user id the local Hive store currently belongs to.
+  /// Signing in as a different account must not inherit the previous one's data.
+  static const String pocketBaseOwnerId = 'pocketbase_owner_id';
+
   // Default Values
   static const double defaultDailyWorkingHours = 8.0;
   static const int defaultWeeklyWorkingDays = 5;

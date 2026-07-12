@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../data/repositories/settings_repository.dart';
 import '../utils/platform_utils.dart';
 
 /// What caused a record to be deleted.
@@ -36,16 +37,29 @@ class JournalEntry {
   final String collection;
   final String itemId;
 
+  /// PocketBase account the record belonged to. The journal outlives an account
+  /// switch, so this is what stops A's deleted records being restored — and
+  /// pushed — into B's account.
+  final String ownerId;
+
   /// The full record as it existed immediately before deletion.
   final Map<String, dynamic> payload;
 
-  const JournalEntry({required this.timestamp, required this.source, required this.collection, required this.itemId, required this.payload});
+  const JournalEntry({
+    required this.timestamp,
+    required this.source,
+    required this.collection,
+    required this.itemId,
+    required this.payload,
+    this.ownerId = '',
+  });
 
   Map<String, dynamic> toJson() => {
     'ts': timestamp.toIso8601String(),
     'source': source.name,
     'collection': collection,
     'item_id': itemId,
+    'owner_id': ownerId,
     'payload': payload,
   };
 
@@ -57,6 +71,7 @@ class JournalEntry {
         source: DeleteSource.parse(json['source'] as String?),
         collection: json['collection'] as String? ?? '',
         itemId: json['item_id'] as String? ?? '',
+        ownerId: json['owner_id'] as String? ?? '',
         payload: (json['payload'] as Map?)?.cast<String, dynamic>() ?? const {},
       );
     } catch (_) {
@@ -75,6 +90,10 @@ class JournalEntry {
 /// swallowed and reported via [debugPrint].
 class DeletionJournalService {
   static const int _retentionMonths = 6;
+
+  final SettingsRepository _settingsRepository;
+
+  DeletionJournalService({required SettingsRepository settingsRepository}) : _settingsRepository = settingsRepository;
 
   Directory? _dir;
 
@@ -117,7 +136,14 @@ class DeletionJournalService {
     final dir = _dir;
     if (dir == null) return;
 
-    final entry = JournalEntry(timestamp: DateTime.now(), source: source ?? _currentSource, collection: collection, itemId: itemId, payload: payload);
+    final entry = JournalEntry(
+      timestamp: DateTime.now(),
+      source: source ?? _currentSource,
+      collection: collection,
+      itemId: itemId,
+      ownerId: _settingsRepository.getPocketBaseOwnerId(),
+      payload: payload,
+    );
 
     try {
       final file = File('${dir.path}/${_fileNameFor(entry.timestamp)}');

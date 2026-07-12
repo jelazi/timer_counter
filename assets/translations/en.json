@@ -558,6 +558,7 @@
         "source_cascade": "deleted with its parent",
         "source_syncRealtime": "deleted by sync (live event)",
         "source_syncReconcile": "deleted by sync (reconcile)",
-        "source_bulkClear": "bulk wipe"
+        "source_bulkClear": "bulk wipe",
+        "owner_mismatch": "This backup belongs to a different PocketBase account. It can be restored locally, but will not be uploaded to the server."
     }
 }

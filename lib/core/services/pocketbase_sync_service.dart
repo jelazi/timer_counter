@@ -163,6 +163,12 @@ class PocketBaseSyncService {
   /// Used by the web `AuthGate` to switch between login screen and home.
   Stream<bool> get authStateStream => _authStateController.stream;
 
+  final _accountSwitchController = StreamController<String>.broadcast();
+
+  /// Emits the new user id when a different account signs in and the local store
+  /// was wiped as a result. Blocs must reload — their in-memory state is stale.
+  Stream<String> get onAccountSwitched => _accountSwitchController.stream;
+
   final _guardController = StreamController<SyncGuardReport>.broadcast();
 
   /// Emits whenever a reconcile was refused because it wanted to delete an
@@ -252,6 +258,7 @@ class PocketBaseSyncService {
       _setStatus(SyncStatus.connecting);
       await _pb.collection('users').authWithPassword(email, password);
       _saveAuthState();
+      await _bindLocalStoreToAccount();
       _authStateController.add(true);
       return null;
     } on ClientException catch (e) {
@@ -280,6 +287,39 @@ class PocketBaseSyncService {
     _lastError = null;
     _setStatus(SyncStatus.disabled);
     _authStateController.add(false);
+  }
+
+  /// Tie the local Hive store to the account that just signed in, wiping it
+  /// first if it belongs to a different one.
+  ///
+  /// The local store is per-machine, but a PocketBase server can host many
+  /// accounts. Without this, signing in as B on a machine that last synced as A
+  /// leaves A's records sitting in Hive: B sees them in every screen, and the
+  /// next `uploadAll()` re-creates them inside B's account (the client stamps
+  /// `user: B` on every record it pushes). `smartFirstSync()` cannot catch this
+  /// either — it short-circuits on the `lastSync` marker, which is global and
+  /// still set from A's session.
+  ///
+  /// The wipe is journalled as a bulk clear, so if the switch was a mistake the
+  /// previous account's records are still recoverable from the deletion journal.
+  Future<void> _bindLocalStoreToAccount() async {
+    final newOwner = userId;
+    if (newOwner == null) return;
+
+    final previousOwner = _settingsRepo.getPocketBaseOwnerId();
+    if (previousOwner.isNotEmpty && previousOwner != newOwner) {
+      debugPrint('[PocketBaseSync] Account switch ($previousOwner → $newOwner): clearing local store');
+      await _journalled(DeleteSource.bulkClear, clearLocalData);
+
+      // Blocs still hold the previous account's records in memory.
+      for (final c in SyncCollection.values) {
+        _collectionChangeController.add(c);
+      }
+      _accountSwitchController.add(newOwner);
+    }
+
+    // Also covers the first-ever sign-in, where there is nothing to wipe.
+    await _settingsRepo.setPocketBaseOwnerId(newOwner);
   }
 
   /// Wipe all synced Hive collections and the `lastSync` marker.
@@ -1155,5 +1195,6 @@ class PocketBaseSyncService {
     await _collectionChangeController.close();
     await _authStateController.close();
     await _guardController.close();
+    await _accountSwitchController.close();
   }
 }

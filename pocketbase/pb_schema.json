@@ -48,7 +48,7 @@
         "system": false,
         "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
-        "createRule": "@request.auth.id != \"\"",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "fields": [
@@ -109,7 +109,7 @@
         "system": false,
         "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
-        "createRule": "@request.auth.id != \"\"",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "fields": [
@@ -251,7 +251,7 @@
         "system": false,
         "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
-        "createRule": "@request.auth.id != \"\"",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "fields": [
@@ -357,7 +357,7 @@
         "system": false,
         "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
-        "createRule": "@request.auth.id != \"\"",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "fields": [
@@ -463,7 +463,7 @@
         "system": false,
         "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
-        "createRule": "@request.auth.id != \"\"",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "fields": [
@@ -533,7 +533,7 @@
         "system": false,
         "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
-        "createRule": "@request.auth.id != \"\"",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "fields": [
@@ -603,7 +603,7 @@
         "system": false,
         "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
-        "createRule": "@request.auth.id != \"\"",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
         "fields": [

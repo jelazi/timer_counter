@@ -36,6 +36,10 @@ class SnapshotDiff {
   final String snapshotPath;
   final DateTime snapshotDate;
 
+  /// PocketBase account the snapshot was taken under. Empty for snapshots taken
+  /// before this was recorded, or when sync was never configured.
+  final String ownerId;
+
   final List<CategoryModel> missingCategories;
   final List<ProjectModel> missingProjects;
   final List<TaskModel> missingTasks;
@@ -50,6 +54,7 @@ class SnapshotDiff {
   const SnapshotDiff({
     required this.snapshotPath,
     required this.snapshotDate,
+    this.ownerId = '',
     this.missingCategories = const [],
     this.missingProjects = const [],
     this.missingTasks = const [],
@@ -137,6 +142,7 @@ class SnapshotDiffService {
     return SnapshotDiff(
       snapshotPath: snapshotPath,
       snapshotDate: snapshotDate,
+      ownerId: snapshot['owner_id'] as String? ?? '',
       missingCategories: _missing(_decode(snapshot['categories'], CategoryModel.fromJson), _categoryRepository.getAll().map((c) => c.id).toSet(), (c) => c.id),
       missingProjects: _missing(_decode(snapshot['projects'], ProjectModel.fromJson), _projectRepository.getAll().map((p) => p.id).toSet(), (p) => p.id),
       missingTasks: _missing(_decode(snapshot['tasks'], TaskModel.fromJson), _taskRepository.getAll().map((t) => t.id).toSet(), (t) => t.id),
@@ -162,6 +168,13 @@ class SnapshotDiffService {
     PocketBaseSyncService? syncService,
   }) async {
     try {
+      // Pushing a snapshot taken under a different PocketBase account would
+      // re-create that account's records inside the current one — the client
+      // stamps the signed-in user on everything it pushes. Refuse outright.
+      if (syncService != null && !_ownedByCurrentAccount(diff, syncService)) {
+        return const RestoreResult(error: 'snapshot_owner_mismatch');
+      }
+
       final entries = onlyDays == null ? diff.missingTimeEntries : diff.missingTimeEntries.where((e) => onlyDays.contains(_dayKey(e.startTime))).toList();
 
       // Parents first, so nothing is briefly orphaned.
@@ -256,6 +269,15 @@ class SnapshotDiffService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+
+  /// True when the snapshot belongs to the signed-in account, or predates owner
+  /// tracking / was taken with sync switched off (nothing to conflict with).
+  bool _ownedByCurrentAccount(SnapshotDiff diff, PocketBaseSyncService syncService) {
+    if (diff.ownerId.isEmpty) return true;
+    final currentUser = syncService.userId;
+    if (currentUser == null) return true;
+    return diff.ownerId == currentUser;
+  }
 
   List<T> _decode<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
     if (value is! List) return const [];

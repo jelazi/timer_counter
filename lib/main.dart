@@ -84,7 +84,7 @@ Future<void> main() async {
 
   // ── Deletion Journal ───────────────────────────────────────────────────
   // Attached before anything can delete, so no deletion goes unrecorded.
-  final deletionJournal = DeletionJournalService();
+  final deletionJournal = DeletionJournalService(settingsRepository: settingsRepository);
   await deletionJournal.init();
   categoryRepository.attachJournal(deletionJournal);
   projectRepository.attachJournal(deletionJournal);

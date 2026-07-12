@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:timer_counter/core/services/pocketbase_sync_service.dart';
 import 'package:timer_counter/core/services/snapshot_diff_service.dart';
 import 'package:timer_counter/data/models/category_model.dart';
 import 'package:timer_counter/data/models/monthly_hours_target_model.dart';
@@ -25,6 +26,8 @@ class MockTimeEntryRepository extends Mock implements TimeEntryRepository {}
 class MockMonthlyHoursTargetRepository extends Mock implements MonthlyHoursTargetRepository {}
 
 class MockStandaloneInvoiceRepository extends Mock implements StandaloneInvoiceRepository {}
+
+class MockPocketBaseSyncService extends Mock implements PocketBaseSyncService {}
 
 TimeEntryModel _entry(String id, DateTime start, {int seconds = 3600, String projectId = 'p1', String taskId = 't1'}) {
   return TimeEntryModel(
@@ -210,6 +213,63 @@ void main() {
 
       expect(result.entriesRestored, 0);
       expect(result.projectsRestored, 1);
+    });
+  });
+
+  group('cross-account safety', () {
+    test('a snapshot records the account it was taken under', () {
+      final snapshot = snapshotOf(entries: [_entry('e1', DateTime(2026, 7, 8, 9))]);
+      snapshot['owner_id'] = 'userA';
+
+      expect(compare(snapshot).ownerId, 'userA');
+    });
+
+    test('refuses to push a snapshot belonging to a different account', () async {
+      // Pushing would re-file account A's records under account B.
+      final snapshot = snapshotOf(entries: [_entry('e1', DateTime(2026, 7, 8, 9))]);
+      snapshot['owner_id'] = 'userA';
+      final diff = compare(snapshot);
+
+      final sync = MockPocketBaseSyncService();
+      when(() => sync.userId).thenReturn('userB');
+
+      final result = await service.restoreMissing(diff, syncService: sync);
+
+      expect(result.hasError, isTrue);
+      expect(result.error, 'snapshot_owner_mismatch');
+      verifyNever(() => sync.pushTimeEntry(any()));
+    });
+
+    test('allows a push when the snapshot belongs to the signed-in account', () async {
+      final snapshot = snapshotOf(entries: [_entry('e1', DateTime(2026, 7, 8, 9))]);
+      snapshot['owner_id'] = 'userA';
+      final diff = compare(snapshot);
+
+      final sync = MockPocketBaseSyncService();
+      when(() => sync.userId).thenReturn('userA');
+      when(() => sync.isSignedIn).thenReturn(true);
+      when(() => sync.pushTimeEntry(any())).thenAnswer((_) async {});
+
+      final result = await service.restoreMissing(diff, syncService: sync);
+
+      expect(result.hasError, isFalse);
+      expect(result.pushedToServer, isTrue);
+      verify(() => sync.pushTimeEntry(any())).called(1);
+    });
+
+    test('allows a push for snapshots taken before owner tracking existed', () async {
+      // Older snapshots carry no owner_id; they must stay restorable.
+      final diff = compare(snapshotOf(entries: [_entry('e1', DateTime(2026, 7, 8, 9))]));
+
+      final sync = MockPocketBaseSyncService();
+      when(() => sync.userId).thenReturn('userB');
+      when(() => sync.isSignedIn).thenReturn(true);
+      when(() => sync.pushTimeEntry(any())).thenAnswer((_) async {});
+
+      final result = await service.restoreMissing(diff, syncService: sync);
+
+      expect(result.hasError, isFalse);
+      expect(diff.ownerId, isEmpty);
     });
   });
 

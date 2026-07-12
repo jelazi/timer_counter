@@ -230,6 +230,10 @@ class SettingsRepository {
   String getPocketBaseLastSync() => _box.get(AppConstants.pocketBaseLastSync, defaultValue: '') as String;
   Future<void> setPocketBaseLastSync(String v) => _box.put(AppConstants.pocketBaseLastSync, v);
 
+  /// PocketBase user id the local store belongs to. Empty before the first sign-in.
+  String getPocketBaseOwnerId() => _box.get(AppConstants.pocketBaseOwnerId, defaultValue: '') as String;
+  Future<void> setPocketBaseOwnerId(String v) => _box.put(AppConstants.pocketBaseOwnerId, v);
+
   bool get hasPocketBaseOverride => getPocketBaseUrl().isNotEmpty || getPocketBaseEmail().isNotEmpty || getPocketBasePassword().isNotEmpty;
 
   Future<void> clearPocketBaseOverride() async {
