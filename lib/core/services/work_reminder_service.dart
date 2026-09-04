@@ -232,7 +232,7 @@ class WorkReminderService {
 
     final interval = _settingsRepo.getRemindStartInterval();
     if (_lastStartReminder != null && now.difference(_lastStartReminder!).inMinutes < interval) {
-      debugPrint('[WorkReminder] Start: too soon (interval=${interval}min, last=${_lastStartReminder})');
+      debugPrint('[WorkReminder] Start: too soon (interval=${interval}min, last=$_lastStartReminder)');
       return;
     }
 

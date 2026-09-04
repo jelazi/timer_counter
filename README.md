@@ -2,9 +2,11 @@
 
 A cross-platform time tracking desktop application built with Flutter. Track your work hours, manage projects and tasks, view statistics, and export/import data in Tyme-compatible JSON format.
 
-![Flutter](https://img.shields.io/badge/Flutter-3.10+-blue.svg)
+[![CI](https://github.com/jelazi/timer_counter/actions/workflows/ci.yml/badge.svg)](https://github.com/jelazi/timer_counter/actions/workflows/ci.yml)
+![Flutter](https://img.shields.io/badge/Flutter-3.44-blue.svg)
 ![Dart](https://img.shields.io/badge/Dart-3.10+-blue.svg)
 ![Platform](https://img.shields.io/badge/Platform-macOS%20|%20Windows%20|%20Linux-lightgrey.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Features
 
@@ -128,7 +130,7 @@ flutter build linux
 
 ## License
 
-This project is for personal use.
+Released under the [MIT License](LICENSE).
 
 ---
 
@@ -226,4 +228,4 @@ Quick checklist:
 
 ## Licence
 
-Tento projekt je pro osobní použití.
+Uvolněno pod [licencí MIT](LICENSE).

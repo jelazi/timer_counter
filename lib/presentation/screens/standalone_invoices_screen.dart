@@ -194,6 +194,7 @@ class StandaloneInvoicesScreen extends StatelessWidget {
     try {
       final outputDir = await FilePicker.platform.getDirectoryPath(dialogTitle: tr('standalone_invoices.select_output_dir'));
       if (outputDir == null) return;
+      if (!context.mounted) return;
 
       final service = PdfReportService(
         timeEntryRepo: context.read<TimeEntryRepository>(),

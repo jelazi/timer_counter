@@ -1,5 +1,60 @@
 # Development Log
 
+## 2026-09-04 — chore: repository hygiene for public/CV readiness
+
+### What was done
+
+- **Removed real client data from version control.** `git rm` on `test_export.json`, `test_export.csv`
+  and `tyme.data` (a 131 KB SQLite database with 230 records). All three were tracked on `master`
+  and publicly readable. Added them to `.gitignore` along with `*.tyme`.
+- **Redacted the client name from two DEVLOG entries** (2026-02-17 section): the invoice description
+  example and the `faktura_{month}_{year}.pdf` description no longer name the customer company.
+- **Added `LICENSE`** (MIT, 2026 Lubomír Žižka). Both `## License` / `## Licence` sections of
+  `README.md` now point at it instead of saying "for personal use".
+- **Added `.github/workflows/ci.yml`** — `flutter pub get` + `flutter analyze` + `flutter test` on
+  push/PR against `master`, pinned to Flutter 3.44.3 via `subosito/flutter-action@v2`.
+  A `dart format` step was written and then dropped: 60 of 88 files would have failed it, which is a
+  separate reformatting decision, not part of this cleanup.
+- **Added CI and MIT badges** to the top of `README.md`; bumped the Flutter badge 3.10+ -> 3.44.
+- **Deleted the placeholder test** `test/widget_test.dart` (`expect(1 + 1, equals(2))`).
+- **Moved `FIREBASE_SETUP.md` into `docs/`**, next to `POCKETBASE_SETUP.md`.
+- **GitHub metadata**: set the repository description, added 10 topics (flutter, dart, bloc,
+  time-tracking, desktop-app, cross-platform, pocketbase, hive, pdf-generation, self-hosted),
+  and switched the default branch from `develop` to `master`.
+
+### What was fixed
+
+- `work_reminder_service.dart:235` — `unnecessary_brace_in_string_interps` on `${_lastStartReminder}`.
+- `standalone_invoices_screen.dart` `_exportPdf()` — three `use_build_context_synchronously` hits:
+  the three `context.read<...Repository>()` calls run after `await FilePicker.getDirectoryPath()`.
+  Added a `if (!context.mounted) return;` guard after the null check on the picked directory.
+- The default branch was `develop`, which sat **50 commits behind `master`** since 2026-02-17.
+  Every visitor to the repository saw the February state of the project.
+
+### Current state
+
+- `flutter analyze`: **No issues found** (was 4 infos).
+- `flutter test`: **23 tests, all passed** (24 before, minus the deleted placeholder).
+- Working tree has staged deletions and modifications; **not committed** — the commit is the author's.
+
+### Pending / next steps
+
+- **History rewrite is still outstanding.** The removed data files remain in every earlier commit and
+  are still fetchable from GitHub. Requires `git filter-repo --invert-paths --path test_export.json
+  --path test_export.csv --path tyme.data` followed by a force push.
+- **`develop` branch not deleted** (remote or local). It has no unique commits — verified with
+  `git merge-base --is-ancestor origin/develop origin/master`.
+- **Client name still present in build config**, deliberately left alone because changing it has
+  functional consequences: `ios/Runner.xcodeproj/project.pbxproj` uses the bundle identifier
+  `cz.jelazi.timerCounter` (changing it breaks provisioning profiles and existing installs), and
+  `windows/installer/timer_counter_setup.iss` sets `AppPublisher` / `AppURL` to the client company.
+- **No screenshots yet.** The README has no images; the app needs to be run and captured manually.
+- **Windows build scripts left in the repository root** (`windows_build.bat`, `deploy_windows.bat`,
+  `inno_setup.iss`). They resolve paths from `%~dp0` and the current working directory, so moving
+  them into `tool/` needs path edits that cannot be tested from macOS.
+- **God files untouched**: `settings_screen.dart` 101 KB, `pdf_reports_screen.dart` 72 KB,
+  `statistics_screen.dart` 65 KB, `pdf_report_service.dart` 61 KB.
+
 ## 2026-07-12 (part 2) — fix: bind the local store to a PocketBase account; stop cross-account contamination
 
 ### What was fixed
@@ -1785,7 +1840,7 @@ Fixed all RenderFlex overflow errors when running on iPhone/Android. The app was
 1. **PDF reports overflow fix** — Wrapped the main content of `PdfReportsScreen` in `Expanded` + `SingleChildScrollView` so it scrolls instead of overflowing the vertical `Column`.
 2. **Configurable invoice supplier** — Added supplier management with Hive persistence. Users can save multiple suppliers to a list (stored as JSON maps in the settings box), select from saved ones via InputChips, or enter new data. Fields: name, address line 1, address line 2, IČO, phone, email.
 3. **Configurable invoice customer (odběratel)** — Same as supplier but for customers. Fields: name, address line 1, address line 2, IČO, DIČ. Also stored as a list in Hive with selection index.
-4. **Editable invoice description** — "***REMOVED***" is now configurable via settings. Stored in Hive as `invoice_description`. Also used in QR payment code.
+4. **Editable invoice description** — the invoice line description is now configurable via settings. Stored in Hive as `invoice_description`. Also used in QR payment code.
 5. **Bank account, bank code & SWIFT** — Added editable fields for bank name, account number, bank code, IBAN, and SWIFT. All rendered on the invoice PDF. Previously bank name and SWIFT were empty.
 6. **Editable issuer name & email** — "Vystavil" section on the invoice now uses configurable issuer name and email from settings.
 7. **Editable file names** — Users can customize the generated PDF file name patterns using `{month}` and `{year}` placeholders. Defaults: `report_{month}_{year}`, `report_{month}_{year}_rezijni`, `faktura_{month}_{year}`.
@@ -1841,7 +1896,7 @@ Fixed all RenderFlex overflow errors when running on iPhone/Android. The app was
 3. **PDF Reports tab (new feature)** — Implemented a 6th NavigationRail tab "PDF Reporty" that generates 3 PDF files matching the Python `json_to_pdf.py` script output exactly:
    - `report_{month}_{year}.pdf` — Monthly table with days x tasks, color-coded (blue header, light blue day column, green totals column, green CELKEM row, alternating row colors), summary with total time, hourly rate, total amount
    - `report_{month}_{year}_rezijni.pdf` — Same report but with "Angličtina" entries merged into "Režijní čas"
-   - `faktura_{month}_{year}.pdf` — Invoice with supplier (Lubomír Žižka), buyer (***REMOVED***), bank details, item table, CELKEM K ÚHRADĚ, QR payment code, signature sections
+   - `faktura_{month}_{year}.pdf` — Invoice with configurable supplier and buyer details, bank details, item table, CELKEM K ÚHRADĚ, QR payment code, signature sections
 4. **Running timer badge in header** — Added `_buildRunningBadge()` to `time_tracking_screen.dart` that shows project name, task name, and elapsed time in a colored badge (with project color border and red pulsing dot) in the top-right header area when a timer is running. Always visible without scrolling.
 5. **New service: PdfReportService** — Created `lib/core/services/pdf_report_service.dart` using the `pdf` Dart package. Processes time entries from repositories, generates PDF with layout matching the Python script: same colors, fonts, table structure, invoice layout, QR code.
 6. **New screen: PdfReportsScreen** — Created `lib/presentation/screens/pdf_reports_screen.dart` with month/year selection, period summary (total hours, entry count), file list preview, and directory picker for output.

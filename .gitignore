@@ -59,3 +59,9 @@ pocketbase/*
 # PocketBase config (credentials)
 lib/config/pocketbase_config.json
 lib/firebase_options.dart
+
+# Local/exported time-tracking data (contains real client records)
+test_export.json
+test_export.csv
+tyme.data
+*.tyme
