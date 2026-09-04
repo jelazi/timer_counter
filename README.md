@@ -226,6 +226,22 @@ Quick checklist:
 - Configure the app in Settings -> PocketBase, or create a local `lib/config/pocketbase_config.json` from [lib/config/pocketbase_config.example.json](lib/config/pocketbase_config.example.json) before building a dedicated release.
 - Do not ship another user's real PocketBase credentials or invoice settings in a customer build.
 
+### Server URL resolution
+
+The server URL is resolved in this order, first match wins:
+
+1. `--dart-define=POCKETBASE_URL=...` — a build-time constant
+2. the `url` field of the bundled `lib/config/pocketbase_config.json` asset (placeholder values containing `example.com` are ignored)
+3. the URL saved in Settings -> PocketBase
+
+The web target has no Settings screen before sign-in, so it needs the URL at build time and prompts for credentials on the login screen:
+
+```bash
+flutter build web --dart-define=POCKETBASE_URL=https://your-pb.example.com
+```
+
+`lib/config/pocketbase_config.json` is git-ignored, but it is declared as an asset in `pubspec.yaml` and is therefore **bundled into every build**. Flutter assets are not encrypted, and on the web target they are served as plain files, so treat any credentials placed in it as readable by anyone holding the build. Prefer `--dart-define` for the URL and the login screen for credentials.
+
 ## Licence
 
 Uvolněno pod [licencí MIT](LICENSE).

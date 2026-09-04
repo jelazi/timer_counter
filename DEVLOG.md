@@ -1,5 +1,117 @@
 # Development Log
 
+## 2026-09-04 (part 4) — chore: drop dead Firebase config, align versions, cover the export service
+
+### What was done
+
+- **Removed the abandoned Firebase setup**: `firebase.json` and `docs/FIREBASE_SETUP.md`. `pubspec.yaml`
+  declares no Firebase dependency and nothing imports `firebase_options.dart`, so both files only
+  documented a path the project no longer takes — it syncs through PocketBase. The `.gitignore` entries
+  for `google-services.json` and `GoogleService-Info.plist` were kept as cheap insurance.
+- **Aligned the installer versions with `pubspec.yaml` (1.0.10).** `inno_setup.iss` was pinned at 1.0.6
+  and `windows/installer/timer_counter_setup.iss` at 1.0.7, so the installer advertised 1.0.6 while
+  shipping 1.0.10 code.
+- **Documented how the PocketBase server URL is resolved** in `README.md`: the
+  `--dart-define=POCKETBASE_URL` constant, then the bundled asset, then the settings override, plus the
+  web build command. None of this was written down anywhere, although `auth_gate.dart` tells the user
+  at runtime to pass the define.
+- **Noted the asset-bundling caveat in the README**: `lib/config/pocketbase_config.json` is git-ignored
+  but declared as an asset, so it is baked into every build (confirmed at
+  `build/unit_test_assets/lib/config/`) and is served as a plain file on the web target.
+- **Added `test/core/services/tyme_export_service_test.dart`** — 17 tests across four groups: duration
+  rounding, hourly rate resolution, the exported entry payload, and entry selection. `exportToJson`
+  takes an `outputPath`, so the tests write to a temp directory and need no `path_provider`. Repositories
+  are faked with `mocktail`, matching the pattern in `snapshot_diff_service_test.dart`.
+
+### What was fixed
+
+Nothing behavioural — this entry is documentation, dead-file removal and test coverage.
+
+One export behaviour was pinned down while writing the tests and is worth recording: with rounding on,
+an entry shorter than half the rounding step rounds to zero and is then lifted to the one-minute floor
+by `_calculateDurationMinutes`. At a 15-minute step, 8 minutes becomes 15 but 7 minutes becomes 1, not
+15. That is what "NEAREST" implies, but it is surprising enough to be covered by its own test.
+
+### Current state
+
+- `flutter analyze`: **No issues found**.
+- `flutter test`: **40 tests passed**, up from 23.
+
+### Pending / next steps
+
+- **Bundle identifiers stay `com.example.*` on Android, macOS, Linux and Windows** — decided, not
+  pending. iOS was moved to `cz.jelazi.timerCounter` in part 3 because the old value carried a client
+  name; the remaining platforms carry only the Flutter default, which is cosmetic. Renaming them would
+  cost real data: on macOS the sandbox container is keyed by the bundle identifier and
+  `~/Library/Containers/com.example.timerCounter` holds 14 MB of live Hive boxes, so a rename without a
+  migration step orphans them and the app starts empty. Android carries the same risk on any installed
+  device, and its `namespace` change would additionally require moving `MainActivity.kt` into a matching
+  package directory. Revisit only alongside a data migration.
+- The two Inno Setup scripts remain side by side. They are not duplicates: `inno_setup.iss` resolves
+  paths from the repository root and takes `/DMyAppVersion`, driven by `deploy_windows.bat`, while
+  `windows/installer/timer_counter_setup.iss` resolves paths relative to its own directory for manual
+  compilation. Worth consolidating on one, but that is a workflow decision.
+- Test coverage is still thin overall: 3 test files against 85 files under `lib/`. The blocs and
+  `tyme_import_service` have none.
+- Everything under the part 3 entry about GitHub still serving the pre-rewrite objects is unchanged.
+
+## 2026-09-04 (part 3) — chore: rewrite git history to purge personal and client data
+
+### What was fixed
+
+Auditing the history before the planned rewrite turned up considerably more than the three data
+files the rewrite was scoped for. `lib/data/models/invoice_settings.dart` and
+`lib/core/services/pdf_report_service.dart` carried hardcoded invoice defaults until they were made
+configurable in February. Present across 20-33 commits each:
+
+- Author's own data: home address, IČO `19164165`, phone, bank account number `670100-...` and IBAN.
+- Client data: company name, registered address, IČO and DIČ.
+
+None of this is in `HEAD` — it was cleaned up when invoice settings became configurable — but it was
+readable in the public history of every earlier commit. The bank account and home address were the
+more serious exposure; the removed `test_export.*` / `tyme.data` files were what prompted the
+rewrite in the first place.
+
+### What was done
+
+- **Backed up first.** `git bundle create --all` before touching anything, verified with
+  `git bundle verify` ("The bundle records a complete history").
+- **Ran `git filter-repo`** over all 55 commits, combining two filters in one pass:
+  - `--invert-paths` on `test_export.json`, `test_export.csv`, `tyme.data`.
+  - `--replace-text` over 14 literals — client name, both companies' addresses and registration
+    numbers, phone, bank account, IBAN, and the invoice description naming the client's project.
+  - Checked for string collisions beforehand: the numeric literals appear only in those two Dart
+    files, so replacing them globally could not corrupt Xcode UUIDs or lockfile hashes.
+- **Renamed the iOS bundle identifier** `cz.medutech.timerCounter` -> `cz.jelazi.timerCounter`
+  (6 occurrences in `ios/Runner.xcodeproj/project.pbxproj`), done through the same `--replace-text`
+  pass so history and `HEAD` agree. Other platforms were unaffected — Android, macOS, Linux and
+  Windows all still use the Flutter default `com.example.*`.
+- **Repointed the Windows installer** in `windows/installer/timer_counter_setup.iss`: `AppURL` to the
+  GitHub repository via the replacement pass, and `AppPublisher` set by hand afterwards, since the
+  automated pass could only blank it.
+- **Force-pushed** both branches; `develop` was fast-forwarded to `master` first so they stay level.
+
+### Current state
+
+- `flutter analyze`: **No issues found**. `flutter test`: **23 tests passed**. Verified after the
+  rewrite, so the replacements did not corrupt any source file.
+- All 55 commits preserved (no commits dropped); every SHA changed.
+- Sweep over `git rev-list --all` for the three filenames and nine sensitive literals: **0 hits**.
+- `origin/master` and `origin/develop` both at `ecca8ab`.
+
+### Pending / next steps
+
+- **The old objects are still served by GitHub.** Verified, not assumed: fetching
+  `contents/lib/data/models/invoice_settings.dart?ref=2c1f47f7...` still returns the full plaintext
+  invoice block, and the pre-rewrite tree still lists `tyme.data`. A force-push makes old commits
+  unreachable but does not delete them; they stay addressable by SHA until GitHub garbage-collects.
+  Resolving this needs either a request to GitHub Support to purge unreachable objects, or deleting
+  and recreating the repository (0 stars, 0 forks and 0 issues make that cheap here).
+- The data was publicly readable for months, so it must be treated as already disclosed regardless.
+  Unlike an API key, a client's IČO and an address cannot be rotated.
+- `lzizka@gmail.com` was deliberately left alone: it is the author email on all 55 commits, so
+  scrubbing it from file contents while it stays in commit metadata would achieve nothing.
+
 ## 2026-09-04 (part 2) — chore: adopt a develop/master branch workflow
 
 ### What was done

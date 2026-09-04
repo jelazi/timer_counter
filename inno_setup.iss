@@ -1,9 +1,9 @@
 ; Inno Setup script for Timer Counter.
-; Compile manually with: ISCC.exe /DMyAppVersion=1.0.6 inno_setup.iss
+; Compile manually with: ISCC.exe /DMyAppVersion=1.0.10 inno_setup.iss
 
 #define MyAppName "Timer Counter"
 #ifndef MyAppVersion
-#define MyAppVersion "1.0.6"
+#define MyAppVersion "1.0.10"
 #endif
 #define MyAppPublisher "Timer Counter"
 #define MyAppExeName "timer_counter.exe"
