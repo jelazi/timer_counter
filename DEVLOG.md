@@ -1,5 +1,32 @@
 # Development Log
 
+## 2026-09-04 (part 2) — chore: adopt a develop/master branch workflow
+
+### What was done
+
+- **Reset `develop` onto `master`.** `develop` had been the default branch while sitting 52 commits
+  behind `master` with no commits of its own, so the update was a fast-forward
+  (`9654408..112a7d7`), not a history rewrite — nothing was discarded.
+- **Adopted the intended workflow**: `develop` is the integration branch for ongoing work, `master`
+  holds releases. The GitHub default branch stays `master` so visitors land on the released state.
+- **Widened the CI triggers** in `.github/workflows/ci.yml` from `[master]` to `[master, develop]`
+  for both `push` and `pull_request`. As written earlier the same day, the workflow would not have
+  run on any development work at all — it only fired once changes had already reached `master`.
+
+### Current state
+
+- `origin/develop` and `origin/master` both at `112a7d7`; `git rev-list --left-right --count` between
+  them reports `0 0`.
+- Default branch on GitHub: `master`. Branches on the remote: `develop`, `master`.
+- The CI trigger change is committed by the author, not verified by an actual Actions run yet.
+
+### Pending / next steps
+
+- Everything listed under the part 1 entry below is still open — most importantly the **history
+  rewrite**: `test_export.json`, `test_export.csv` and `tyme.data` were removed from the working tree
+  but remain reachable in every commit before `112a7d7` and are still fetchable from GitHub.
+- First CI run needs to be watched; the workflow has never executed.
+
 ## 2026-09-04 — chore: repository hygiene for public/CV readiness
 
 ### What was done
