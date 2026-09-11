@@ -14,6 +14,14 @@ The app syncs these PocketBase collections:
 - `running_timers`
 - `monthly_targets`
 - `day_overrides`
+- `context_settings`
+- `context_day_overrides`
+
+The last two hold the per-work-context schedules, month goals and days off. They
+were added later, so a server whose schema predates them still works: the app
+detects that they are missing and keeps that data local until they are imported.
+An older app version does not know them at all and leaves them untouched, so old
+and new builds can share one server.
 
 Every synced collection uses an `item_id` field for the app's local UUID and a required `user` relation to the authenticated PocketBase user. API rules restrict records to their owner, so one PocketBase server can host multiple users without mixing their data.
 
@@ -114,7 +122,8 @@ The schema is stored in `pocketbase/pb_schema.json`.
 2. Go to Settings -> Import collections.
 3. Paste the full contents of `pocketbase/pb_schema.json`.
 4. Review and confirm the import.
-5. Verify that all seven app collections exist: `categories`, `projects`, `tasks`, `time_entries`, `running_timers`, `monthly_targets`, and `day_overrides`.
+5. Verify that all nine app collections exist: `categories`, `projects`, `tasks`, `time_entries`, `running_timers`, `monthly_targets`, `day_overrides`, `context_settings`, and `context_day_overrides`.
+6. Re-importing on an existing server adds the two `context_*` collections and leaves the existing records alone.
 
 The schema includes API rules so authenticated users can list, view, update, and delete only their own records.
 
@@ -206,6 +215,7 @@ Most app features are shared with macOS and Linux. The current macOS-only featur
 | Test Connection fails | URL must point to the PocketBase root, not `/_/` or `/api` |
 | Auth fails | Confirm the user exists in `users` and the password is correct |
 | Sync returns 404 for `day_overrides` | Import the latest `pocketbase/pb_schema.json` |
+| Per-context schedules do not reach other devices | Import the latest schema so `context_settings` and `context_day_overrides` exist |
 | Sync works for one user but not another | Verify records have the correct `user` relation and API rules were imported |
 | Realtime sync does not update | Check proxy/firewall support for Server-Sent Events |
 | Windows app starts without sync | Check Settings -> PocketBase or whether a valid config was bundled |
@@ -233,6 +243,14 @@ Aplikace synchronizuje tyto PocketBase kolekce:
 - `running_timers`
 - `monthly_targets`
 - `day_overrides`
+- `context_settings`
+- `context_day_overrides`
+
+Poslední dvě drží rozvrhy, měsíční cíle a dny volna jednotlivých pracovních
+režimů. Byly přidány později, takže server se starším schématem funguje dál:
+aplikace pozná, že kolekce chybí, a tato data si nechá lokálně, dokud je
+nenaimportuješ. Starší verze aplikace je vůbec nezná a nesáhne na ně, takže
+starý i nový build mohou sdílet jeden server.
 
 Každá synchronizovaná kolekce používá pole `item_id` jako UUID z lokální aplikace a povinnou relaci `user` na přihlášeného uživatele PocketBase. API pravidla omezují záznamy pouze na jejich vlastníka, takže jeden PocketBase server může hostovat více uživatelů bez míchání dat.
 
@@ -333,7 +351,8 @@ Schéma je uložené v `pocketbase/pb_schema.json`.
 2. Přejdi do Settings -> Import collections.
 3. Vlož celý obsah `pocketbase/pb_schema.json`.
 4. Zkontroluj a potvrď import.
-5. Ověř, že existuje všech sedm aplikačních kolekcí: `categories`, `projects`, `tasks`, `time_entries`, `running_timers`, `monthly_targets` a `day_overrides`.
+5. Ověř, že existuje všech devět aplikačních kolekcí: `categories`, `projects`, `tasks`, `time_entries`, `running_timers`, `monthly_targets`, `day_overrides`, `context_settings` a `context_day_overrides`.
+6. Opakovaný import na běžícím serveru jen doplní dvě kolekce `context_*`, stávající záznamy zůstanou nedotčené.
 
 Schéma obsahuje API pravidla, takže přihlášení uživatelé mohou číst, upravovat a mazat jen své vlastní záznamy.
 
@@ -425,6 +444,7 @@ Většina funkcí je společná pro macOS, Windows i Linux. Aktuální macOS-onl
 | Test Connection selže | URL musí ukazovat na root PocketBase, ne na `/_/` nebo `/api` |
 | Auth selže | Ověř, že uživatel existuje v `users` a heslo je správné |
 | Sync vrací 404 pro `day_overrides` | Naimportuj nejnovější `pocketbase/pb_schema.json` |
+| Rozvrhy režimů se nedostanou na další zařízení | Naimportuj nejnovější schéma, aby existovaly `context_settings` a `context_day_overrides` |
 | Sync funguje pro jednoho uživatele, ale ne pro jiného | Ověř správnou relaci `user` a importovaná API pravidla |
 | Realtime sync se neupdatuje | Zkontroluj proxy/firewall a podporu pro Server-Sent Events |
 | Windows aplikace se spustí bez syncu | Zkontroluj Settings -> PocketBase nebo jestli byl zabalený validní config |

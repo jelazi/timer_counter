@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:pocketbase/pocketbase.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/monthly_hours_target_model.dart';
 import '../../data/models/project_model.dart';
@@ -26,7 +27,16 @@ import 'deletion_journal_service.dart';
 enum SyncStatus { disabled, connecting, connected, error }
 
 /// Event emitted when a remote change updates a local collection.
-enum SyncCollection { categories, projects, tasks, timeEntries, runningTimers, monthlyTargets, dayOverrides }
+enum SyncCollection { categories, projects, tasks, timeEntries, runningTimers, monthlyTargets, dayOverrides, contextSettings, contextDayOverrides }
+
+/// Collections added for per-context work schedules.
+///
+/// A server whose schema predates them simply does not have them, and an older
+/// app version never reads or writes them. Both cases must degrade to "no
+/// context data" rather than failing the sync, so every access to these is
+/// tolerant of a missing collection.
+const _contextSettingsCollection = 'context_settings';
+const _contextDayOverridesCollection = 'context_day_overrides';
 
 /// Callback for reporting sync progress.
 typedef SyncProgressCallback = void Function(String message, double progress);
@@ -332,6 +342,7 @@ class PocketBaseSyncService {
     await _runningTimerRepo.stopAll();
     await _monthlyTargetRepo.deleteAll();
     await _settingsRepo.restoreAllDayOverrides({});
+    await _settingsRepo.clearAllContextSettings();
     await _settingsRepo.setPocketBaseLastSync('');
   }
 
@@ -362,6 +373,7 @@ class PocketBaseSyncService {
       await _subscribeRunningTimers();
       await _subscribeMonthlyTargets();
       await _subscribeDayOverrides();
+      await _subscribeContextCollections();
 
       _setStatus(SyncStatus.connected);
       _lastError = null;
@@ -385,6 +397,12 @@ class PocketBaseSyncService {
       await _pb.collection('day_overrides').unsubscribe();
     } catch (e) {
       debugPrint('[PocketBaseSync] Error stopping listeners: $e');
+    }
+    try {
+      await _pb.collection(_contextSettingsCollection).unsubscribe();
+      await _pb.collection(_contextDayOverridesCollection).unsubscribe();
+    } catch (e) {
+      debugPrint('[PocketBaseSync] Error stopping context listeners: $e');
     }
     _listenersActive = false;
     debugPrint('[PocketBaseSync] Listeners stopped');
@@ -499,6 +517,28 @@ class PocketBaseSyncService {
     await _deleteRecord('day_overrides', _dateKey(date));
   }
 
+  /// Push the schedule and month goals of one work context.
+  Future<void> pushContextSettings(String contextId) async {
+    if (!isSignedIn) return;
+    await _upsertRecord(_contextSettingsCollection, contextId, _contextSettingsToMap(contextId));
+  }
+
+  Future<void> pushContextDayOverride(String contextId, DateTime date, String type) async {
+    if (!isSignedIn) return;
+    final itemId = _contextDayKey(contextId, _dateKey(date));
+    await _upsertRecord(_contextDayOverridesCollection, itemId, {
+      'item_id': itemId,
+      'context_id': contextId,
+      'date': _dateKey(date),
+      'override_type': type,
+    });
+  }
+
+  Future<void> deleteContextDayOverride(String contextId, DateTime date) async {
+    if (!isSignedIn) return;
+    await _deleteRecord(_contextDayOverridesCollection, _contextDayKey(contextId, _dateKey(date)));
+  }
+
   // ═════════════════════════════════════════════════════════════════════════
   // BULK — initial upload / download
   // ═════════════════════════════════════════════════════════════════════════
@@ -532,11 +572,14 @@ class PocketBaseSyncService {
       final targets = _monthlyTargetRepo.getAll();
       await _replaceRemote('monthly_targets', {for (final m in targets) m.id: _monthlyTargetToMap(m)});
 
-      onProgress?.call('Day overrides…', 0.96);
+      onProgress?.call('Day overrides…', 0.94);
       final dayOverrides = _settingsRepo.getAllDayOverrides();
       await _replaceRemote('day_overrides', {
         for (final entry in dayOverrides.entries) entry.key: {'item_id': entry.key, 'date': entry.key, 'override_type': entry.value},
       });
+
+      onProgress?.call('Work contexts…', 0.98);
+      await _uploadContextData();
 
       _settingsRepo.setPocketBaseLastSync(DateTime.now().toIso8601String());
       onProgress?.call('Done', 1.0);
@@ -594,6 +637,10 @@ class PocketBaseSyncService {
       onProgress?.call('Day overrides…', 0.85);
       final remoteDayOverrides = await _downloadCollection<MapEntry<String, String>>('day_overrides', _dayOverrideFromMap);
 
+      onProgress?.call('Work contexts…', 0.88);
+      final remoteContextSettings = await _downloadOptionalCollection<Map<String, dynamic>>(_contextSettingsCollection, (m) => m);
+      final remoteContextOverrides = await _downloadOptionalCollection<MapEntry<String, String>>(_contextDayOverridesCollection, _contextDayOverrideFromMap);
+
       // ── Phase 2: apply. Everything is in hand, so a failure here cannot
       // leave us reconciled against a partial download. ─────────────────────
       onProgress?.call('Applying…', 0.90);
@@ -650,6 +697,30 @@ class PocketBaseSyncService {
         await _settingsRepo.restoreAllDayOverrides({for (final entry in remoteDayOverrides) entry.key: entry.value});
       }
 
+      // Context settings are only ever upserted: a context whose record the
+      // server does not have keeps its local schedule instead of losing it.
+      if (remoteContextSettings != null) {
+        for (final settings in remoteContextSettings) {
+          await _applyContextSettings(settings);
+        }
+      }
+
+      final localContextOverrides = _settingsRepo.getAllContextDayOverrides();
+      if (remoteContextOverrides != null) {
+        if (remoteContextOverrides.isEmpty && localContextOverrides.isNotEmpty) {
+          _reportGuard(
+            SyncGuardReport(
+              collection: _contextDayOverridesCollection,
+              blockedDeletions: localContextOverrides.length,
+              localCount: localContextOverrides.length,
+              remoteCount: 0,
+            ),
+          );
+        } else {
+          await _settingsRepo.restoreAllContextDayOverrides({for (final entry in remoteContextOverrides) entry.key: entry.value});
+        }
+      }
+
       _settingsRepo.setPocketBaseLastSync(DateTime.now().toIso8601String());
       onProgress?.call('Done', 1.0);
       return SyncResult(
@@ -692,7 +763,7 @@ class PocketBaseSyncService {
   Future<int> countRemoteRecords() async {
     if (!isSignedIn) return 0;
     int total = 0;
-    for (final coll in ['categories', 'projects', 'tasks', 'time_entries', 'running_timers', 'monthly_targets', 'day_overrides']) {
+    for (final coll in ['categories', 'projects', 'tasks', 'time_entries', 'running_timers', 'monthly_targets', 'day_overrides', _contextSettingsCollection, _contextDayOverridesCollection]) {
       try {
         final result = await _pb.collection(coll).getList(filter: 'user = "$userId"', perPage: 1);
         total += result.totalItems;
@@ -711,7 +782,9 @@ class PocketBaseSyncService {
         _timeEntryRepo.getAll().length +
         _runningTimerRepo.getAll().length +
         _monthlyTargetRepo.getAll().length +
-        _settingsRepo.getAllDayOverrides().length;
+        _settingsRepo.getAllDayOverrides().length +
+        _settingsRepo.getContextIdsWithSettings().length +
+        _settingsRepo.getAllContextDayOverrides().length;
   }
 
   /// Perform smart first sync after initial connection.
@@ -841,6 +914,47 @@ class PocketBaseSyncService {
     }, filter: 'user = "$userId"');
   }
 
+  /// Subscribe to the optional context collections.
+  ///
+  /// A server without them must not leave the client in the error state, so a
+  /// failure here is logged and the rest of the sync carries on.
+  Future<void> _subscribeContextCollections() async {
+    try {
+      await _pb.collection(_contextSettingsCollection).subscribe('*', (e) async {
+        if (_suppressListeners) return;
+        final record = e.record;
+        if (record == null || e.action == 'delete') return;
+        await _applyContextSettings(record.toJson());
+        _collectionChangeController.add(SyncCollection.contextSettings);
+      }, filter: 'user = "$userId"');
+
+      await _pb.collection(_contextDayOverridesCollection).subscribe('*', (e) async {
+        if (_suppressListeners) return;
+        final record = e.record;
+        if (record == null) return;
+
+        final contextId = record.getStringValue('context_id');
+        final date = _parseDateKeyOrNull(record.getStringValue('date'));
+        if (contextId.isEmpty || date == null) return;
+
+        switch (e.action) {
+          case 'create':
+          case 'update':
+            final type = record.getStringValue('override_type');
+            if (type == 'off' || type == 'work') {
+              await _settingsRepo.setContextDayOverride(contextId, date, type);
+              _collectionChangeController.add(SyncCollection.contextDayOverrides);
+            }
+          case 'delete':
+            await _settingsRepo.setContextDayOverride(contextId, date, null);
+            _collectionChangeController.add(SyncCollection.contextDayOverrides);
+        }
+      }, filter: 'user = "$userId"');
+    } catch (e) {
+      debugPrint('[PocketBaseSync] Context collections unavailable, real-time sync for them is off: $e');
+    }
+  }
+
   void _handleEvent<T>(RecordSubscriptionEvent event, T Function(Map<String, dynamic>) fromMap, Future<void> Function(T) upsert, Future<void> Function(String) delete) {
     final record = event.record;
     if (record == null) return;
@@ -956,6 +1070,45 @@ class PocketBaseSyncService {
       throw StateError('Incomplete download of "$collection": got ${results.length} records, server reported $expectedTotal');
     }
     return results;
+  }
+
+  /// Like [_downloadCollection], but returns null when the server has no such
+  /// collection or will not serve it. Lets a client whose schema is newer than
+  /// the server's sync everything else instead of aborting.
+  Future<List<T>?> _downloadOptionalCollection<T>(String collection, T Function(Map<String, dynamic>) fromMap) async {
+    try {
+      return await _downloadCollection(collection, fromMap);
+    } on ClientException catch (e) {
+      if (e.statusCode == 404 || e.statusCode == 403) {
+        debugPrint('[PocketBaseSync] Collection "$collection" unavailable (${e.statusCode}), skipping');
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  /// Push every work context's schedule and day overrides.
+  ///
+  /// Failures are logged, not thrown: the context collections are optional and
+  /// must never take the rest of an upload down with them.
+  Future<void> _uploadContextData() async {
+    try {
+      for (final contextId in _settingsRepo.getContextIdsWithSettings()) {
+        await _upsertRecord(_contextSettingsCollection, contextId, _contextSettingsToMap(contextId));
+      }
+
+      await _replaceRemote(_contextDayOverridesCollection, {
+        for (final entry in _settingsRepo.getAllContextDayOverrides().entries)
+          entry.key: {
+            'item_id': entry.key,
+            'context_id': entry.key.split(AppConstants.contextKeySeparator).first,
+            'date': entry.key.split(AppConstants.contextKeySeparator).last,
+            'override_type': entry.value,
+          },
+      });
+    } catch (e) {
+      debugPrint('[PocketBaseSync] Context data upload skipped: $e');
+    }
   }
 
   /// Reconcile a local collection against the freshly downloaded remote list.
@@ -1126,6 +1279,52 @@ class PocketBaseSyncService {
     final date = m['date'] as String? ?? m['item_id'] as String? ?? '';
     final type = m['override_type'] as String? ?? '';
     return MapEntry(date, type);
+  }
+
+  // --- Work contexts ---
+
+  Map<String, dynamic> _contextSettingsToMap(String contextId) => {
+    'item_id': contextId,
+    'context_id': contextId,
+    'use_own_schedule': _settingsRepo.getContextUsesOwnSchedule(contextId),
+    'schedule': jsonEncode(_settingsRepo.getContextScheduleMap(contextId)),
+    'month_targets': jsonEncode(_settingsRepo.getContextMonthTargets(contextId)),
+  };
+
+  Future<void> _applyContextSettings(Map<String, dynamic> m) async {
+    final contextId = m['item_id'] as String? ?? m['context_id'] as String? ?? '';
+    if (contextId.isEmpty) return;
+
+    await _settingsRepo.setContextUsesOwnSchedule(contextId, m['use_own_schedule'] as bool? ?? false);
+
+    final schedule = _decodeJsonMap(m['schedule']);
+    if (schedule.isNotEmpty) await _settingsRepo.restoreContextScheduleMap(contextId, schedule);
+
+    await _settingsRepo.restoreContextMonthTargets(contextId, _decodeJsonMap(m['month_targets']));
+  }
+
+  /// `<contextId>|<YYYY-MM-DD>` — the key both the remote `item_id` and the
+  /// local override map use.
+  MapEntry<String, String> _contextDayOverrideFromMap(Map<String, dynamic> m) {
+    final contextId = m['context_id'] as String? ?? '';
+    final date = m['date'] as String? ?? '';
+    final type = m['override_type'] as String? ?? '';
+    return MapEntry(_contextDayKey(contextId, date), type);
+  }
+
+  static String _contextDayKey(String contextId, String dateKey) => '$contextId${AppConstants.contextKeySeparator}$dateKey';
+
+  static Map<String, dynamic> _decodeJsonMap(dynamic value) {
+    if (value is Map) return Map<String, dynamic>.from(value);
+    if (value is String && value.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (e) {
+        debugPrint('[PocketBaseSync] Malformed context JSON: $e');
+      }
+    }
+    return const {};
   }
 
   // --- Date helpers ---

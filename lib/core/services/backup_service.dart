@@ -23,8 +23,10 @@ import '../../data/repositories/time_entry_repository.dart';
 /// Service for full backup and restore of all application data including settings.
 class BackupService {
   /// Bumped to 2 when monthly targets and standalone invoices were added to the
-  /// payload. Version 1 files restore fine — their missing keys read as empty.
-  static const int backupVersion = 2;
+  /// payload, and to 3 for the weekly work schedule and the per-context
+  /// schedules, day overrides and month goals. Older files restore fine — their
+  /// missing keys read as empty and leave the current values alone.
+  static const int backupVersion = 3;
 
   final TimeEntryRepository _timeEntryRepository;
   final ProjectRepository _projectRepository;
@@ -240,8 +242,24 @@ class BackupService {
       'pocketBaseEnabled': _settingsRepository.getPocketBaseEnabled(),
       'pocketBaseLastSync': _settingsRepository.getPocketBaseLastSync(),
 
-      // Day overrides
+      // Work schedule & day overrides
+      'workSchedule': _settingsRepository.getWorkScheduleMap(),
       'dayOverrides': _settingsRepository.getAllDayOverrides(),
+
+      // Work contexts
+      'contextSettings': _exportContextSettings(),
+      'contextDayOverrides': _settingsRepository.getAllContextDayOverrides(),
+    };
+  }
+
+  Map<String, dynamic> _exportContextSettings() {
+    return {
+      for (final id in _settingsRepository.getContextIdsWithSettings())
+        id: {
+          'useOwnSchedule': _settingsRepository.getContextUsesOwnSchedule(id),
+          'schedule': _settingsRepository.getContextScheduleMap(id),
+          'monthTargets': _settingsRepository.getContextMonthTargets(id),
+        },
     };
   }
 
@@ -306,10 +324,30 @@ class BackupService {
     if (s['pocketBaseEnabled'] != null) await _settingsRepository.setPocketBaseEnabled(s['pocketBaseEnabled'] as bool);
     if (s['pocketBaseLastSync'] != null) await _settingsRepository.setPocketBaseLastSync(s['pocketBaseLastSync'] as String);
 
-    // Day overrides
+    // Work schedule & day overrides
+    if (s['workSchedule'] is Map) await _settingsRepository.restoreWorkScheduleMap(s['workSchedule'] as Map);
     if (s['dayOverrides'] != null) {
       final overrides = (s['dayOverrides'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()));
       await _settingsRepository.restoreAllDayOverrides(overrides);
+    }
+
+    // Work contexts
+    if (s['contextSettings'] is Map) await _restoreContextSettings(s['contextSettings'] as Map);
+    if (s['contextDayOverrides'] is Map) {
+      final overrides = (s['contextDayOverrides'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()));
+      await _settingsRepository.restoreAllContextDayOverrides(overrides);
+    }
+  }
+
+  Future<void> _restoreContextSettings(Map<dynamic, dynamic> contexts) async {
+    for (final entry in contexts.entries) {
+      final id = entry.key.toString();
+      final settings = entry.value;
+      if (settings is! Map) continue;
+
+      await _settingsRepository.setContextUsesOwnSchedule(id, settings['useOwnSchedule'] as bool? ?? false);
+      if (settings['schedule'] is Map) await _settingsRepository.restoreContextScheduleMap(id, settings['schedule'] as Map);
+      if (settings['monthTargets'] is Map) await _settingsRepository.restoreContextMonthTargets(id, settings['monthTargets'] as Map);
     }
   }
 
@@ -349,6 +387,7 @@ class BackupService {
     await _settingsRepository.setPocketBasePassword('');
     await _settingsRepository.setPocketBaseEnabled(false);
     await _settingsRepository.setPocketBaseLastSync('');
+    await _settingsRepository.clearAllContextSettings();
   }
 
   Future<String> _getDefaultBackupPath() async {

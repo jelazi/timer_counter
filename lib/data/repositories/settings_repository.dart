@@ -2,6 +2,7 @@ import 'package:hive_ce/hive.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../models/invoice_settings.dart';
+import '../models/work_day_schedule.dart';
 
 class SettingsRepository {
   late Box<dynamic> _box;
@@ -277,6 +278,24 @@ class SettingsRepository {
   bool getWorkScheduleEnabled(int weekday) => _box.get('${AppConstants.workSchedulePrefix}_${weekday}_enabled', defaultValue: _defaultSchedule[weekday]!.$3) as bool;
   Future<void> setWorkScheduleEnabled(int weekday, bool enabled) => _box.put('${AppConstants.workSchedulePrefix}_${weekday}_enabled', enabled);
 
+  WorkDaySchedule getWorkDaySchedule(int weekday) =>
+      WorkDaySchedule(start: getWorkScheduleStart(weekday), end: getWorkScheduleEnd(weekday), enabled: getWorkScheduleEnabled(weekday));
+
+  Future<void> setWorkDaySchedule(int weekday, WorkDaySchedule schedule) async {
+    await setWorkScheduleStart(weekday, schedule.start);
+    await setWorkScheduleEnd(weekday, schedule.end);
+    await setWorkScheduleEnabled(weekday, schedule.enabled);
+  }
+
+  Map<String, dynamic> getWorkScheduleMap() => {for (int day = 1; day <= 7; day++) '$day': getWorkDaySchedule(day).toJson()};
+
+  Future<void> restoreWorkScheduleMap(Map<dynamic, dynamic> schedule) async {
+    for (int day = 1; day <= 7; day++) {
+      final raw = schedule['$day'];
+      if (raw is Map) await setWorkDaySchedule(day, WorkDaySchedule.fromJson(raw));
+    }
+  }
+
   /// Get today's expected working hours (0 if not a work day), considering day overrides
   double getTodayExpectedHours() {
     return getExpectedHoursForDate(DateTime.now());
@@ -284,14 +303,8 @@ class SettingsRepository {
 
   /// Get expected working hours for a specific weekday
   double getExpectedHoursForDay(int weekday) {
-    if (!getWorkScheduleEnabled(weekday)) return 0;
-    final start = getWorkScheduleStart(weekday);
-    final end = getWorkScheduleEnd(weekday);
-    final startParts = start.split(':');
-    final endParts = end.split(':');
-    final startMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
-    final endMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
-    return (endMinutes - startMinutes) / 60.0;
+    final schedule = getWorkDaySchedule(weekday);
+    return schedule.enabled ? schedule.hours : 0;
   }
 
   // === Local Snapshot Backups ===
@@ -311,7 +324,7 @@ class SettingsRepository {
   // 'off' = vacation/day off (normally a work day but won't work)
   // 'work' = extra work day (normally not a work day but will work)
 
-  static String _dayOverrideKey(DateTime date) => '${AppConstants.dayOverridePrefix}_${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  static String _dayOverrideKey(DateTime date) => '${AppConstants.dayOverridePrefix}_${_dateKey(date)}';
 
   /// Get override for a specific date. Returns 'off', 'work', or null (no override).
   String? getDayOverride(DateTime date) {
@@ -371,29 +384,245 @@ class SettingsRepository {
     }
   }
 
+  // === Work Contexts ===
+  //
+  // A work context is a monthly target (see MonthlyHoursTargetModel) that also
+  // carries its own schedule, day overrides and per-month hour goals. Everything
+  // here is optional: a context without its own settings behaves exactly as
+  // before, falling back to the global schedule and overrides.
+
+  static String _contextScheduleKey(String contextId, int weekday, String field) => '${AppConstants.contextSchedulePrefix}_${contextId}_${weekday}_$field';
+
+  static String _contextOwnScheduleKey(String contextId) => '${AppConstants.contextSchedulePrefix}_${contextId}_${AppConstants.contextScheduleOwnSuffix}';
+
+  static String _contextDayOverrideKey(String contextId, DateTime date) => '${AppConstants.contextDayOverridePrefix}_${contextId}_${_dateKey(date)}';
+
+  static String _contextMonthTargetKey(String contextId, int year, int month) => '${AppConstants.contextMonthTargetPrefix}_${contextId}_${_monthKey(year, month)}';
+
+  static String _dateKey(DateTime date) => '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  static String _monthKey(int year, int month) => '$year-${month.toString().padLeft(2, '0')}';
+
+  /// Whether [contextId] overrides the global weekly schedule with its own.
+  bool getContextUsesOwnSchedule(String contextId) => _box.get(_contextOwnScheduleKey(contextId), defaultValue: false) as bool;
+
+  Future<void> setContextUsesOwnSchedule(String contextId, bool value) => _box.put(_contextOwnScheduleKey(contextId), value);
+
+  /// The context's own schedule for [weekday], regardless of whether it is in
+  /// use. Defaults to the global schedule so switching it on starts from what
+  /// the user already has.
+  WorkDaySchedule getContextOwnDaySchedule(String contextId, int weekday) {
+    return WorkDaySchedule(
+      start: _box.get(_contextScheduleKey(contextId, weekday, 'start'), defaultValue: getWorkScheduleStart(weekday)) as String,
+      end: _box.get(_contextScheduleKey(contextId, weekday, 'end'), defaultValue: getWorkScheduleEnd(weekday)) as String,
+      enabled: _box.get(_contextScheduleKey(contextId, weekday, 'enabled'), defaultValue: getWorkScheduleEnabled(weekday)) as bool,
+    );
+  }
+
+  Future<void> setContextOwnDaySchedule(String contextId, int weekday, WorkDaySchedule schedule) async {
+    await _box.put(_contextScheduleKey(contextId, weekday, 'start'), schedule.start);
+    await _box.put(_contextScheduleKey(contextId, weekday, 'end'), schedule.end);
+    await _box.put(_contextScheduleKey(contextId, weekday, 'enabled'), schedule.enabled);
+  }
+
+  /// The schedule that actually applies to [contextId] on [weekday].
+  WorkDaySchedule getEffectiveDaySchedule(int weekday, {String? contextId}) {
+    if (contextId != null && getContextUsesOwnSchedule(contextId)) {
+      return getContextOwnDaySchedule(contextId, weekday);
+    }
+    return getWorkDaySchedule(weekday);
+  }
+
+  Map<String, dynamic> getContextScheduleMap(String contextId) => {for (int day = 1; day <= 7; day++) '$day': getContextOwnDaySchedule(contextId, day).toJson()};
+
+  Future<void> restoreContextScheduleMap(String contextId, Map<dynamic, dynamic> schedule) async {
+    for (int day = 1; day <= 7; day++) {
+      final raw = schedule['$day'];
+      if (raw is Map) await setContextOwnDaySchedule(contextId, day, WorkDaySchedule.fromJson(raw));
+    }
+  }
+
+  String? getContextDayOverride(String contextId, DateTime date) => _box.get(_contextDayOverrideKey(contextId, date)) as String?;
+
+  Future<void> setContextDayOverride(String contextId, DateTime date, String? type) async {
+    final key = _contextDayOverrideKey(contextId, date);
+    if (type == null) {
+      await _box.delete(key);
+    } else {
+      await _box.put(key, type);
+    }
+  }
+
+  Map<DateTime, String> getContextDayOverridesForMonth(String contextId, int year, int month) {
+    final result = <DateTime, String>{};
+    final daysInMonth = DateTime(year, month + 1, 0).day;
+    for (int day = 1; day <= daysInMonth; day++) {
+      final date = DateTime(year, month, day);
+      final override = getContextDayOverride(contextId, date);
+      if (override != null) result[date] = override;
+    }
+    return result;
+  }
+
+  /// All context day overrides, keyed `<contextId>|<YYYY-MM-DD>`.
+  Map<String, String> getAllContextDayOverrides() {
+    final prefix = '${AppConstants.contextDayOverridePrefix}_';
+    final result = <String, String>{};
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(prefix)) continue;
+      final rest = key.substring(prefix.length);
+      final split = rest.lastIndexOf('_');
+      if (split <= 0) continue;
+      final value = _box.get(key);
+      if (value is String) {
+        result['${rest.substring(0, split)}${AppConstants.contextKeySeparator}${rest.substring(split + 1)}'] = value;
+      }
+    }
+    return result;
+  }
+
+  Future<void> restoreAllContextDayOverrides(Map<String, String> overrides) async {
+    final prefix = '${AppConstants.contextDayOverridePrefix}_';
+    final keysToDelete = _box.keys.where((k) => k is String && k.startsWith(prefix)).toList();
+    for (final key in keysToDelete) {
+      await _box.delete(key);
+    }
+    for (final entry in overrides.entries) {
+      final parts = entry.key.split(AppConstants.contextKeySeparator);
+      if (parts.length != 2) continue;
+      await _box.put('$prefix${parts[0]}_${parts[1]}', entry.value);
+    }
+  }
+
+  /// Hour goal for one specific month, or null when the context's default applies.
+  double? getContextMonthTarget(String contextId, int year, int month) {
+    final value = _box.get(_contextMonthTargetKey(contextId, year, month));
+    return value is num ? value.toDouble() : null;
+  }
+
+  Future<void> setContextMonthTarget(String contextId, int year, int month, double? hours) async {
+    final key = _contextMonthTargetKey(contextId, year, month);
+    if (hours == null) {
+      await _box.delete(key);
+    } else {
+      await _box.put(key, hours);
+    }
+  }
+
+  /// Month exceptions of one context, keyed `YYYY-MM`.
+  Map<String, double> getContextMonthTargets(String contextId) {
+    final prefix = '${AppConstants.contextMonthTargetPrefix}_${contextId}_';
+    final result = <String, double>{};
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(prefix)) continue;
+      final value = _box.get(key);
+      if (value is num) result[key.substring(prefix.length)] = value.toDouble();
+    }
+    return result;
+  }
+
+  Future<void> restoreContextMonthTargets(String contextId, Map<dynamic, dynamic> targets) async {
+    final prefix = '${AppConstants.contextMonthTargetPrefix}_${contextId}_';
+    final keysToDelete = _box.keys.where((k) => k is String && k.startsWith(prefix)).toList();
+    for (final key in keysToDelete) {
+      await _box.delete(key);
+    }
+    for (final entry in targets.entries) {
+      final value = entry.value;
+      if (value is num) await _box.put('$prefix${entry.key}', value.toDouble());
+    }
+  }
+
+  /// All month exceptions, keyed `<contextId>|<YYYY-MM>`.
+  Map<String, double> getAllContextMonthTargets() {
+    final prefix = '${AppConstants.contextMonthTargetPrefix}_';
+    final result = <String, double>{};
+    for (final key in _box.keys) {
+      if (key is! String || !key.startsWith(prefix)) continue;
+      final rest = key.substring(prefix.length);
+      final split = rest.lastIndexOf('_');
+      if (split <= 0) continue;
+      final value = _box.get(key);
+      if (value is num) {
+        result['${rest.substring(0, split)}${AppConstants.contextKeySeparator}${rest.substring(split + 1)}'] = value.toDouble();
+      }
+    }
+    return result;
+  }
+
+  /// Ids of every context that has any local settings of its own.
+  Set<String> getContextIdsWithSettings() {
+    final ids = <String>{};
+    for (final key in _box.keys) {
+      if (key is! String) continue;
+      final id = _contextIdOfKey(key);
+      if (id != null) ids.add(id);
+    }
+    return ids;
+  }
+
+  /// Extract the context id from one of the `context_*` settings keys, or null
+  /// when the key belongs to something else.
+  static String? _contextIdOfKey(String key) {
+    for (final prefix in [AppConstants.contextDayOverridePrefix, AppConstants.contextMonthTargetPrefix]) {
+      if (key.startsWith('${prefix}_')) {
+        final rest = key.substring(prefix.length + 1);
+        final split = rest.lastIndexOf('_');
+        return split > 0 ? rest.substring(0, split) : null;
+      }
+    }
+
+    if (!key.startsWith('${AppConstants.contextSchedulePrefix}_')) return null;
+    var rest = key.substring(AppConstants.contextSchedulePrefix.length + 1);
+    if (rest.endsWith('_${AppConstants.contextScheduleOwnSuffix}')) {
+      return rest.substring(0, rest.length - AppConstants.contextScheduleOwnSuffix.length - 1);
+    }
+    // `<id>_<weekday>_<field>`
+    final fieldSplit = rest.lastIndexOf('_');
+    if (fieldSplit <= 0) return null;
+    rest = rest.substring(0, fieldSplit);
+    final weekdaySplit = rest.lastIndexOf('_');
+    return weekdaySplit > 0 ? rest.substring(0, weekdaySplit) : null;
+  }
+
+  /// Remove the settings of every context, leaving global ones intact.
+  Future<void> clearAllContextSettings() async {
+    final prefixes = ['${AppConstants.contextSchedulePrefix}_', '${AppConstants.contextDayOverridePrefix}_', '${AppConstants.contextMonthTargetPrefix}_'];
+    final keysToDelete = _box.keys.where((k) => k is String && prefixes.any(k.startsWith)).toList();
+    for (final key in keysToDelete) {
+      await _box.delete(key);
+    }
+  }
+
+  /// The override that applies to [date] for [contextId]: the context's own
+  /// override wins, otherwise the global one is inherited.
+  String? getEffectiveDayOverride(DateTime date, {String? contextId}) {
+    if (contextId != null) {
+      final own = getContextDayOverride(contextId, date);
+      if (own != null) return own;
+    }
+    return getDayOverride(date);
+  }
+
   /// Check if a specific date is a work day (considering overrides).
-  bool isWorkDay(DateTime date) {
-    final override = getDayOverride(date);
+  ///
+  /// With [contextId] the context's own schedule and day overrides apply,
+  /// falling back to the global ones wherever the context defines nothing.
+  bool isWorkDay(DateTime date, {String? contextId}) {
+    final override = getEffectiveDayOverride(date, contextId: contextId);
     if (override == 'off') return false;
     if (override == 'work') return true;
-    return getWorkScheduleEnabled(date.weekday);
+    return getEffectiveDaySchedule(date.weekday, contextId: contextId).enabled;
   }
 
   /// Get expected working hours for a specific date (considering overrides).
-  double getExpectedHoursForDate(DateTime date) {
-    final override = getDayOverride(date);
+  double getExpectedHoursForDate(DateTime date, {String? contextId}) {
+    final override = getEffectiveDayOverride(date, contextId: contextId);
     if (override == 'off') return 0;
-    if (override == 'work') {
-      // For extra work days, use the hours from the weekday schedule (even if disabled)
-      final start = getWorkScheduleStart(date.weekday);
-      final end = getWorkScheduleEnd(date.weekday);
-      final startParts = start.split(':');
-      final endParts = end.split(':');
-      final startMinutes = int.parse(startParts[0]) * 60 + int.parse(startParts[1]);
-      final endMinutes = int.parse(endParts[0]) * 60 + int.parse(endParts[1]);
-      return (endMinutes - startMinutes) / 60.0;
-    }
-    return getExpectedHoursForDay(date.weekday);
+    final schedule = getEffectiveDaySchedule(date.weekday, contextId: contextId);
+    // An extra work day is worth the weekday's hours even though it is disabled.
+    if (override == 'work') return schedule.hours;
+    return schedule.enabled ? schedule.hours : 0;
   }
 
   /// Load complete invoice settings from Hive

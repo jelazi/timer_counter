@@ -1,5 +1,139 @@
 # Development Log
 
+## 2026-09-11 — feat: per-context work schedules, days off and month goals
+
+### What was done
+
+A monthly target can now carry its own **work schedule, days off and per-month hour goals**, so
+remaining hours are reported separately for each group of projects ("Medutech" and another company,
+each with its own working days). A target that defines none of this behaves exactly as before.
+
+- **`MonthlyHoursTargetModel` was not touched** — not one field added, `typeId` 6 unchanged. The new
+  settings live in the settings box under three new key prefixes (`AppConstants.contextSchedulePrefix`,
+  `contextDayOverridePrefix`, `contextMonthTargetPrefix`), keyed by the target's id. The reason is
+  downgrade safety: a new `@HiveField` holding a nested `@HiveType` would make an older build throw
+  `unknown typeId` on the same box, and even primitive fields would be dropped the moment an older
+  build wrote the record back.
+- **`SettingsRepository`** gained the context API: `getContextUsesOwnSchedule` /
+  `setContextUsesOwnSchedule`, `getContextOwnDaySchedule` / `setContextOwnDaySchedule`,
+  `getContextDayOverride` / `setContextDayOverride`, `getContextMonthTarget` /
+  `setContextMonthTarget`, the export/restore pairs (`getAllContextDayOverrides`,
+  `restoreAllContextDayOverrides`, `getContextScheduleMap`, `restoreContextScheduleMap`,
+  `getContextMonthTargets`, `restoreContextMonthTargets`), `getContextIdsWithSettings` and
+  `clearAllContextSettings`.
+- **`isWorkDay` and `getExpectedHoursForDate` took an optional `contextId`.** Resolution order:
+  the context's own day override, then the global one, then the weekly schedule (the context's when it
+  is switched on, otherwise the global one). Passing no `contextId` yields the previous behaviour
+  verbatim, which is what every global figure still does.
+- **New `WorkDaySchedule`** (`lib/data/models/work_day_schedule.dart`) — a plain Equatable value type,
+  deliberately not a `HiveType`, persisted as individual settings keys and as JSON in PocketBase.
+- **New `MonthlyTargetCalculator`** (`lib/core/services/monthly_target_calculator.dart`) with
+  `MonthlyTargetProgress`. The "remaining work days / remaining hours / hours per day" block had been
+  copy-pasted into `statistics_screen.dart`, `time_entries_overview_screen.dart` and
+  `time_tracking_screen.dart`; all three now derive their numbers here, each target counting its own
+  work days.
+- **Sync**: two new PocketBase collections, `context_settings` (one record per context: schedule and
+  month goals as JSON) and `context_day_overrides` (one record per context and date). Added to
+  `pocketbase/pb_schema.json`, `uploadAll`, `downloadAll`, the real-time subscriptions,
+  `countRemoteRecords`, `countLocalRecords` and `clearLocalData`, plus `pushContextSettings`,
+  `pushContextDayOverride` and `deleteContextDayOverride`.
+- **UI**: `_DayOverridesCalendar` was extracted from `settings_screen.dart` into
+  `lib/presentation/widgets/day_overrides_calendar.dart` and given an optional `contextId`; days the
+  context inherits from the global settings are drawn in orange. New
+  `lib/presentation/screens/work_context_screen.dart` edits one context — name, projects, default
+  goal, the "own schedule" switch with the seven weekday rows, the month exceptions and the context's
+  own calendar. The monthly targets section in settings now opens it and summarises what each context
+  overrides.
+- The target cards on the statistics and overview screens now state the **remaining hours** outright
+  (the `monthly_targets.remaining` key existed but had never been used), next to the existing
+  "hours per day needed".
+- **Backups** bumped to `backupVersion` 3 and now carry `workSchedule`, `contextSettings` and
+  `contextDayOverrides`. The global weekly schedule had never been in a backup at all — restoring a
+  backup silently left the old working hours in place.
+- Translations: new `work_contexts` section in `cs.json` and `en.json`.
+
+### What was fixed
+
+- **The global weekly work schedule was missing from every backup and snapshot.** A restore brought
+  back day overrides but not the working hours they modify.
+- `getExpectedHoursForDay` could return negative hours for an end time before the start time; it now
+  goes through `WorkDaySchedule.hours`, which floors at zero.
+- "Has work been tracked today" is now judged per target (only the hours of that target's own
+  projects), not from every entry in the month. With a single target covering everything the result is
+  identical; with several it stops one context's work from consuming another context's day.
+
+### Data safety
+
+This was the binding constraint, so it is worth writing down what protects existing data:
+
+- Nothing existing was renamed, moved or migrated. Old targets, day overrides and the global schedule
+  are read from and written to exactly the same keys and collections as before.
+- The new settings-box prefixes cannot collide with the scanned global ones: `getAllDayOverrides`
+  matches `day_override_`, and context keys start with `context_day_override_`. Covered by a test.
+- An **older app build** does not know the two new collections, so it neither lists, subscribes to,
+  downloads, nor reconciles them — its `uploadAll` only replaces its own seven collections. Old and new
+  builds can run against the same server.
+- A **server with the older schema** returns 404; `_downloadOptionalCollection` treats 404 and 403 as
+  "not available" and skips that collection instead of failing `downloadAll`, so sync keeps working and
+  context data simply stays local until the schema is imported. `_uploadContextData` catches its own
+  failures for the same reason.
+- Context settings are only ever upserted on download — a context whose record the server does not
+  have keeps its local schedule. Context day overrides go through the same `SyncGuard` "empty remote
+  must not wipe local" rule as the global ones.
+- Deleting a target deliberately leaves its context settings behind, so the existing undo restores a
+  target complete with its schedule.
+
+### Current state
+
+- `flutter analyze`: **No issues found**.
+- `flutter test`: **60 tests passed**, up from 40 — 20 new ones in
+  `test/core/services/monthly_target_calculator_test.dart` covering schedule inheritance, override
+  precedence, key isolation from the global keys, export/restore round-trips, month exceptions and the
+  remaining-work-day counting.
+- Verified by analyzer and tests only; the app was not launched and no data was migrated.
+
+### Server rollout
+
+The two collections were created on the live server the same day, before the app had ever run against
+it. Both were absent (`404 Missing collection`), which is the case the client's fallback covers.
+
+- **Backed up first**, into `~/Documents/timer_counter_pb_backup_2026-09-11_13-50-20/`: PocketBase's own
+  full backup (`timer_counter_pre_context_2026-09-11_13-50-20.zip`, 1.76 MB, also left on the server), a
+  JSON dump of every record in all eight collections, and `collections_before.json` — the schema exactly
+  as it stood beforehand.
+- **Created with two `POST /api/collections` calls, not the admin UI's "Import collections"**, which
+  submits the whole schema and can overwrite or drop existing collections. Nothing existing was sent to
+  the server at all. Record counts were taken before and after and compared: `categories` 1,
+  `projects` 4, `tasks` 24, `time_entries` 806, `running_timers` 0, `monthly_targets` 3,
+  `day_overrides` 53 — unchanged.
+- **The server hosts two app accounts** — `lzizka@gmail.com` (2 projects, 640 entries, 1 target, 23 day
+  overrides) and `eli.zizkova@gmail.com` (2 projects, 166 entries, 2 targets, 30 day overrides) — plus a
+  separate superuser that happens to share the first e-mail. No record lacks a `user` relation. The new
+  collections carry the same required `user` relation, so contexts are per account like everything else.
+- **Verified end-to-end by impersonating the app user** (`POST /api/collections/users/impersonate/{id}`):
+  created a `context_settings` and a `context_day_overrides` record, read both back with the JSON blobs
+  intact, confirmed the other account sees zero records, confirmed a write stamped with the other
+  account's id is refused (HTTP 400), then deleted both. Both collections are back to 0 records.
+- **The new collections use a stricter `createRule`** (`@request.auth.id != "" && user = @request.auth.id`)
+  than the ones already on the server (`@request.auth.id != ""`), matching what
+  `pocketbase/pb_schema.json` has always specified. The impersonation test above confirms the client's
+  `_upsertRecord` satisfies it, since it stamps `user` with its own id on every create.
+
+### Current state
+
+- `flutter analyze`: **No issues found**.
+- `flutter test`: **60 tests passed**, up from 40.
+- Server: `context_settings` and `context_day_overrides` exist, are owner-scoped, and answer HTTP 200.
+
+### Pending / next steps
+
+- **The app itself has not been run against the updated server.** The real-time subscriptions to the two
+  new collections, and a session with an old and a new build connected at once, are still unverified.
+- The live server's existing collections keep the laxer `createRule`. Worth aligning them with the repo
+  schema, but that is an edit to collections holding real data and was deliberately left alone here.
+- The context editor writes straight to the repository like the existing settings sections do, so it is
+  not covered by a bloc or widget test.
+
 ## 2026-09-04 (part 4) — chore: drop dead Firebase config, align versions, cover the export service
 
 ### What was done

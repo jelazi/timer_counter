@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/services/monthly_target_calculator.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/task_model.dart';
@@ -747,13 +748,18 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     final monthStart = DateTime(now.year, now.month, 1);
     final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
     final today = DateTime(now.year, now.month, now.day);
-    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+    final tomorrow = today.add(const Duration(days: 1));
 
     // Get all entries for this month
     final monthEntries = timeEntryRepo.getByDateRange(monthStart, monthEnd);
     final hoursPerProject = <String, double>{};
+    final todayHoursPerProject = <String, double>{};
     for (final entry in monthEntries) {
-      hoursPerProject.update(entry.projectId, (val) => val + entry.actualDurationSeconds / 3600.0, ifAbsent: () => entry.actualDurationSeconds / 3600.0);
+      final hours = entry.actualDurationSeconds / 3600.0;
+      hoursPerProject.update(entry.projectId, (val) => val + hours, ifAbsent: () => hours);
+      if (!entry.startTime.isBefore(today) && entry.startTime.isBefore(tomorrow)) {
+        todayHoursPerProject.update(entry.projectId, (val) => val + hours, ifAbsent: () => hours);
+      }
     }
 
     // Include running timer seconds per project
@@ -761,42 +767,22 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     if (timerState is TimerRunning) {
       for (final t in timerState.runningTimers) {
         if (!t.startTime.isBefore(monthStart) && t.startTime.isBefore(monthEnd)) {
-          hoursPerProject.update(t.projectId, (val) => val + t.elapsedSeconds / 3600.0, ifAbsent: () => t.elapsedSeconds / 3600.0);
+          final hours = t.elapsedSeconds / 3600.0;
+          hoursPerProject.update(t.projectId, (val) => val + hours, ifAbsent: () => hours);
+          if (!t.startTime.isBefore(today) && t.startTime.isBefore(tomorrow)) {
+            todayHoursPerProject.update(t.projectId, (val) => val + hours, ifAbsent: () => hours);
+          }
         }
       }
     }
 
-    // Check if today is a working day and already has entries (or running timer)
-    final todayIsWorkDay = settingsRepo.isWorkDay(today);
-    final hasTodayEntries =
-        monthEntries.any((e) {
-          final entryDay = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
-          return entryDay == today;
-        }) ||
-        (timerState is TimerRunning &&
-            timerState.runningTimers.any((t) {
-              final tDay = DateTime(t.startTime.year, t.startTime.month, t.startTime.day);
-              return tDay == today;
-            }));
-    // If today is a work day and already has work done, skip it (start from tomorrow)
-    final countFrom = (todayIsWorkDay && hasTodayEntries) ? today.add(const Duration(days: 1)) : today;
-    int remainingWorkDays = 0;
-    for (DateTime d = countFrom; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
-      if (settingsRepo.isWorkDay(d)) {
-        remainingWorkDays++;
-      }
-    }
-    if (remainingWorkDays == 0) return 0;
+    // Each target spreads its own remaining hours over its own work days, so a
+    // context that does not work today contributes nothing to today's figure.
+    final progressList = MonthlyTargetCalculator(
+      settingsRepo,
+    ).progressFor(targets, monthStart: monthStart, hoursPerProject: hoursPerProject, todayHoursPerProject: todayHoursPerProject);
 
-    // Sum remaining hours across all targets
-    double totalRemainingHours = 0;
-    for (final target in targets) {
-      final workedHours = target.projectIds.fold(0.0, (sum, pid) => sum + (hoursPerProject[pid] ?? 0));
-      final remaining = (target.targetHours - workedHours).clamp(0.0, double.infinity);
-      totalRemainingHours += remaining;
-    }
-
-    return totalRemainingHours / remainingWorkDays;
+    return progressList.fold(0.0, (sum, progress) => sum + progress.dailyNeeded);
   }
 }
 

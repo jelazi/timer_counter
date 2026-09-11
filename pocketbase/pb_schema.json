@@ -647,5 +647,136 @@
                 "required": true
             }
         ]
+    },
+    {
+        "id": "tc_ctx_set0",
+        "name": "context_settings",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "cs_item_id0",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "cs_user_rel0",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "cs_ctx_id00",
+                "name": "context_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "cs_own_sch0",
+                "name": "use_own_schedule",
+                "type": "bool",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cs_schedule0",
+                "name": "schedule",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cs_mth_tgt00",
+                "name": "month_targets",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            }
+        ]
+    },
+    {
+        "id": "tc_ctx_dov0",
+        "name": "context_day_overrides",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "cd_item_id0",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "cd_user_rel0",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "cd_ctx_id00",
+                "name": "context_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "cd_date_key0",
+                "name": "date",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "cd_type_val0",
+                "name": "override_type",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            }
+        ]
     }
 ]

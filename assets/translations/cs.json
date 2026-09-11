@@ -470,6 +470,25 @@
         "daily_needed": "~{hours}h/den potřeba ({days} prac. dnů zbývá)",
         "description": "Seskupte projekty s měsíčním hodinovým cílem pro sledování pokroku"
     },
+    "work_contexts": {
+        "description": "Seskupte projekty do pracovních režimů (např. podle firmy) s vlastním rozvrhem, dny volna a měsíčním cílem",
+        "open": "Nastavit režim",
+        "edit_basics": "Upravit název, projekty a cíl",
+        "own_schedule": "Vlastní pracovní rozvrh",
+        "own_schedule_desc": "Bez vlastního rozvrhu režim používá globální pracovní dobu",
+        "own_schedule_on": "Režim má vlastní pracovní dobu",
+        "own_schedule_off": "Režim používá globální pracovní dobu",
+        "day_overrides_desc": "Dny volna a práce navíc jen pro tento režim; ostatní dny se přebírají z globálního nastavení",
+        "inherited_day": "Z globálního nastavení",
+        "month_targets": "Cíle pro konkrétní měsíce",
+        "month_targets_desc": "Bez výjimky platí výchozí cíl {hours} h pro každý měsíc",
+        "no_month_targets": "Žádné měsíční výjimky",
+        "add_month_target": "Přidat měsíční výjimku",
+        "badge_own_schedule": "vlastní rozvrh",
+        "badge_global_schedule": "globální rozvrh",
+        "badge_own_days": "{count} vlastních dnů",
+        "badge_month_targets": "{count} měsíčních výjimek"
+    },
     "standalone_invoices": {
         "title": "Samostatné faktury",
         "subtitle": "Faktury nesouvisející s počítáním času",

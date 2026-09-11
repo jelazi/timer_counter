@@ -470,6 +470,25 @@
         "daily_needed": "~{hours}h/day needed ({days} work days left)",
         "description": "Group projects with a monthly hours target to track progress"
     },
+    "work_contexts": {
+        "description": "Group projects into work contexts (e.g. per company) with their own schedule, days off and monthly goal",
+        "open": "Configure context",
+        "edit_basics": "Edit name, projects and goal",
+        "own_schedule": "Own work schedule",
+        "own_schedule_desc": "Without its own schedule the context follows the global working hours",
+        "own_schedule_on": "Context uses its own working hours",
+        "own_schedule_off": "Context follows the global working hours",
+        "day_overrides_desc": "Days off and extra work days for this context only; other days are inherited from the global settings",
+        "inherited_day": "From global settings",
+        "month_targets": "Goals for specific months",
+        "month_targets_desc": "Without an exception the default goal of {hours} h applies to every month",
+        "no_month_targets": "No month exceptions",
+        "add_month_target": "Add month exception",
+        "badge_own_schedule": "own schedule",
+        "badge_global_schedule": "global schedule",
+        "badge_own_days": "{count} own days",
+        "badge_month_targets": "{count} month exceptions"
+    },
     "standalone_invoices": {
         "title": "Standalone Invoices",
         "subtitle": "Invoices not related to time tracking",

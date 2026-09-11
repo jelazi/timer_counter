@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/services/monthly_target_calculator.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/running_timer_model.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
@@ -759,54 +760,46 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final timeEntryRepo = context.read<TimeEntryRepository>();
     final dates = _getDateRange(_selectedRange, _periodOffset);
     final entries = timeEntryRepo.getByDateRange(dates.$1, dates.$2);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
     final hoursPerProject = <String, double>{};
+    final todayHoursPerProject = <String, double>{};
     for (final entry in entries) {
-      hoursPerProject.update(entry.projectId, (val) => val + entry.actualDurationSeconds / 3600.0, ifAbsent: () => entry.actualDurationSeconds / 3600.0);
+      final hours = entry.actualDurationSeconds / 3600.0;
+      hoursPerProject.update(entry.projectId, (val) => val + hours, ifAbsent: () => hours);
+      if (!entry.startTime.isBefore(today) && entry.startTime.isBefore(tomorrow)) {
+        todayHoursPerProject.update(entry.projectId, (val) => val + hours, ifAbsent: () => hours);
+      }
     }
 
     // Include running timer seconds per project
-    final runningPerProject = _runningSecondsPerProject(timerState, dates.$1, dates.$2);
-    for (final entry in runningPerProject.entries) {
+    for (final entry in _runningSecondsPerProject(timerState, dates.$1, dates.$2).entries) {
       hoursPerProject.update(entry.key, (val) => val + entry.value / 3600.0, ifAbsent: () => entry.value / 3600.0);
     }
-
-    // Calculate remaining working days in the viewed month
-    final monthStart = dates.$1;
-    final lastDayOfMonth = DateTime(monthStart.year, monthStart.month + 1, 0);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    // Check if today is a working day and already has entries
-    final todayIsWorkDay = settingsRepo.isWorkDay(today);
-    final hasTodayEntries =
-        entries.any((e) {
-          final entryDay = DateTime(e.startTime.year, e.startTime.month, e.startTime.day);
-          return entryDay == today;
-        }) ||
-        _getRunningTimersInRange(timerState, today, today.add(const Duration(days: 1))).isNotEmpty;
-    // Start counting from today (or month start if viewing a future month)
-    // If today is a work day and already has work done, skip it (start from tomorrow)
-    final baseCountFrom = today.isAfter(monthStart) ? today : monthStart;
-    final countFrom = (todayIsWorkDay && hasTodayEntries && baseCountFrom == today) ? today.add(const Duration(days: 1)) : baseCountFrom;
-    int remainingWorkDays = 0;
-    for (DateTime d = countFrom; !d.isAfter(lastDayOfMonth); d = d.add(const Duration(days: 1))) {
-      if (settingsRepo.isWorkDay(d)) {
-        remainingWorkDays++;
-      }
+    for (final entry in _runningSecondsPerProject(timerState, today, tomorrow).entries) {
+      todayHoursPerProject.update(entry.key, (val) => val + entry.value / 3600.0, ifAbsent: () => entry.value / 3600.0);
     }
+
+    final progressList = MonthlyTargetCalculator(
+      settingsRepo,
+    ).progressFor(targets, monthStart: dates.$1, hoursPerProject: hoursPerProject, todayHoursPerProject: todayHoursPerProject);
 
     return SizedBox(
       height: 64,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: targets.length,
+        itemCount: progressList.length,
         separatorBuilder: (_, _) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
-          final target = targets[index];
-          final workedHours = target.projectIds.fold(0.0, (sum, pid) => sum + (hoursPerProject[pid] ?? 0));
-          final progress = target.targetHours > 0 ? (workedHours / target.targetHours).clamp(0.0, 1.0) : 0.0;
-          final isComplete = workedHours >= target.targetHours;
-          final remainingHours = (target.targetHours - workedHours).clamp(0.0, double.infinity);
-          final dailyNeeded = remainingWorkDays > 0 && !isComplete ? remainingHours / remainingWorkDays : 0.0;
+          final progressItem = progressList[index];
+          final target = progressItem.target;
+          final workedHours = progressItem.workedHours;
+          final progress = progressItem.progress;
+          final isComplete = progressItem.isComplete;
+          final remainingWorkDays = progressItem.remainingWorkDays;
+          final dailyNeeded = progressItem.dailyNeeded;
 
           return Container(
             width: 280,
@@ -832,7 +825,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       ),
                     ),
                     Text(
-                      '${workedHours.toStringAsFixed(1)}/${target.targetHours.toStringAsFixed(0)}h',
+                      '${workedHours.toStringAsFixed(1)}/${progressItem.targetHours.toStringAsFixed(0)}h',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: isComplete ? Colors.green : null),
                     ),
                   ],
@@ -847,11 +840,25 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     color: isComplete ? Colors.green : Theme.of(context).colorScheme.primary,
                   ),
                 ),
-                if (!isComplete && remainingWorkDays > 0) ...[
+                if (!isComplete) ...[
                   const SizedBox(height: 3),
-                  Text(
-                    tr('monthly_targets.daily_needed', namedArgs: {'hours': dailyNeeded.toStringAsFixed(1), 'days': '$remainingWorkDays'}),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 9, color: Theme.of(context).colorScheme.tertiary),
+                  Row(
+                    children: [
+                      Text(
+                        tr('monthly_targets.remaining', args: [progressItem.remainingHours.toStringAsFixed(1)]),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 9, fontWeight: FontWeight.w600),
+                      ),
+                      if (remainingWorkDays > 0) ...[
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            tr('monthly_targets.daily_needed', namedArgs: {'hours': dailyNeeded.toStringAsFixed(1), 'days': '$remainingWorkDays'}),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 9, color: Theme.of(context).colorScheme.tertiary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ],

@@ -78,6 +78,21 @@ class AppConstants {
   // Day Overrides (per date: 'off' = vacation/holiday, 'work' = extra work day)
   static const String dayOverridePrefix = 'day_override';
 
+  // Work Contexts — a monthly target that carries its own schedule, day
+  // overrides and per-month hour goals.
+  //
+  // These prefixes deliberately do not start with `work_schedule` or
+  // `day_override`: the global keys are scanned by prefix and synced to
+  // PocketBase, and an older app version must not mistake context data for
+  // global data.
+  static const String contextSchedulePrefix = 'context_schedule';
+  static const String contextScheduleOwnSuffix = 'own';
+  static const String contextDayOverridePrefix = 'context_day_override';
+  static const String contextMonthTargetPrefix = 'context_month_target';
+
+  /// Separator between context id and date/month in composite keys.
+  static const String contextKeySeparator = '|';
+
   // Local Snapshot Backups
   static const String snapshotFrequency = 'snapshot_frequency';
   static const String snapshotRetentionDays = 'snapshot_retention_days';
