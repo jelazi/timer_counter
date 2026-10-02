@@ -1,5 +1,33 @@
 # Development Log
 
+## 2026-10-02 (part 2) — fix: remaining work days skipped the last day of a month with a DST change
+
+### What was fixed
+
+- **`MonthlyTargetCalculator.workDaysBetween` stepped through days with `add(Duration(days: 1))`**,
+  i.e. 24 hours. Across the end of daylight saving time (2026-10-25 in Europe/Prague, a 25-hour day)
+  the loop landed on 23:00 of the same date: 25 October was visited twice and 31 October never.
+  So a day off on the last day of October was ignored, and the work-day count was off by one
+  whenever the 25th and the 31st differ. The same loop already existed in the three screens before
+  the 2026-09-11 refactor; the calculator inherited it.
+- Surfaced by `flutter test` today: "a context's own days off shorten only its own count" puts a day
+  off on the last day of the *current* month, so it only fails in October (expected 29, got 30).
+  It passed on 2026-09-11.
+
+### What was done
+
+- `lib/core/services/monthly_target_calculator.dart`: `workDaysBetween` and the "skip today" step in
+  `remainingWorkDays` now advance with `DateTime(y, m, d + 1)` (calendar day, not 24 hours).
+- `test/core/services/monthly_target_calculator_test.dart`: new test "a month with a daylight saving
+  change visits every day once". It uses fixed October and March 2026 dates, so it does not depend on
+  today's date. It fails against the old loop and passes now; it can only reproduce the bug when the
+  runner's time zone has DST.
+
+### Current state
+
+- `flutter test`: **61 tests passed** (machine time zone CEST).
+- `flutter analyze`: no issues.
+
 ## 2026-10-02 — fix: macOS app would not launch (expired signing), switch to ad-hoc signing
 
 ### What was fixed

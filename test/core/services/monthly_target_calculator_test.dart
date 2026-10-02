@@ -212,6 +212,14 @@ void main() {
 
       expect(own, global - 1);
     });
+
+    test('a month with a daylight saving change visits every day once', () async {
+      await makeEveryDayAWorkDay();
+      await settings.setContextDayOverride(contextId, DateTime(2026, 10, 31), 'off');
+
+      expect(calculator.workDaysBetween(DateTime(2026, 10, 1), DateTime(2026, 10, 31), contextId: contextId), 30);
+      expect(calculator.workDaysBetween(DateTime(2026, 3, 1), DateTime(2026, 3, 31), contextId: contextId), 31);
+    });
   });
 
   group('progress', () {

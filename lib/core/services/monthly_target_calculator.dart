@@ -48,7 +48,7 @@ class MonthlyTargetCalculator {
   /// Work days in `[from, to]` inclusive, counted for [contextId]'s schedule.
   int workDaysBetween(DateTime from, DateTime to, {String? contextId}) {
     int count = 0;
-    for (DateTime d = _dayOf(from); !d.isAfter(_dayOf(to)); d = d.add(const Duration(days: 1))) {
+    for (DateTime d = _dayOf(from); !d.isAfter(_dayOf(to)); d = DateTime(d.year, d.month, d.day + 1)) {
       if (_settings.isWorkDay(d, contextId: contextId)) count++;
     }
     return count;
@@ -65,7 +65,7 @@ class MonthlyTargetCalculator {
 
     final baseCountFrom = today.isAfter(start) ? today : start;
     final skipToday = hasWorkedToday && baseCountFrom == today && _settings.isWorkDay(today, contextId: contextId);
-    final countFrom = skipToday ? today.add(const Duration(days: 1)) : baseCountFrom;
+    final countFrom = skipToday ? DateTime(today.year, today.month, today.day + 1) : baseCountFrom;
 
     if (countFrom.isAfter(lastDayOfMonth)) return 0;
     return workDaysBetween(countFrom, lastDayOfMonth, contextId: contextId);
