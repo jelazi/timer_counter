@@ -1,5 +1,35 @@
 # Development Log
 
+## 2026-10-02 (part 3) — macOS release build showed only a black window (stale native assets)
+
+### What was fixed
+
+- The 1.0.10 Release build from `develop` (`b19dab4`) opened a black window and never got further.
+  Run from the terminal, it reported `Unhandled Exception: ... Couldn't resolve native function
+  'DOBJC_initializeApi' in 'package:objective_c/objective_c.dylib' : No available native assets`,
+  raised from `path_provider_foundation` inside `HiveX.initFlutter` (`main.dart:55`). No data was
+  opened.
+- The bundle was missing `objective_c.framework` and `sqlite3.framework`, and its
+  `NativeAssetsManifest.json` was empty. `build/native_assets/macos/` only held arm64 dylibs left
+  over from the earlier builds of this session. The code was fine: the stale `build/` state was the
+  cause.
+- Fix: `flutter clean && flutter pub get && flutter build macos --release`. The clean build embeds
+  both frameworks and the manifest maps arm64 and x64.
+
+### Current state
+
+- Clean build: ad-hoc signed, `codesign --verify --deep --strict` OK. It launched with one window
+  showing "Sledování času", with no exceptions in its output, and the projects were listed.
+- Data checked before and after the launch: categories 2, projects 3, tasks 12, time_entries 663,
+  monthly_targets 2, standalone_invoices 6, settings 37. Backup taken right before the first real
+  launch: `~/Documents/timer_counter_container_backup_2026-10-02_08-59-58/`.
+- Not installed into `/Applications`; that still holds the re-signed 1.0.9.
+
+### Pending / next steps
+
+- If a macOS release build ever starts to a black window, run `flutter clean` before rebuilding and
+  check that `Contents/Frameworks` contains `objective_c.framework` and `sqlite3.framework`.
+
 ## 2026-10-02 (part 2) — fix: remaining work days skipped the last day of a month with a DST change
 
 ### What was fixed
