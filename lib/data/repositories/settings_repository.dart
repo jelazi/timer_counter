@@ -235,6 +235,9 @@ class SettingsRepository {
   String getPocketBaseOwnerId() => _box.get(AppConstants.pocketBaseOwnerId, defaultValue: '') as String;
   Future<void> setPocketBaseOwnerId(String v) => _box.put(AppConstants.pocketBaseOwnerId, v);
 
+  String getPocketBaseSyncLedger() => _box.get(AppConstants.pocketBaseSyncLedger, defaultValue: '') as String;
+  Future<void> setPocketBaseSyncLedger(String v) => _box.put(AppConstants.pocketBaseSyncLedger, v);
+
   bool get hasPocketBaseOverride => getPocketBaseUrl().isNotEmpty || getPocketBaseEmail().isNotEmpty || getPocketBasePassword().isNotEmpty;
 
   Future<void> clearPocketBaseOverride() async {

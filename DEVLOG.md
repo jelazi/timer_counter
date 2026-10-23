@@ -1,5 +1,97 @@
 # Development Log
 
+## 2026-10-23 — fix(sync): stop deleting local entries the server never received; restore 75 lost entries
+
+### What was fixed
+
+- **Account `eli.zizkova@gmail.com` lost 75 time entries (96 h) in two batches**, found by diffing her
+  device's daily snapshots (`snapshots/`, 47 files from 2026-07-29 to 2026-10-23) against the live
+  server:
+  - 33 entries dated 2026-08-05 – 2026-09-01 (53.9 h), gone between the 2026-09-07 and 2026-09-08
+    snapshots;
+  - 42 entries dated 2026-09-23 – 2026-10-14 (42.1 h), gone on 2026-10-15 after 11:14 UTC, when a new
+    app build signed in.
+  None of them ever reached the server. Between 2026-10-11 and 2026-10-15 her app ran and its
+  snapshots grew daily, but the server log shows no request from her account at all.
+- **Root cause, three parts in `PocketBaseSyncService`:**
+  1. The app signs in only at startup (`main.dart`) and never refreshes the token. The server issues
+     7-day tokens (`users.authToken.duration = 604800`), and a desktop app can sit in the tray longer.
+  2. With an invalid token, every `push*` returned early on `if (!isSignedIn) return;`, and a failed
+     `_upsertRecord` was only logged. Nothing recorded that the change still had to be sent.
+  3. On the next sign-in, `downloadAll()` → `_replaceLocal()` deleted every local record missing from
+     the server. `SyncGuard` only blocks 10+ deletions that are also over 30 % of the collection;
+     42 of 239 (18 %) passed silently. The deletions went to her device's deletion journal as
+     `syncReconcile`.
+
+### What was done
+
+- New `lib/core/services/sync_ledger.dart` — `SyncLedger`, persisted under the new settings key
+  `pocketbase_sync_ledger` (`AppConstants.pocketBaseSyncLedger`, accessors in `SettingsRepository`):
+  - `confirmed`: per collection, the ids the server is known to hold (set from each download,
+    successful push and real-time event);
+  - `pending`: per collection, local upserts/deletes not sent yet, with an in-memory version so an
+    older in-flight push cannot clear a newer pending change;
+  - `plan()`: a local record missing remotely is deleted only if it is confirmed and has no pending
+    change; everything else is kept and queued for upload. An empty or malformed ledger therefore
+    never deletes anything.
+- `PocketBaseSyncService`:
+  - All `push*`/`delete*` methods go through `_pushUpsert`/`_pushDelete`: queue first, then send, and
+    clear the queue entry only on success. `_upsertRecord`/`_deleteRecord` now return `bool`.
+  - `_flushPending()` sends every queued change, rebuilding upserts from the current local record
+    (`_localRecordMap`). It runs at the start and end of `downloadAll()` and from the keep-alive.
+  - `_replaceLocal()` and the new `_reconcileKeyed()` (day overrides, context day overrides) use
+    `SyncLedger.plan()`; they do not overwrite records with unsent changes, and they queue local-only
+    records for upload. Remote context settings skip contexts with a pending upsert.
+  - Real-time events go through `_acceptRemoteChange()`, which updates `confirmed` and ignores events
+    for records with unsent local changes.
+  - `_replaceRemote()` (`uploadAll`) updates `confirmed` and clears the pending entries it uploaded.
+  - Auth: `_ensureAuth()` refreshes a token with less than a day left (`authRefresh`), and signs in
+    again with the credentials from the last `signIn()` (kept in memory only) once it has expired.
+    `resync`, `uploadAll`, `downloadAll` and every push use it. A 30-minute `Timer.periodic`
+    keep-alive refreshes the token and flushes the queue; after a re-login it runs `resync()`
+    because the real-time subscriptions were authorized with the expired token.
+  - Static `tokenExpiry(token)` reads the JWT `exp` claim (`@visibleForTesting`).
+  - `clearLocalData()` (account switch) also clears the ledger.
+- New `test/core/services/sync_ledger_test.dart`: 11 tests (reconcile plan incl. the 197 synced +
+  42 offline case, pending versioning, encode/decode, `tokenExpiry`).
+
+### Data restore (production server, done with the user's OK)
+
+- Full PocketBase backup first via `POST /api/backups`: `timer_counter_pre_eli_restore_2026-10-23.zip`
+  (1.78 MB), kept on the server and copied to `~/Documents/timer_counter_pb_backup_2026-10-23/`.
+- Created a temporary superuser (`/app/pocketbase superuser upsert … --dir=/app/pb_data` in container
+  `cmmor94eo0006qiadvnesp5qu`), inserted the 75 entries through the records API with their original
+  `item_id` and fields, user `4f3ehkb4t4mod2q`, after checking each `item_id` was absent. One request
+  timed out after 64 inserts; the idempotent rerun added the remaining 11. Then the superuser was
+  deleted again (its token now gets HTTP 401).
+- Working files (not in git, listed in `.git/info/exclude`): `pb_dump_2026-10-23/` with the raw server
+  DB, her snapshots (`eli_device/snapshots/`) and the recovered list (`eli_lost_entries.csv/.json`).
+- Left out on purpose: a few entries that disappeared one by one outside the two batches and look
+  like her own edits (e.g. a 46.5 h runaway timer from 2026-09-18).
+
+### Current state
+
+- `flutter analyze`: No issues found.
+- `flutter test`: **72 tests passed** (61 + 11 new).
+- Server after the restore: 290 entries for Eli (215 + 75), 290 unique `item_id`s, all 75 present with
+  matching start time, duration and project. Per month: Jun 89.3 h, Jul 87.3 h, Aug 79.5 h,
+  Sep 48.5 h, Oct 56.6 h.
+- The fix is **not yet run against the live server in the app**: token refresh, re-login after
+  expiry, the keep-alive and the offline queue are covered by unit tests of `SyncLedger` only.
+
+### Pending / next steps
+
+- Install the new build on Eli's device soon: the build she runs has the old sync, and entries
+  recorded there while its token is expired will be deleted again on the next restart.
+- Manual test: stop the server (or let a token expire), record entries, bring it back, and confirm
+  they upload and survive a restart.
+- First run of the new build on any device: the ledger starts empty, so every local record the server
+  does not have is uploaded rather than deleted. A record deleted on another device while this one was
+  off would come back once.
+- Her 2026-10-19 data has a duplicate entry (two records starting 10:04:28, ending 10:38:26 and
+  10:38:32) — not touched.
+- Commit not made yet.
+
 ## 2026-10-02 (part 3) — macOS release build showed only a black window (stale native assets)
 
 ### What was fixed

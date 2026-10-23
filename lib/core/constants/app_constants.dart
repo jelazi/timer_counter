@@ -115,6 +115,9 @@ class AppConstants {
   /// Signing in as a different account must not inherit the previous one's data.
   static const String pocketBaseOwnerId = 'pocketbase_owner_id';
 
+  /// Which records the server is known to hold, and local changes not sent yet.
+  static const String pocketBaseSyncLedger = 'pocketbase_sync_ledger';
+
   // Default Values
   static const double defaultDailyWorkingHours = 8.0;
   static const int defaultWeeklyWorkingDays = 5;

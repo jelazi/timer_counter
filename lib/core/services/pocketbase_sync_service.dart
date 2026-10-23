@@ -19,6 +19,7 @@ import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
 import 'deletion_journal_service.dart';
+import 'sync_ledger.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enums & Result types
@@ -202,6 +203,19 @@ class PocketBaseSyncService {
   /// Suppresses local updates from PocketBase listeners during bulk operations.
   bool _suppressListeners = false;
 
+  late final SyncLedger _ledger;
+
+  /// Kept in memory only, so an expired token can be replaced without the user.
+  String? _email;
+  String? _password;
+
+  Future<bool>? _authInFlight;
+  Timer? _keepAliveTimer;
+  bool _flushing = false;
+
+  static const Duration _keepAliveInterval = Duration(minutes: 30);
+  static const Duration _tokenRefreshMargin = Duration(days: 1);
+
   bool get isSignedIn => _pb.authStore.isValid;
   String? get userId => _pb.authStore.record?.id;
   String? get userEmail => _pb.authStore.record?.getStringValue('email');
@@ -223,6 +237,7 @@ class PocketBaseSyncService {
        _monthlyTargetRepo = monthlyTargetRepo,
        _settingsRepo = settingsRepo {
     _pb = PocketBase(serverUrl);
+    _ledger = SyncLedger.decode(_settingsRepo.getPocketBaseSyncLedger());
 
     // Restore auth from settings
     final savedToken = _settingsRepo.getPocketBaseAuthToken();
@@ -267,8 +282,11 @@ class PocketBaseSyncService {
       _lastError = null;
       _setStatus(SyncStatus.connecting);
       await _pb.collection('users').authWithPassword(email, password);
+      _email = email;
+      _password = password;
       _saveAuthState();
       await _bindLocalStoreToAccount();
+      _startKeepAlive();
       _authStateController.add(true);
       return null;
     } on ClientException catch (e) {
@@ -287,6 +305,10 @@ class PocketBaseSyncService {
   /// When [clearLocal] is true, all synced Hive boxes are wiped — important on
   /// shared browsers so the next user doesn't see leftover data.
   Future<void> signOut({bool clearLocal = false}) async {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+    _email = null;
+    _password = null;
     await stopListeners();
     _pb.authStore.clear();
     _settingsRepo.setPocketBaseAuthToken('');
@@ -344,6 +366,8 @@ class PocketBaseSyncService {
     await _settingsRepo.restoreAllDayOverrides({});
     await _settingsRepo.clearAllContextSettings();
     await _settingsRepo.setPocketBaseLastSync('');
+    _ledger.clear();
+    await _saveLedger();
   }
 
   void _saveAuthState() {
@@ -353,6 +377,75 @@ class PocketBaseSyncService {
       _settingsRepo.setPocketBaseAuthModel(_toJsonString(record.toJson()));
     }
   }
+
+  /// Make sure requests go out with a valid token: refresh it before it
+  /// expires, and sign in again with the remembered credentials once it has.
+  Future<bool> _ensureAuth() => _authInFlight ??= _refreshAuthIfNeeded().whenComplete(() => _authInFlight = null);
+
+  Future<bool> _refreshAuthIfNeeded() async {
+    final token = _pb.authStore.token;
+    if (_pb.authStore.isValid) {
+      final expiry = tokenExpiry(token);
+      if (expiry == null || expiry.isAfter(DateTime.now().add(_tokenRefreshMargin))) return true;
+      try {
+        await _pb.collection('users').authRefresh();
+        _saveAuthState();
+        return true;
+      } catch (e) {
+        debugPrint('[PocketBaseSync] Token refresh failed: $e');
+      }
+    }
+
+    final email = _email;
+    final password = _password;
+    if (email == null || password == null) return _pb.authStore.isValid;
+    try {
+      await _pb.collection('users').authWithPassword(email, password);
+      _saveAuthState();
+      debugPrint('[PocketBaseSync] Signed in again after the token expired');
+      return true;
+    } catch (e) {
+      debugPrint('[PocketBaseSync] Re-authentication failed: $e');
+      _lastError = e.toString();
+      return false;
+    }
+  }
+
+  @visibleForTesting
+  static DateTime? tokenExpiry(String token) {
+    final parts = token.split('.');
+    if (parts.length != 3) return null;
+    try {
+      final payload = jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1])))) as Map<String, dynamic>;
+      final exp = payload['exp'];
+      final seconds = exp is num ? exp.toInt() : int.tryParse('$exp');
+      if (seconds == null) return null;
+      return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// A desktop app can sit in the tray for longer than a token lives, without
+  /// ever being resumed, so the token and the pending queue are kept alive on
+  /// a timer rather than only on user activity.
+  void _startKeepAlive() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(_keepAliveInterval, (_) => _keepAlive());
+  }
+
+  Future<void> _keepAlive() async {
+    final hadValidToken = _pb.authStore.isValid;
+    if (!await _ensureAuth()) return;
+    if (!hadValidToken) {
+      // Real-time subscriptions were authorized with the expired token.
+      await resync();
+    } else {
+      await _flushPending();
+    }
+  }
+
+  Future<void> _saveLedger() => _settingsRepo.setPocketBaseSyncLedger(_ledger.encode());
 
   // ═════════════════════════════════════════════════════════════════════════
   // Listener management — real-time sync via SSE subscriptions
@@ -421,7 +514,7 @@ class PocketBaseSyncService {
   /// on resume we must re-subscribe AND explicitly pull the current remote
   /// state, then notify listening blocs to reload from the local store.
   Future<void> resync() async {
-    if (!isSignedIn) return;
+    if (!await _ensureAuth()) return;
     debugPrint('[PocketBaseSync] Resync triggered');
 
     // Re-establish subscriptions — the previous connection may be dead.
@@ -446,97 +539,129 @@ class PocketBaseSyncService {
   // PUSH — write single record to PocketBase
   // ═════════════════════════════════════════════════════════════════════════
 
-  Future<void> pushCategory(CategoryModel c) async {
-    if (!isSignedIn) return;
-    await _upsertRecord('categories', c.id, _categoryToMap(c));
-  }
+  Future<void> pushCategory(CategoryModel c) => _pushUpsert('categories', c.id, _categoryToMap(c));
 
-  Future<void> deleteCategory(String id) async {
-    if (!isSignedIn) return;
-    await _deleteRecord('categories', id);
-  }
+  Future<void> deleteCategory(String id) => _pushDelete('categories', id);
 
-  Future<void> pushProject(ProjectModel p) async {
-    if (!isSignedIn) return;
-    await _upsertRecord('projects', p.id, _projectToMap(p));
-  }
+  Future<void> pushProject(ProjectModel p) => _pushUpsert('projects', p.id, _projectToMap(p));
 
-  Future<void> deleteProject(String id) async {
-    if (!isSignedIn) return;
-    await _deleteRecord('projects', id);
-  }
+  Future<void> deleteProject(String id) => _pushDelete('projects', id);
 
-  Future<void> pushTask(TaskModel t) async {
-    if (!isSignedIn) return;
-    await _upsertRecord('tasks', t.id, _taskToMap(t));
-  }
+  Future<void> pushTask(TaskModel t) => _pushUpsert('tasks', t.id, _taskToMap(t));
 
-  Future<void> deleteTask(String id) async {
-    if (!isSignedIn) return;
-    await _deleteRecord('tasks', id);
-  }
+  Future<void> deleteTask(String id) => _pushDelete('tasks', id);
 
-  Future<void> pushTimeEntry(TimeEntryModel e) async {
-    if (!isSignedIn) return;
-    await _upsertRecord('time_entries', e.id, _timeEntryToMap(e));
-  }
+  Future<void> pushTimeEntry(TimeEntryModel e) => _pushUpsert('time_entries', e.id, _timeEntryToMap(e));
 
-  Future<void> deleteTimeEntry(String id) async {
-    if (!isSignedIn) return;
-    await _deleteRecord('time_entries', id);
-  }
+  Future<void> deleteTimeEntry(String id) => _pushDelete('time_entries', id);
 
-  Future<void> pushRunningTimer(RunningTimerModel t) async {
-    if (!isSignedIn) return;
-    await _upsertRecord('running_timers', t.id, _runningTimerToMap(t));
-  }
+  Future<void> pushRunningTimer(RunningTimerModel t) => _pushUpsert('running_timers', t.id, _runningTimerToMap(t));
 
-  Future<void> deleteRunningTimer(String id) async {
-    if (!isSignedIn) return;
-    await _deleteRecord('running_timers', id);
-  }
+  Future<void> deleteRunningTimer(String id) => _pushDelete('running_timers', id);
 
-  Future<void> pushMonthlyTarget(MonthlyHoursTargetModel m) async {
-    if (!isSignedIn) return;
-    await _upsertRecord('monthly_targets', m.id, _monthlyTargetToMap(m));
-  }
+  Future<void> pushMonthlyTarget(MonthlyHoursTargetModel m) => _pushUpsert('monthly_targets', m.id, _monthlyTargetToMap(m));
 
-  Future<void> deleteMonthlyTarget(String id) async {
-    if (!isSignedIn) return;
-    await _deleteRecord('monthly_targets', id);
-  }
+  Future<void> deleteMonthlyTarget(String id) => _pushDelete('monthly_targets', id);
 
-  Future<void> pushDayOverride(DateTime date, String type) async {
-    if (!isSignedIn) return;
+  Future<void> pushDayOverride(DateTime date, String type) {
     final dateKey = _dateKey(date);
-    await _upsertRecord('day_overrides', dateKey, {'item_id': dateKey, 'date': dateKey, 'override_type': type});
+    return _pushUpsert('day_overrides', dateKey, _dayOverrideToMap(dateKey, type));
   }
 
-  Future<void> deleteDayOverride(DateTime date) async {
-    if (!isSignedIn) return;
-    await _deleteRecord('day_overrides', _dateKey(date));
-  }
+  Future<void> deleteDayOverride(DateTime date) => _pushDelete('day_overrides', _dateKey(date));
 
   /// Push the schedule and month goals of one work context.
-  Future<void> pushContextSettings(String contextId) async {
-    if (!isSignedIn) return;
-    await _upsertRecord(_contextSettingsCollection, contextId, _contextSettingsToMap(contextId));
-  }
+  Future<void> pushContextSettings(String contextId) => _pushUpsert(_contextSettingsCollection, contextId, _contextSettingsToMap(contextId));
 
-  Future<void> pushContextDayOverride(String contextId, DateTime date, String type) async {
-    if (!isSignedIn) return;
+  Future<void> pushContextDayOverride(String contextId, DateTime date, String type) {
     final itemId = _contextDayKey(contextId, _dateKey(date));
-    await _upsertRecord(_contextDayOverridesCollection, itemId, {
-      'item_id': itemId,
-      'context_id': contextId,
-      'date': _dateKey(date),
-      'override_type': type,
-    });
+    return _pushUpsert(_contextDayOverridesCollection, itemId, _contextDayOverrideToMap(itemId, type));
   }
 
-  Future<void> deleteContextDayOverride(String contextId, DateTime date) async {
-    if (!isSignedIn) return;
-    await _deleteRecord(_contextDayOverridesCollection, _contextDayKey(contextId, _dateKey(date)));
+  Future<void> deleteContextDayOverride(String contextId, DateTime date) =>
+      _pushDelete(_contextDayOverridesCollection, _contextDayKey(contextId, _dateKey(date)));
+
+  /// Queue the change before sending it, so a push that cannot go out now
+  /// (offline, expired token, server error) is retried instead of forgotten.
+  Future<void> _pushUpsert(String collection, String itemId, Map<String, dynamic> data) async {
+    final version = _ledger.markPending(collection, itemId, PendingOp.upsert);
+    await _saveLedger();
+    if (!await _ensureAuth()) return;
+    if (await _upsertRecord(collection, itemId, data)) {
+      _ledger.confirm(collection, itemId);
+      _ledger.clearPending(collection, itemId, version: version);
+      await _saveLedger();
+    }
+  }
+
+  Future<void> _pushDelete(String collection, String itemId) async {
+    final version = _ledger.markPending(collection, itemId, PendingOp.delete);
+    await _saveLedger();
+    if (!await _ensureAuth()) return;
+    if (await _deleteRecord(collection, itemId)) {
+      _ledger.unconfirm(collection, itemId);
+      _ledger.clearPending(collection, itemId, version: version);
+      await _saveLedger();
+    }
+  }
+
+  /// Send every queued change. An upsert sends the record as it is now, so a
+  /// record edited several times while offline goes out once, in its final state.
+  Future<void> _flushPending() async {
+    if (_flushing || _ledger.pendingCount == 0) return;
+    _flushing = true;
+    try {
+      for (final (collection, itemId, op) in _ledger.pendingEntries()) {
+        if (!await _ensureAuth()) return;
+        final version = _ledger.pendingVersion(collection, itemId);
+        if (op == PendingOp.delete) {
+          if (!await _deleteRecord(collection, itemId)) continue;
+          _ledger.unconfirm(collection, itemId);
+        } else {
+          final data = _localRecordMap(collection, itemId);
+          if (data != null) {
+            if (!await _upsertRecord(collection, itemId, data)) continue;
+            _ledger.confirm(collection, itemId);
+          }
+        }
+        _ledger.clearPending(collection, itemId, version: version);
+      }
+    } finally {
+      _flushing = false;
+      await _saveLedger();
+    }
+  }
+
+  Map<String, dynamic>? _localRecordMap(String collection, String itemId) {
+    switch (collection) {
+      case 'categories':
+        final c = _categoryRepo.getById(itemId);
+        return c == null ? null : _categoryToMap(c);
+      case 'projects':
+        final p = _projectRepo.getById(itemId);
+        return p == null ? null : _projectToMap(p);
+      case 'tasks':
+        final t = _taskRepo.getById(itemId);
+        return t == null ? null : _taskToMap(t);
+      case 'time_entries':
+        final e = _timeEntryRepo.getById(itemId);
+        return e == null ? null : _timeEntryToMap(e);
+      case 'running_timers':
+        final t = _runningTimerRepo.getById(itemId);
+        return t == null ? null : _runningTimerToMap(t);
+      case 'monthly_targets':
+        final m = _monthlyTargetRepo.getById(itemId);
+        return m == null ? null : _monthlyTargetToMap(m);
+      case 'day_overrides':
+        final type = _settingsRepo.getAllDayOverrides()[itemId];
+        return type == null ? null : _dayOverrideToMap(itemId, type);
+      case _contextSettingsCollection:
+        return _settingsRepo.getContextIdsWithSettings().contains(itemId) ? _contextSettingsToMap(itemId) : null;
+      case _contextDayOverridesCollection:
+        final type = _settingsRepo.getAllContextDayOverrides()[itemId];
+        return type == null ? null : _contextDayOverrideToMap(itemId, type);
+    }
+    return null;
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -545,7 +670,7 @@ class PocketBaseSyncService {
 
   /// Upload all local data to PocketBase, replacing remote.
   Future<SyncResult> uploadAll({SyncProgressCallback? onProgress}) async {
-    if (!isSignedIn) return const SyncResult(error: 'Not signed in');
+    if (!await _ensureAuth()) return const SyncResult(error: 'Not signed in');
     _suppressListeners = true;
     try {
       onProgress?.call('Categories…', 0.05);
@@ -574,9 +699,7 @@ class PocketBaseSyncService {
 
       onProgress?.call('Day overrides…', 0.94);
       final dayOverrides = _settingsRepo.getAllDayOverrides();
-      await _replaceRemote('day_overrides', {
-        for (final entry in dayOverrides.entries) entry.key: {'item_id': entry.key, 'date': entry.key, 'override_type': entry.value},
-      });
+      await _replaceRemote('day_overrides', {for (final entry in dayOverrides.entries) entry.key: _dayOverrideToMap(entry.key, entry.value)});
 
       onProgress?.call('Work contexts…', 0.98);
       await _uploadContextData();
@@ -612,9 +735,12 @@ class PocketBaseSyncService {
   /// collections reconciled against a truncated download — silently destroying
   /// records that a later `uploadAll()` then deleted server-side too.
   Future<SyncResult> downloadAll({SyncProgressCallback? onProgress}) async {
-    if (!isSignedIn) return const SyncResult(error: 'Not signed in');
+    if (!await _ensureAuth()) return const SyncResult(error: 'Not signed in');
     _suppressListeners = true;
     try {
+      onProgress?.call('Uploading local changes…', 0.02);
+      await _flushPending();
+
       // ── Phase 1: fetch everything. No writes. ────────────────────────────
       onProgress?.call('Categories…', 0.05);
       final cats = await _downloadCollection('categories', _categoryFromMap);
@@ -694,13 +820,15 @@ class PocketBaseSyncService {
       if (remoteDayOverrides.isEmpty && localOverrides.isNotEmpty) {
         _reportGuard(SyncGuardReport(collection: 'day_overrides', blockedDeletions: localOverrides.length, localCount: localOverrides.length, remoteCount: 0));
       } else {
-        await _settingsRepo.restoreAllDayOverrides({for (final entry in remoteDayOverrides) entry.key: entry.value});
+        await _settingsRepo.restoreAllDayOverrides(_reconcileKeyed('day_overrides', Map.fromEntries(remoteDayOverrides), localOverrides));
       }
 
       // Context settings are only ever upserted: a context whose record the
       // server does not have keeps its local schedule instead of losing it.
       if (remoteContextSettings != null) {
         for (final settings in remoteContextSettings) {
+          final contextId = settings['item_id'] as String? ?? '';
+          if (_ledger.pendingOp(_contextSettingsCollection, contextId) != null) continue;
           await _applyContextSettings(settings);
         }
       }
@@ -717,9 +845,15 @@ class PocketBaseSyncService {
             ),
           );
         } else {
-          await _settingsRepo.restoreAllContextDayOverrides({for (final entry in remoteContextOverrides) entry.key: entry.value});
+          await _settingsRepo.restoreAllContextDayOverrides(
+            _reconcileKeyed(_contextDayOverridesCollection, Map.fromEntries(remoteContextOverrides), localContextOverrides),
+          );
         }
       }
+
+      await _saveLedger();
+      onProgress?.call('Uploading local changes…', 0.95);
+      await _flushPending();
 
       _settingsRepo.setPocketBaseLastSync(DateTime.now().toIso8601String());
       onProgress?.call('Done', 1.0);
@@ -842,7 +976,7 @@ class PocketBaseSyncService {
   Future<void> _subscribeCategories() async {
     await _pb.collection('categories').subscribe('*', (e) {
       if (_suppressListeners) return;
-      _handleEvent<CategoryModel>(e, _categoryFromMap, (c) => _categoryRepo.add(c), (id) => _categoryRepo.delete(id));
+      _handleEvent<CategoryModel>('categories', e, _categoryFromMap, (c) => _categoryRepo.add(c), (id) => _categoryRepo.delete(id));
       _collectionChangeController.add(SyncCollection.categories);
     }, filter: 'user = "$userId"');
   }
@@ -850,7 +984,7 @@ class PocketBaseSyncService {
   Future<void> _subscribeProjects() async {
     await _pb.collection('projects').subscribe('*', (e) {
       if (_suppressListeners) return;
-      _handleEvent<ProjectModel>(e, _projectFromMap, (p) => _projectRepo.add(p), (id) => _projectRepo.delete(id));
+      _handleEvent<ProjectModel>('projects', e, _projectFromMap, (p) => _projectRepo.add(p), (id) => _projectRepo.delete(id));
       _collectionChangeController.add(SyncCollection.projects);
     }, filter: 'user = "$userId"');
   }
@@ -858,7 +992,7 @@ class PocketBaseSyncService {
   Future<void> _subscribeTasks() async {
     await _pb.collection('tasks').subscribe('*', (e) {
       if (_suppressListeners) return;
-      _handleEvent<TaskModel>(e, _taskFromMap, (t) => _taskRepo.add(t), (id) => _taskRepo.delete(id));
+      _handleEvent<TaskModel>('tasks', e, _taskFromMap, (t) => _taskRepo.add(t), (id) => _taskRepo.delete(id));
       _collectionChangeController.add(SyncCollection.tasks);
     }, filter: 'user = "$userId"');
   }
@@ -866,7 +1000,7 @@ class PocketBaseSyncService {
   Future<void> _subscribeTimeEntries() async {
     await _pb.collection('time_entries').subscribe('*', (e) {
       if (_suppressListeners) return;
-      _handleEvent<TimeEntryModel>(e, _timeEntryFromMap, (entry) => _timeEntryRepo.add(entry), (id) => _timeEntryRepo.delete(id));
+      _handleEvent<TimeEntryModel>('time_entries', e, _timeEntryFromMap, (entry) => _timeEntryRepo.add(entry), (id) => _timeEntryRepo.delete(id));
       _collectionChangeController.add(SyncCollection.timeEntries);
     }, filter: 'user = "$userId"');
   }
@@ -874,7 +1008,7 @@ class PocketBaseSyncService {
   Future<void> _subscribeRunningTimers() async {
     await _pb.collection('running_timers').subscribe('*', (e) {
       if (_suppressListeners) return;
-      _handleEvent<RunningTimerModel>(e, _runningTimerFromMap, (t) => _runningTimerRepo.start(t), (id) => _runningTimerRepo.stop(id));
+      _handleEvent<RunningTimerModel>('running_timers', e, _runningTimerFromMap, (t) => _runningTimerRepo.start(t), (id) => _runningTimerRepo.stop(id));
       _collectionChangeController.add(SyncCollection.runningTimers);
     }, filter: 'user = "$userId"');
   }
@@ -882,7 +1016,7 @@ class PocketBaseSyncService {
   Future<void> _subscribeMonthlyTargets() async {
     await _pb.collection('monthly_targets').subscribe('*', (e) {
       if (_suppressListeners) return;
-      _handleEvent<MonthlyHoursTargetModel>(e, _monthlyTargetFromMap, (m) => _monthlyTargetRepo.add(m), (id) => _monthlyTargetRepo.delete(id));
+      _handleEvent<MonthlyHoursTargetModel>('monthly_targets', e, _monthlyTargetFromMap, (m) => _monthlyTargetRepo.add(m), (id) => _monthlyTargetRepo.delete(id));
       _collectionChangeController.add(SyncCollection.monthlyTargets);
     }, filter: 'user = "$userId"');
   }
@@ -895,7 +1029,7 @@ class PocketBaseSyncService {
 
       final itemId = record.getStringValue('item_id');
       final date = _parseDateKeyOrNull(itemId);
-      if (date == null) return;
+      if (date == null || !_acceptRemoteChange('day_overrides', itemId, e.action)) return;
 
       switch (e.action) {
         case 'create':
@@ -924,6 +1058,7 @@ class PocketBaseSyncService {
         if (_suppressListeners) return;
         final record = e.record;
         if (record == null || e.action == 'delete') return;
+        if (!_acceptRemoteChange(_contextSettingsCollection, record.getStringValue('item_id'), e.action)) return;
         await _applyContextSettings(record.toJson());
         _collectionChangeController.add(SyncCollection.contextSettings);
       }, filter: 'user = "$userId"');
@@ -936,6 +1071,7 @@ class PocketBaseSyncService {
         final contextId = record.getStringValue('context_id');
         final date = _parseDateKeyOrNull(record.getStringValue('date'));
         if (contextId.isEmpty || date == null) return;
+        if (!_acceptRemoteChange(_contextDayOverridesCollection, record.getStringValue('item_id'), e.action)) return;
 
         switch (e.action) {
           case 'create':
@@ -955,9 +1091,17 @@ class PocketBaseSyncService {
     }
   }
 
-  void _handleEvent<T>(RecordSubscriptionEvent event, T Function(Map<String, dynamic>) fromMap, Future<void> Function(T) upsert, Future<void> Function(String) delete) {
+  void _handleEvent<T>(
+    String collection,
+    RecordSubscriptionEvent event,
+    T Function(Map<String, dynamic>) fromMap,
+    Future<void> Function(T) upsert,
+    Future<void> Function(String) delete,
+  ) {
     final record = event.record;
     if (record == null) return;
+    final itemId = record.getStringValue('item_id');
+    if (itemId.isEmpty || !_acceptRemoteChange(collection, itemId, event.action)) return;
 
     switch (event.action) {
       case 'create':
@@ -966,12 +1110,23 @@ class PocketBaseSyncService {
         upsert(item);
         break;
       case 'delete':
-        final itemId = record.getStringValue('item_id');
-        if (itemId.isNotEmpty) {
-          _journalled(DeleteSource.syncRealtime, () => delete(itemId));
-        }
+        _journalled(DeleteSource.syncRealtime, () => delete(itemId));
         break;
     }
+  }
+
+  /// Records what a real-time event says the server holds. Returns false when a
+  /// local change to the same record has not been sent yet: it must win over
+  /// the remote state, not be overwritten by it.
+  bool _acceptRemoteChange(String collection, String itemId, String action) {
+    if (_ledger.pendingOp(collection, itemId) != null) return false;
+    if (action == 'delete') {
+      _ledger.unconfirm(collection, itemId);
+    } else {
+      _ledger.confirm(collection, itemId);
+    }
+    _saveLedger();
+    return true;
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -979,7 +1134,7 @@ class PocketBaseSyncService {
   // ═════════════════════════════════════════════════════════════════════════
 
   /// Upsert a record — try update first, create if not found.
-  Future<void> _upsertRecord(String collection, String itemId, Map<String, dynamic> data) async {
+  Future<bool> _upsertRecord(String collection, String itemId, Map<String, dynamic> data) async {
     try {
       // Search for existing record by item_id
       final existing = await _pb.collection(collection).getList(filter: 'item_id = "$itemId" && user = "$userId"', perPage: 1);
@@ -988,20 +1143,24 @@ class PocketBaseSyncService {
       } else {
         await _pb.collection(collection).create(body: {...data, 'user': userId});
       }
+      return true;
     } catch (e) {
       debugPrint('[PocketBaseSync] upsert $collection/$itemId error: $e');
+      return false;
     }
   }
 
   /// Delete a record by item_id.
-  Future<void> _deleteRecord(String collection, String itemId) async {
+  Future<bool> _deleteRecord(String collection, String itemId) async {
     try {
       final existing = await _pb.collection(collection).getList(filter: 'item_id = "$itemId" && user = "$userId"', perPage: 1);
       if (existing.items.isNotEmpty) {
         await _pb.collection(collection).delete(existing.items.first.id);
       }
+      return true;
     } catch (e) {
       debugPrint('[PocketBaseSync] delete $collection/$itemId error: $e');
+      return false;
     }
   }
 
@@ -1032,6 +1191,12 @@ class PocketBaseSyncService {
       }
     }
 
+    _ledger.setConfirmed(collection, {...items.keys, ...existingRecords.keys});
+    for (final itemId in items.keys) {
+      _ledger.clearPending(collection, itemId, version: _ledger.pendingVersion(collection, itemId));
+    }
+    await _saveLedger();
+
     // Delete remote orphans — but only if this looks like a real deletion and
     // not a truncated/empty local store about to wipe a healthy server.
     final orphans = existingRecords.values.toList();
@@ -1042,9 +1207,12 @@ class PocketBaseSyncService {
       return;
     }
 
-    for (final pbId in orphans) {
-      await _pb.collection(collection).delete(pbId);
+    for (final entry in existingRecords.entries) {
+      await _pb.collection(collection).delete(entry.value);
+      _ledger.unconfirm(collection, entry.key);
+      _ledger.clearPending(collection, entry.key, version: _ledger.pendingVersion(collection, entry.key));
     }
+    await _saveLedger();
   }
 
   /// Download all records from a PocketBase collection for the current user.
@@ -1098,13 +1266,7 @@ class PocketBaseSyncService {
       }
 
       await _replaceRemote(_contextDayOverridesCollection, {
-        for (final entry in _settingsRepo.getAllContextDayOverrides().entries)
-          entry.key: {
-            'item_id': entry.key,
-            'context_id': entry.key.split(AppConstants.contextKeySeparator).first,
-            'date': entry.key.split(AppConstants.contextKeySeparator).last,
-            'override_type': entry.value,
-          },
+        for (final entry in _settingsRepo.getAllContextDayOverrides().entries) entry.key: _contextDayOverrideToMap(entry.key, entry.value),
       });
     } catch (e) {
       debugPrint('[PocketBaseSync] Context data upload skipped: $e');
@@ -1117,6 +1279,9 @@ class PocketBaseSyncService {
   /// [remoteItems] means "deleted remotely" *or* "the server failed to tell us
   /// about it", and we cannot distinguish the two. So a suspiciously large
   /// deletion batch is refused and reported rather than applied — see [SyncGuard].
+  ///
+  /// Records with unsent local changes keep their local state, and only records
+  /// the server is known to have had are candidates for deletion — see [SyncLedger].
   Future<void> _replaceLocal<T>(
     String collection,
     List<T> remoteItems,
@@ -1127,11 +1292,19 @@ class PocketBaseSyncService {
   ) async {
     final remoteIds = <String>{};
     for (final item in remoteItems) {
-      remoteIds.add(getId(item));
+      final id = getId(item);
+      remoteIds.add(id);
+      if (_ledger.pendingOp(collection, id) != null) continue;
       await upsert(item);
     }
 
-    final toDelete = localIds.where((id) => !remoteIds.contains(id)).toList();
+    final plan = _ledger.plan(collection, localIds: localIds, remoteIds: remoteIds);
+    _ledger.setConfirmed(collection, remoteIds);
+    for (final id in plan.upload) {
+      _ledger.markPending(collection, id, PendingOp.upsert);
+    }
+
+    final toDelete = plan.deleteLocally;
     if (SyncGuard.blocks(deleteCount: toDelete.length, localCount: localIds.length, remoteCount: remoteItems.length)) {
       _reportGuard(
         SyncGuardReport(collection: collection, blockedDeletions: toDelete.length, localCount: localIds.length, remoteCount: remoteItems.length),
@@ -1142,6 +1315,28 @@ class PocketBaseSyncService {
     for (final id in toDelete) {
       await delete(id);
     }
+  }
+
+  /// [_replaceLocal] for collections kept locally as one key → value map.
+  Map<String, String> _reconcileKeyed(String collection, Map<String, String> remote, Map<String, String> local) {
+    final plan = _ledger.plan(collection, localIds: local.keys.toSet(), remoteIds: remote.keys.toSet());
+    final merged = <String, String>{};
+    remote.forEach((key, value) {
+      switch (_ledger.pendingOp(collection, key)) {
+        case PendingOp.delete:
+          break;
+        case PendingOp.upsert:
+          merged[key] = local[key] ?? value;
+        case null:
+          merged[key] = value;
+      }
+    });
+    for (final key in plan.upload) {
+      merged[key] = local[key]!;
+      _ledger.markPending(collection, key, PendingOp.upsert);
+    }
+    _ledger.setConfirmed(collection, remote.keys);
+    return merged;
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -1275,6 +1470,8 @@ class PocketBaseSyncService {
     createdAt: _parseDate(m['created_at']),
   );
 
+  Map<String, dynamic> _dayOverrideToMap(String dateKey, String type) => {'item_id': dateKey, 'date': dateKey, 'override_type': type};
+
   MapEntry<String, String> _dayOverrideFromMap(Map<String, dynamic> m) {
     final date = m['date'] as String? ?? m['item_id'] as String? ?? '';
     final type = m['override_type'] as String? ?? '';
@@ -1313,6 +1510,13 @@ class PocketBaseSyncService {
   }
 
   static String _contextDayKey(String contextId, String dateKey) => '$contextId${AppConstants.contextKeySeparator}$dateKey';
+
+  Map<String, dynamic> _contextDayOverrideToMap(String itemId, String type) => {
+    'item_id': itemId,
+    'context_id': itemId.split(AppConstants.contextKeySeparator).first,
+    'date': itemId.split(AppConstants.contextKeySeparator).last,
+    'override_type': type,
+  };
 
   static Map<String, dynamic> _decodeJsonMap(dynamic value) {
     if (value is Map) return Map<String, dynamic>.from(value);
@@ -1389,6 +1593,7 @@ class PocketBaseSyncService {
   // ═════════════════════════════════════════════════════════════════════════
 
   Future<void> dispose() async {
+    _keepAliveTimer?.cancel();
     await stopListeners();
     await _statusController.close();
     await _collectionChangeController.close();
