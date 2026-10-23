@@ -1,5 +1,43 @@
 # Development Log
 
+## 2026-10-23 (part 2) — iPhone: two stale installs replaced by 1.0.11; Pods deployment target fix
+
+### What was fixed
+
+- **The user's iPhone ran two outdated, separate installs**, both signed in as `lzizka@gmail.com`:
+  `cz.medutech.timerCounter` 1.0.8 (local data up to 2026-06-23, 196 entries behind the server) and
+  `com.example.timerCounter` 1.0.6 (up to 2026-07-09, 164 behind). Their app containers were copied
+  with `xcrun devicectl device copy from` and the Hive boxes read with the project's adapters: no entry
+  existed only on the phone, and all shared entries matched the server.
+  - 1.0.6 predates the startup catch-up and resume resync (added in 1.0.7, `7392df9`), so it only
+    received real-time events while open.
+  - 1.0.8 resyncs on resume but returns early once its 7-day token has expired; its settings box was
+    last written on 2026-06-23, i.e. no successful sign-in since.
+  - Both predate `SyncGuard`, so a manual "upload" from either would have deleted the newer server data.
+- **`flutter build ios --release` failed under Xcode 27**: `IPHONEOS_DEPLOYMENT_TARGET` 13.0 on the
+  remaining CocoaPods target (`printing`, the only plugin without Swift Package Manager support);
+  Xcode 27 accepts 15.0–27.0.
+
+### What was done
+
+- `ios/Podfile` `post_install`: raise every pod target's `IPHONEOS_DEPLOYMENT_TARGET` below 15.0 to
+  15.0 (matches `platform :ios, '15.0'` and the Runner target).
+- The user deleted both old apps; 1.0.11+12 (`c21afb4`) was built and installed with
+  `xcrun devicectl device install app` as `cz.jelazi.timerCounter`.
+
+### Current state
+
+- `flutter build ios --release`: built `build/ios/iphoneos/Runner.app` (27.7 MB), all 15 Pods
+  deployment-target settings at 15.0.
+- `devicectl device info apps` on the iPhone: only `Timer Counter cz.jelazi.timerCounter 1.0.11 (12)`.
+- Not launched by me; the PocketBase account still has to be entered in Settings (the local
+  `lib/config/pocketbase_config.json` holds placeholders, so nothing is bundled).
+
+### Pending / next steps
+
+- Enter URL/e-mail/password in Settings → PocketBase on the phone and check that ~697 entries arrive.
+- Commit the `ios/Podfile` change.
+
 ## 2026-10-23 — fix(sync): stop deleting local entries the server never received; restore 75 lost entries
 
 ### What was fixed
