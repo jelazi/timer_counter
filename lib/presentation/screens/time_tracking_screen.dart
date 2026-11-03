@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/services/monthly_target_calculator.dart';
+import '../../core/utils/calendar_day.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/task_model.dart';
@@ -748,7 +749,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     final monthStart = DateTime(now.year, now.month, 1);
     final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
+    final tomorrow = addCalendarDays(today, 1);
 
     // Get all entries for this month
     final monthEntries = timeEntryRepo.getByDateRange(monthStart, monthEnd);

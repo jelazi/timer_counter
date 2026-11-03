@@ -24,5 +24,8 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      # A zone with daylight saving time, so the DST tests can fail here too.
       - name: Run tests
         run: flutter test
+        env:
+          TZ: Europe/Prague

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:pocketbase/pocketbase.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -157,6 +158,7 @@ class PocketBaseSyncService {
   final RunningTimerRepository _runningTimerRepo;
   final MonthlyHoursTargetRepository _monthlyTargetRepo;
   final SettingsRepository _settingsRepo;
+  final http.Client Function()? _httpClientFactory;
 
   late PocketBase _pb;
 
@@ -229,14 +231,16 @@ class PocketBaseSyncService {
     required RunningTimerRepository runningTimerRepo,
     required MonthlyHoursTargetRepository monthlyTargetRepo,
     required SettingsRepository settingsRepo,
+    @visibleForTesting http.Client Function()? httpClientFactory,
   }) : _categoryRepo = categoryRepo,
        _projectRepo = projectRepo,
        _taskRepo = taskRepo,
        _timeEntryRepo = timeEntryRepo,
        _runningTimerRepo = runningTimerRepo,
        _monthlyTargetRepo = monthlyTargetRepo,
-       _settingsRepo = settingsRepo {
-    _pb = PocketBase(serverUrl);
+       _settingsRepo = settingsRepo,
+       _httpClientFactory = httpClientFactory {
+    _pb = _createClient(serverUrl);
     _ledger = SyncLedger.decode(_settingsRepo.getPocketBaseSyncLedger());
 
     // Restore auth from settings
@@ -255,9 +259,11 @@ class PocketBaseSyncService {
 
   /// Update server URL (e.g. from settings).
   void updateServerUrl(String url) {
-    _pb = PocketBase(url);
+    _pb = _createClient(url);
     _lastError = null;
   }
+
+  PocketBase _createClient(String url) => PocketBase(url, httpClientFactory: _httpClientFactory);
 
   // ═════════════════════════════════════════════════════════════════════════
   // Authentication

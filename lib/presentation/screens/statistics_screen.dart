@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/services/monthly_target_calculator.dart';
+import '../../core/utils/calendar_day.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/running_timer_model.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
@@ -45,12 +46,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final now = DateTime.now();
     switch (range) {
       case 'today':
-        final day = DateTime(now.year, now.month, now.day).add(Duration(days: offset));
-        return (day, day.add(const Duration(days: 1)));
+        final day = addCalendarDays(now, offset);
+        return (day, addCalendarDays(day, 1));
       case 'week':
-        final currentWeekStart = DateTime(now.year, now.month, now.day - (now.weekday - 1));
-        final weekStart = currentWeekStart.add(Duration(days: offset * 7));
-        return (weekStart, weekStart.add(const Duration(days: 7)));
+        final weekStart = DateTime(now.year, now.month, now.day - (now.weekday - 1) + offset * 7);
+        return (weekStart, addCalendarDays(weekStart, 7));
       case 'month':
         final targetMonth = DateTime(now.year, now.month + offset, 1);
         final endOfMonth = DateTime(targetMonth.year, targetMonth.month + 1, 0, 23, 59, 59);
@@ -73,7 +73,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       case 'today':
         return DateFormat('EEEE, d. MMMM yyyy', locale).format(start);
       case 'week':
-        final weekEnd = end.subtract(const Duration(days: 1));
+        final weekEnd = addCalendarDays(end, -1);
         return '${DateFormat('d.M.', locale).format(start)} — ${DateFormat('d.M.yyyy', locale).format(weekEnd)}';
       case 'month':
         return DateFormat('MMMM yyyy', locale).format(start);
@@ -527,7 +527,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   );
                 case 'week':
                   final weekStart = DateTime(selectedDate.year, selectedDate.month, selectedDate.day - (selectedDate.weekday - 1));
-                  final weekEnd = weekStart.add(const Duration(days: 6));
+                  final weekEnd = addCalendarDays(weekStart, 6);
                   return ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.view_week),
@@ -623,11 +623,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     switch (mode) {
                       case 'day':
                         startDate = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
-                        endDate = startDate.add(const Duration(days: 1));
+                        endDate = addCalendarDays(startDate, 1);
                         break;
                       case 'week':
                         startDate = DateTime(selectedDate.year, selectedDate.month, selectedDate.day - (selectedDate.weekday - 1));
-                        endDate = startDate.add(const Duration(days: 7));
+                        endDate = addCalendarDays(startDate, 7);
                         break;
                       case 'month':
                         startDate = DateTime(selectedYear, selectedMonth, 1);
@@ -699,7 +699,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
       // Count working days from month start up to min(today, monthEnd)
       final countUpTo = today.isBefore(monthEnd) ? today : monthEnd;
       int workingDays = 0;
-      for (DateTime d = monthStart; !d.isAfter(countUpTo); d = d.add(const Duration(days: 1))) {
+      for (DateTime d = monthStart; !d.isAfter(countUpTo); d = addCalendarDays(d, 1)) {
         if (settingsRepo.isWorkDay(d)) {
           workingDays++;
         }
@@ -762,7 +762,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final entries = timeEntryRepo.getByDateRange(dates.$1, dates.$2);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
+    final tomorrow = addCalendarDays(today, 1);
 
     final hoursPerProject = <String, double>{};
     final todayHoursPerProject = <String, double>{};
@@ -907,7 +907,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         dailyMap[dayKey] = (dailyMap[dayKey] ?? 0) + t.elapsedSeconds / 3600;
       }
       bars = List.generate(7, (i) {
-        final day = weekStart.add(Duration(days: i));
+        final day = addCalendarDays(weekStart, i);
         final dayKey = DateTime(day.year, day.month, day.day);
         return _ChartBar(label: DateFormat('E', locale).format(day), hours: dailyMap[dayKey] ?? 0);
       });

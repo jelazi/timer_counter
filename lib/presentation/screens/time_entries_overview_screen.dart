@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/services/monthly_target_calculator.dart';
 import '../../core/services/pocketbase_sync_service.dart';
+import '../../core/utils/calendar_day.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/running_timer_model.dart';
@@ -275,7 +276,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     // Calculate hours per project for the current month
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
+    final tomorrow = addCalendarDays(today, 1);
 
     final hoursPerProject = <String, double>{};
     final todayHoursPerProject = <String, double>{};
@@ -394,7 +395,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     // Include running timer seconds for today
     final timerState = context.read<TimerBloc>().state;
     final dayStart = DateTime(day.year, day.month, day.day);
-    final dayEnd = dayStart.add(const Duration(days: 1));
+    final dayEnd = addCalendarDays(dayStart, 1);
     final runningDaySeconds = isToday ? _getRunningTimersInRange(timerState, dayStart, dayEnd).fold(0, (sum, t) => sum + t.elapsedSeconds) : 0;
     final dayTotalWithRunning = dayTotal + runningDaySeconds;
 
@@ -1010,7 +1011,7 @@ class _AddManualEntryDialogState extends State<_AddManualEntryDialog> {
                     final timeEntryRepo = context.read<TimeEntryRepository>();
                     final existingEntries = timeEntryRepo.getByDateRange(
                       DateTime(start.year, start.month, start.day),
-                      DateTime(start.year, start.month, start.day).add(const Duration(days: 1)),
+                      addCalendarDays(start, 1),
                     );
                     final hasOverlap = existingEntries.any((existing) {
                       if (existing.endTime == null) return false;
@@ -1332,7 +1333,7 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
                     final timeEntryRepo = context.read<TimeEntryRepository>();
                     final existingEntries = timeEntryRepo.getByDateRange(
                       DateTime(start.year, start.month, start.day),
-                      DateTime(start.year, start.month, start.day).add(const Duration(days: 1)),
+                      addCalendarDays(start, 1),
                     );
                     final hasOverlap = existingEntries.any((existing) {
                       if (existing.id == widget.entry.id) return false;

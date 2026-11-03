@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../core/utils/calendar_day.dart';
 import '../../../data/repositories/project_repository.dart';
 import '../../../data/repositories/settings_repository.dart';
 import '../../../data/repositories/time_entry_repository.dart';
@@ -42,11 +43,11 @@ class StatisticsBloc extends Bloc<StatisticsEvent, StatisticsState> {
       switch (event.range) {
         case 'today':
           startDate = DateTime(now.year, now.month, now.day);
-          endDate = startDate.add(const Duration(days: 1));
+          endDate = addCalendarDays(startDate, 1);
           break;
         case 'week':
           startDate = DateTime(now.year, now.month, now.day - (now.weekday - 1));
-          endDate = startDate.add(const Duration(days: 7));
+          endDate = addCalendarDays(startDate, 7);
           break;
         case 'month':
           startDate = DateTime(now.year, now.month, 1);
@@ -58,7 +59,7 @@ class StatisticsBloc extends Bloc<StatisticsEvent, StatisticsState> {
           break;
         default:
           startDate = DateTime(now.year, now.month, now.day);
-          endDate = startDate.add(const Duration(days: 1));
+          endDate = addCalendarDays(startDate, 1);
       }
 
       _loadStats(startDate, endDate, event.range, emit);

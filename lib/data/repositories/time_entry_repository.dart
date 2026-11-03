@@ -2,6 +2,7 @@ import 'package:hive_ce/hive.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/services/deletion_journal_service.dart';
+import '../../core/utils/calendar_day.dart';
 import '../models/time_entry_model.dart';
 
 class TimeEntryRepository {
@@ -37,14 +38,14 @@ class TimeEntryRepository {
   List<TimeEntryModel> getToday() {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
-    final endOfDay = startOfDay.add(const Duration(days: 1));
+    final endOfDay = addCalendarDays(startOfDay, 1);
     return getByDateRange(startOfDay, endOfDay);
   }
 
   List<TimeEntryModel> getThisWeek() {
     final now = DateTime.now();
     final startOfWeek = DateTime(now.year, now.month, now.day - (now.weekday - 1));
-    final endOfWeek = startOfWeek.add(const Duration(days: 7));
+    final endOfWeek = addCalendarDays(startOfWeek, 7);
     return getByDateRange(startOfWeek, endOfWeek);
   }
 
