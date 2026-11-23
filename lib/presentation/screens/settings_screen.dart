@@ -12,15 +12,14 @@ import 'package:uuid/uuid.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/daily_snapshot_service.dart';
+import '../../core/services/data_export_service.dart';
 import '../../core/services/pocketbase_config.dart';
 import '../../core/services/pocketbase_sync_service.dart';
-import '../../core/services/tyme_data_import_service.dart';
-import '../../core/services/tyme_export_service.dart';
-import '../../core/services/tyme_import_service.dart';
 import '../../core/utils/platform_utils.dart';
 import '../../data/models/monthly_hours_target_model.dart';
-import '../../data/repositories/category_repository.dart';
+import '../../data/repositories/client_repository.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
+import '../../data/repositories/project_client_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/task_repository.dart';
@@ -31,7 +30,9 @@ import '../blocs/settings/settings_state.dart';
 import '../blocs/timer/timer_bloc.dart';
 import '../blocs/timer/timer_event.dart';
 import '../widgets/day_overrides_calendar.dart';
+import '../widgets/client_migration_dialog.dart';
 import '../widgets/desktop/pane_header.dart';
+import '../widgets/supplier_profile_dialog.dart';
 import 'backup_history_screen.dart';
 import 'work_context_screen.dart';
 import '../widgets/app_switch_tile.dart';
@@ -426,6 +427,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 ),
                                 const SizedBox(height: 20),
 
+                                // Billing
+                                _buildSectionTitle(context, tr('settings.billing')),
+                                Card(
+                                  child: Column(
+                                    children: [
+                                      ListTile(
+                                        leading: const Icon(Icons.business_outlined),
+                                        title: Text(tr('client_migration.title')),
+                                        subtitle: Text(tr('client_migration.settings_hint')),
+                                        trailing: const Icon(Icons.chevron_right),
+                                        onTap: () => ClientMigrationDialog.show(context),
+                                      ),
+                                      const Divider(height: 1),
+                                      ListTile(
+                                        leading: const Icon(Icons.badge_outlined),
+                                        title: Text(tr('supplier_profile.title')),
+                                        subtitle: Text(context.read<SettingsRepository>().getEffectiveSupplierProfile().party.name),
+                                        trailing: const Icon(Icons.chevron_right),
+                                        onTap: () async {
+                                          await SupplierProfileDialog.show(context);
+                                          if (mounted) setState(() {});
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+
                                 // Data Export & Import
                                 _buildSectionTitle(context, tr('settings.data')),
                                 Card(
@@ -437,14 +466,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         subtitle: const Text('JSON / CSV'),
                                         trailing: const Icon(Icons.chevron_right),
                                         onTap: () => _exportData(context),
-                                      ),
-                                      const Divider(height: 1),
-                                      ListTile(
-                                        leading: const Icon(Icons.file_upload_outlined),
-                                        title: Text(tr('settings.import_data')),
-                                        subtitle: const Text('JSON / CSV / Tyme .data'),
-                                        trailing: const Icon(Icons.chevron_right),
-                                        onTap: () => _showImportDialog(context),
                                       ),
                                     ],
                                   ),
@@ -782,11 +803,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.tune, size: 18),
-                            tooltip: tr('work_contexts.open'),
-                            onPressed: () => _openWorkContext(context, target),
-                          ),
+                          IconButton(icon: const Icon(Icons.tune, size: 18), tooltip: tr('work_contexts.open'), onPressed: () => _openWorkContext(context, target)),
                           IconButton(
                             icon: const Icon(Icons.edit, size: 18),
                             onPressed: () => _showTargetDialog(context, target: target),
@@ -1126,11 +1143,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (_) => _ExportDialog(
         onExport: (outputPath, startDate, endDate, format) async {
           try {
-            final exportService = TymeExportService(
+            final exportService = DataExportService(
               timeEntryRepository: context.read<TimeEntryRepository>(),
               projectRepository: context.read<ProjectRepository>(),
               taskRepository: context.read<TaskRepository>(),
-              categoryRepository: context.read<CategoryRepository>(),
+              clientRepository: context.read<ClientRepository>(),
+              projectClientRepository: context.read<ProjectClientRepository>(),
               settingsRepository: context.read<SettingsRepository>(),
             );
             String path;
@@ -1150,59 +1168,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           } catch (e) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('common.error')}: $e')));
-            }
-          }
-        },
-      ),
-    );
-  }
-
-  void _showImportDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => _ImportDialog(
-        onImport: (filePath, mode) async {
-          ImportResult result;
-
-          if (filePath.toLowerCase().endsWith('.data')) {
-            // Tyme native SQLite format
-            final tymeDataService = TymeDataImportService(
-              timeEntryRepository: context.read<TimeEntryRepository>(),
-              projectRepository: context.read<ProjectRepository>(),
-              taskRepository: context.read<TaskRepository>(),
-              categoryRepository: context.read<CategoryRepository>(),
-            );
-            result = await tymeDataService.importFromTymeData(filePath, mode);
-          } else {
-            final importService = TymeImportService(
-              timeEntryRepository: context.read<TimeEntryRepository>(),
-              projectRepository: context.read<ProjectRepository>(),
-              taskRepository: context.read<TaskRepository>(),
-              categoryRepository: context.read<CategoryRepository>(),
-            );
-            if (filePath.toLowerCase().endsWith('.csv')) {
-              result = await importService.importFromCsv(filePath, mode);
-            } else {
-              result = await importService.importFromJson(filePath, mode);
-            }
-          }
-
-          if (context.mounted) {
-            if (result.hasError) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${tr('import.error')}: ${result.error}'), backgroundColor: Colors.red));
-            } else {
-              context.read<TimerBloc>().add(const LoadRunningTimers());
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    '${tr('import.success')}: ${result.entriesImported} entries, '
-                    '${result.projectsImported} projects, '
-                    '${result.tasksImported} tasks, '
-                    '${result.categoriesImported} categories',
-                  ),
-                  duration: const Duration(seconds: 5),
-                ),
-              );
             }
           }
         },
@@ -1335,105 +1300,6 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
       ],
     );
-  }
-}
-
-class _ImportDialog extends StatefulWidget {
-  final Function(String filePath, ImportMode mode) onImport;
-
-  const _ImportDialog({required this.onImport});
-
-  @override
-  State<_ImportDialog> createState() => _ImportDialogState();
-}
-
-class _ImportDialogState extends State<_ImportDialog> {
-  ImportMode _selectedMode = ImportMode.merge;
-  String? _selectedFilePath;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(tr('import.title')),
-      content: SizedBox(
-        width: 450,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // File selection
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.file_open),
-              title: Text(_selectedFilePath != null ? _selectedFilePath!.split('/').last : tr('import.select_file')),
-              subtitle: _selectedFilePath != null ? Text(_selectedFilePath!, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
-              trailing: FilledButton.tonal(onPressed: _pickFile, child: Text(tr('import.select_file'))),
-            ),
-            const SizedBox(height: 16),
-            Text(tr('import.import_mode'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            RadioGroup<ImportMode>(
-              groupValue: _selectedMode,
-              onChanged: (v) {
-                if (v != null) setState(() => _selectedMode = v);
-              },
-              child: Column(
-                children: [
-                  _buildModeOption(ImportMode.merge, tr('import.merge'), tr('import.merge_desc'), Icons.merge),
-                  _buildModeOption(ImportMode.append, tr('import.append'), tr('import.append_desc'), Icons.add_circle_outline),
-                  _buildModeOption(ImportMode.overwrite, tr('import.overwrite'), tr('import.overwrite_desc'), Icons.warning_amber),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('common.cancel'))),
-        FilledButton.icon(onPressed: _selectedFilePath != null ? () => _doImport(context) : null, icon: const Icon(Icons.file_upload), label: Text(tr('settings.import_data'))),
-      ],
-    );
-  }
-
-  Widget _buildModeOption(ImportMode mode, String title, String description, IconData icon) {
-    return RadioListTile<ImportMode>(
-      contentPadding: EdgeInsets.zero,
-      value: mode,
-      title: Row(children: [Icon(icon, size: 18), const SizedBox(width: 8), Text(title)]),
-      subtitle: Text(description, style: Theme.of(context).textTheme.bodySmall),
-    );
-  }
-
-  Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json', 'csv', 'data'], dialogTitle: tr('import.select_file'));
-    if (result != null && result.files.single.path != null) {
-      setState(() => _selectedFilePath = result.files.single.path);
-    }
-  }
-
-  Future<void> _doImport(BuildContext context) async {
-    if (_selectedMode == ImportMode.overwrite) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: Text(tr('import.overwrite')),
-          content: Text(tr('import.confirm_overwrite')),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: Text(tr('import.overwrite')),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-    }
-
-    if (!context.mounted) return;
-    Navigator.pop(context);
-    widget.onImport(_selectedFilePath!, _selectedMode);
   }
 }
 
@@ -2064,7 +1930,12 @@ class _SnapshotSettingsSectionState extends State<_SnapshotSettingsSection> {
               value: AppConstants.snapshotRetentionOptions.contains(retention) ? retention : AppConstants.defaultSnapshotRetentionDays,
               underline: const SizedBox.shrink(),
               items: AppConstants.snapshotRetentionOptions
-                  .map((days) => DropdownMenuItem(value: days, child: Text(tr('settings.snapshot_retention_days', namedArgs: {'days': '$days'}))))
+                  .map(
+                    (days) => DropdownMenuItem(
+                      value: days,
+                      child: Text(tr('settings.snapshot_retention_days', namedArgs: {'days': '$days'})),
+                    ),
+                  )
                   .toList(),
               onChanged: (value) async {
                 if (value == null) return;

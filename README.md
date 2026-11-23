@@ -1,6 +1,6 @@
 # Timer Counter
 
-A cross-platform time tracking desktop application built with Flutter. Track your work hours, manage projects and tasks, view statistics, and export/import data in Tyme-compatible JSON format.
+A cross-platform time tracking desktop application built with Flutter. Track your work hours, manage projects and tasks, view statistics, and export data in Tyme-compatible JSON / CSV format.
 
 [![CI](https://github.com/jelazi/timer_counter/actions/workflows/ci.yml/badge.svg)](https://github.com/jelazi/timer_counter/actions/workflows/ci.yml)
 ![Flutter](https://img.shields.io/badge/Flutter-3.44-blue.svg)
@@ -34,13 +34,8 @@ A cross-platform time tracking desktop application built with Flutter. Track you
 - **Daily chart** — Bar chart of hours worked per day
 - **Project distribution** — Pie chart with percentage and time per project
 
-### Data Export & Import
-- **Export** — Tyme-compatible JSON format with selectable date range and custom filename
-- **Import** — Import from Tyme JSON with three modes:
-  - **Merge** — Update existing entries, add new ones (match by ID)
-  - **Append** — Add imported data alongside existing data
-  - **Overwrite** — Replace all data with imported data
-- **Smart import** — Auto-creates categories, projects, and tasks if they don't exist; skips duplicates by name
+### Data Export
+- **Export** — Tyme-compatible JSON / CSV format with selectable date range and custom filename
 
 ### System Integration
 - **System tray** — Minimize to system tray with quick-access menu for starting/stopping timers
@@ -136,7 +131,7 @@ Released under the [MIT License](LICENSE).
 
 # Timer Counter (Česky)
 
-Multiplatformní desktopová aplikace pro sledování času vytvořená ve Flutteru. Sledujte pracovní hodiny, spravujte projekty a úkoly, prohlížejte statistiky a exportujte/importujte data v Tyme-kompatibilním JSON formátu.
+Multiplatformní desktopová aplikace pro sledování času vytvořená ve Flutteru. Sledujte pracovní hodiny, spravujte projekty a úkoly, prohlížejte statistiky a exportujte data v Tyme-kompatibilním JSON / CSV formátu.
 
 ## Funkce
 
@@ -165,13 +160,8 @@ Multiplatformní desktopová aplikace pro sledování času vytvořená ve Flutt
 - **Denní graf** — Sloupcový graf odpracovaných hodin za den
 - **Rozložení projektů** — Koláčový graf s procentuálním zastoupením a časem za projekt
 
-### Export a import dat
-- **Export** — Tyme-kompatibilní JSON formát s volitelným obdobím a vlastním názvem souboru
-- **Import** — Import z Tyme JSON se třemi režimy:
-  - **Sloučit** — Aktualizace existujících záznamů, přidání nových (shoda podle ID)
-  - **Přidat** — Přidání importovaných dat ke stávajícím
-  - **Přepsat** — Nahrazení všech dat importovanými
-- **Chytrý import** — Automaticky vytváří kategorie, projekty a úkoly pokud neexistují; přeskakuje duplicity podle názvu
+### Export dat
+- **Export** — Tyme-kompatibilní JSON / CSV formát s volitelným obdobím a vlastním názvem souboru
 
 ### Systémová integrace
 - **Systémová lišta** — Minimalizace do systémové lišty s rychlým menu pro správu časovačů

@@ -2,20 +2,24 @@
 
 part of 'standalone_invoice_model.dart';
 
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
+
 class InvoiceLineItemAdapter extends TypeAdapter<InvoiceLineItem> {
   @override
-  final int typeId = 7;
+  final typeId = 7;
 
   @override
   InvoiceLineItem read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read()};
     return InvoiceLineItem(
-      description: fields[0] as String,
-      quantity: (fields[1] as num).toDouble(),
-      unit: fields[2] as String,
-      unitPrice: (fields[3] as num).toDouble(),
-      discountPercent: (fields[4] as num).toDouble(),
+      description: fields[0] == null ? '' : fields[0] as String,
+      quantity: fields[1] == null ? 1 : (fields[1] as num).toDouble(),
+      unit: fields[2] == null ? 'ks' : fields[2] as String,
+      unitPrice: fields[3] == null ? 0 : (fields[3] as num).toDouble(),
+      discountPercent: fields[4] == null ? 0 : (fields[4] as num).toDouble(),
     );
   }
 
@@ -44,7 +48,7 @@ class InvoiceLineItemAdapter extends TypeAdapter<InvoiceLineItem> {
 
 class StandaloneInvoiceModelAdapter extends TypeAdapter<StandaloneInvoiceModel> {
   @override
-  final int typeId = 8;
+  final typeId = 8;
 
   @override
   StandaloneInvoiceModel read(BinaryReader reader) {
@@ -52,32 +56,33 @@ class StandaloneInvoiceModelAdapter extends TypeAdapter<StandaloneInvoiceModel> 
     final fields = <int, dynamic>{for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read()};
     return StandaloneInvoiceModel(
       id: fields[0] as String,
-      invoiceNumber: fields[1] as int,
+      invoiceNumber: (fields[1] as num).toInt(),
       issueDate: fields[2] as DateTime,
       dueDate: fields[3] as DateTime,
       taxDate: fields[4] as DateTime,
-      supplierJson: Map<String, dynamic>.from(fields[5] as Map),
-      customerJson: Map<String, dynamic>.from(fields[6] as Map),
-      lineItems: (fields[7] as List).cast<InvoiceLineItem>(),
-      bankName: fields[8] as String,
-      bankCode: fields[9] as String,
-      swift: fields[10] as String,
-      accountNumber: fields[11] as String,
-      iban: fields[12] as String,
-      issuerName: fields[13] as String,
-      issuerEmail: fields[14] as String,
-      notes: fields[15] as String,
+      supplierJson: fields[5] == null ? const {} : (fields[5] as Map).cast<String, dynamic>(),
+      customerJson: fields[6] == null ? const {} : (fields[6] as Map).cast<String, dynamic>(),
+      lineItems: fields[7] == null ? const [] : (fields[7] as List).cast<InvoiceLineItem>(),
+      bankName: fields[8] == null ? '' : fields[8] as String,
+      bankCode: fields[9] == null ? '' : fields[9] as String,
+      swift: fields[10] == null ? '' : fields[10] as String,
+      accountNumber: fields[11] == null ? '' : fields[11] as String,
+      iban: fields[12] == null ? '' : fields[12] as String,
+      issuerName: fields[13] == null ? '' : fields[13] as String,
+      issuerEmail: fields[14] == null ? '' : fields[14] as String,
+      notes: fields[15] == null ? '' : fields[15] as String,
       createdAt: fields[16] as DateTime,
       updatedAt: fields[17] as DateTime,
-      invoiceType: fields[18] as String? ?? 'standalone',
-      sourceProjectIds: fields[19] != null ? (fields[19] as List).cast<String>() : const [],
+      invoiceType: fields[18] == null ? 'standalone' : fields[18] as String,
+      sourceProjectIds: fields[19] == null ? const [] : (fields[19] as List).cast<String>(),
+      clientId: fields[20] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, StandaloneInvoiceModel obj) {
     writer
-      ..writeByte(20)
+      ..writeByte(21)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -117,7 +122,9 @@ class StandaloneInvoiceModelAdapter extends TypeAdapter<StandaloneInvoiceModel> 
       ..writeByte(18)
       ..write(obj.invoiceType)
       ..writeByte(19)
-      ..write(obj.sourceProjectIds);
+      ..write(obj.sourceProjectIds)
+      ..writeByte(20)
+      ..write(obj.clientId);
   }
 
   @override

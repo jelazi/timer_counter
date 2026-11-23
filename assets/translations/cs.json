@@ -11,6 +11,7 @@
         "pdf_reports": "PDF Reporty",
         "standalone_invoices": "Faktury",
         "time_entries": "Záznamy",
+        "clients": "Firmy",
         "section_tracking": "Sledování",
         "section_reports": "Přehledy a fakturace"
     },
@@ -48,6 +49,23 @@
         "recent_tasks": "Nedávné"
     },
     "projects": {
+        "this_month": "Tento měsíc",
+        "total": "Celkem",
+        "rate": "Sazba",
+        "month_amount": "K fakturaci",
+        "last_entry": "Poslední záznam",
+        "no_entries": "zatím žádný",
+        "plan_time": "Čas",
+        "plan_budget": "Rozpočet",
+        "archived": "Archivovaný",
+        "overdue": "po termínu",
+        "clients": "Firmy",
+        "add_client": "Přidat firmu",
+        "new_client": "Nová firma…",
+        "service_description": "Popis služby na faktuře",
+        "no_clients": "Zatím bez firmy",
+        "invoice_default": "Na faktuře",
+        "default_client_hint": "Na faktuře se použije firma nahoře. Pořadí změníš přetažením.",
         "title": "Projekty",
         "add_project": "Přidat projekt",
         "edit_project": "Upravit projekt",
@@ -136,6 +154,7 @@
         "distribution_all_tasks": "Všechny úkoly"
     },
     "settings": {
+        "billing": "Fakturace",
         "title": "Nastavení",
         "general": "Obecné",
         "appearance": "Vzhled",
@@ -178,7 +197,6 @@
         "break_after": "Po",
         "data": "Data",
         "export_data": "Exportovat data",
-        "import_data": "Importovat data",
         "select_directory": "Vybrat adresář",
         "about": "O aplikaci",
         "version": "Verze",
@@ -283,27 +301,6 @@
         "timeline": "Časová osa",
         "month_total": "Celkem za měsíc"
     },
-    "import": {
-        "title": "Import dat",
-        "select_file": "Vybrat soubor",
-        "select_file_csv": "Vybrat CSV soubor",
-        "tyme_data_format": "Tyme .data (SQLite záloha z aplikace Tyme)",
-        "overwrite": "Přepsat",
-        "overwrite_desc": "Smazat všechna stávající data a nahradit importovanými",
-        "append": "Přidat",
-        "append_desc": "Přidat importovaná data ke stávajícím",
-        "merge": "Sloučit",
-        "merge_desc": "Aktualizovat existující záznamy, přidat nové (shoda podle ID)",
-        "success": "Import úspěšný",
-        "error": "Import selhal",
-        "entries_imported": "záznamů importováno",
-        "categories_imported": "kategorií importováno",
-        "projects_imported": "projektů importováno",
-        "tasks_imported": "úkolů importováno",
-        "import_mode": "Režim importu",
-        "confirm_overwrite": "Tato akce smaže VŠECHNA stávající data. Jste si jisti?",
-        "no_data": "V souboru nebyla nalezena žádná platná data"
-    },
     "export": {
         "title": "Export dat",
         "date_range": "Období",
@@ -318,6 +315,11 @@
         "csv_format": "CSV"
     },
     "pdf_reports": {
+        "client": "Firma",
+        "lines_per_project": "Řádek za projekt",
+        "lines_single": "Jeden řádek",
+        "per_project_client_hint": "Každý projekt se fakturuje firmě, která je u něj nahoře.",
+        "no_client": "Zatím bez firmy: použije se odběratel z původního nastavení faktury.",
         "title": "PDF Reporty",
         "subtitle": "Generování měsíčních reportů a faktur ve formátu PDF",
         "select_period": "Vyberte období",
@@ -493,6 +495,7 @@
         "badge_month_targets": "{count} měsíčních výjimek"
     },
     "standalone_invoices": {
+        "pick_client": "Vybrat firmu",
         "title": "Samostatné faktury",
         "subtitle": "Faktury nesouvisející s počítáním času",
         "create": "Nová faktura",
@@ -547,8 +550,8 @@
         "type_standalone": "Samostatná",
         "no_saved_customers": "Žádní uložení odběratelé. Vyplňte údaje a uložte je.",
         "customer_name_required": "Vyplňte název odběratele",
-        "customer_saved": "Odběratel uložen do globálního seznamu",
-        "save_customer": "Uložit odběratele"
+        "customer_saved": "Uloženo jako firma",
+        "save_customer": "Uložit jako firmu"
     },
     "backup_history": {
         "title": "Zálohy a obnova",
@@ -582,5 +585,65 @@
         "source_syncReconcile": "smazala synchronizace (sesouhlasení)",
         "source_bulkClear": "hromadné smazání",
         "owner_mismatch": "Tato záloha patří jinému PocketBase účtu. Lze ji obnovit lokálně, ale nenahraje se na server."
+    },
+    "clients": {
+        "title": "Firmy",
+        "subtitle": "Firmy, kterým fakturuješ",
+        "add": "Přidat firmu",
+        "edit": "Upravit firmu",
+        "name": "Název",
+        "ico": "IČO",
+        "dic": "DIČ",
+        "address1": "Ulice",
+        "address2": "PSČ a město",
+        "email": "E-mail",
+        "phone": "Telefon",
+        "notes": "Poznámka",
+        "name_required": "Zadej název firmy",
+        "no_clients": "Zatím žádné firmy",
+        "no_clients_hint": "Přidej firmy, kterým fakturuješ, a pak je připoj k projektům.",
+        "projects": "Projekty",
+        "no_projects": "Bez projektu",
+        "archived": "Archivovaná",
+        "show_archived": "Zobrazit archivované",
+        "archive": "Archivovat",
+        "unarchive": "Obnovit",
+        "delete": "Smazat firmu",
+        "delete_confirm": "Smazat firmu {name}? Odpojí se i od projektů.",
+        "delete_has_invoices": "Firma má vystavené faktury, takže ji nejde smazat. Můžeš ji archivovat.",
+        "search": "Hledat firmu"
+    },
+    "supplier_profile": {
+        "title": "Můj profil dodavatele",
+        "short": "Můj profil",
+        "hint": "Tvoje údaje jako dodavatele na každé faktuře. Jeden profil na účet, synchronizuje se na všechna tvoje zařízení.",
+        "iban": "IBAN",
+        "swift": "SWIFT"
+    },
+    "invoice_lines": {
+        "title": "Položky faktury",
+        "subtitle": "Faktura pro {client}. Před vystavením můžeš řádky upravit, rozepsat nebo přidat.",
+        "description": "Popis",
+        "quantity": "Množství",
+        "unit": "Jednotka",
+        "unit_price": "Cena za jednotku",
+        "add": "Přidat řádek",
+        "total": "Celkem",
+        "issue": "Vystavit fakturu"
+    },
+    "client_migration": {
+        "title": "Vytvořit firmy z faktur",
+        "intro": "Z odběratelů ve tvých fakturách vzniknou tyto firmy, připojí se k projektům, za které byly fakturované, a zapíšou se ke každé faktuře.",
+        "new": "nová",
+        "projects": "Projekty",
+        "invoices": "Faktury",
+        "none": "žádné",
+        "profile": "Tvůj profil dodavatele se vyplní z dosavadního nastavení faktury ({name}).",
+        "safe": "Nic se nesmaže ani nepřepíše. Vše je v zálohách a dá se potom upravit.",
+        "later": "Teď ne",
+        "apply": "Vytvořit firmy",
+        "done": "Firmy vytvořeny",
+        "nothing": "Všechny faktury už mají svou firmu.",
+        "settings_hint": "Doplní firmy a jejich projekty podle odběratelů v existujících fakturách"
     }
 }

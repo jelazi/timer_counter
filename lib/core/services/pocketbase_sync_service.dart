@@ -7,16 +7,23 @@ import 'package:pocketbase/pocketbase.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../data/models/category_model.dart';
+import '../../data/models/client_model.dart';
 import '../../data/models/monthly_hours_target_model.dart';
+import '../../data/models/project_client_model.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/running_timer_model.dart';
+import '../../data/models/standalone_invoice_model.dart';
+import '../../data/models/supplier_profile.dart';
 import '../../data/models/task_model.dart';
 import '../../data/models/time_entry_model.dart';
 import '../../data/repositories/category_repository.dart';
+import '../../data/repositories/client_repository.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
+import '../../data/repositories/project_client_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/running_timer_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../../data/repositories/standalone_invoice_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
 import 'deletion_journal_service.dart';
@@ -29,7 +36,21 @@ import 'sync_ledger.dart';
 enum SyncStatus { disabled, connecting, connected, error }
 
 /// Event emitted when a remote change updates a local collection.
-enum SyncCollection { categories, projects, tasks, timeEntries, runningTimers, monthlyTargets, dayOverrides, contextSettings, contextDayOverrides }
+enum SyncCollection {
+  categories,
+  projects,
+  tasks,
+  timeEntries,
+  runningTimers,
+  monthlyTargets,
+  dayOverrides,
+  contextSettings,
+  contextDayOverrides,
+  clients,
+  projectClients,
+  invoices,
+  supplierProfile,
+}
 
 /// Collections added for per-context work schedules.
 ///
@@ -39,6 +60,17 @@ enum SyncCollection { categories, projects, tasks, timeEntries, runningTimers, m
 /// tolerant of a missing collection.
 const _contextSettingsCollection = 'context_settings';
 const _contextDayOverridesCollection = 'context_day_overrides';
+
+/// Collections added for clients and synced invoices. Same rule as the context
+/// collections: optional on the server, and a server without them leaves the
+/// rest of the sync untouched while local changes wait in the ledger.
+const _clientsCollection = 'clients';
+const _projectClientsCollection = 'project_clients';
+const _invoicesCollection = 'invoices';
+const _userSettingsCollection = 'user_settings';
+
+/// Item id of the supplier profile record in [_userSettingsCollection].
+const _supplierProfileItem = 'supplier_profile';
 
 /// Callback for reporting sync progress.
 typedef SyncProgressCallback = void Function(String message, double progress);
@@ -112,13 +144,7 @@ class SyncGuardReport {
   /// True when the reconcile ran the other way (local → remote).
   final bool remoteSide;
 
-  const SyncGuardReport({
-    required this.collection,
-    required this.blockedDeletions,
-    required this.localCount,
-    required this.remoteCount,
-    this.remoteSide = false,
-  });
+  const SyncGuardReport({required this.collection, required this.blockedDeletions, required this.localCount, required this.remoteCount, this.remoteSide = false});
 }
 
 /// Deletion thresholds above which a reconcile is treated as data loss, not intent.
@@ -158,6 +184,9 @@ class PocketBaseSyncService {
   final RunningTimerRepository _runningTimerRepo;
   final MonthlyHoursTargetRepository _monthlyTargetRepo;
   final SettingsRepository _settingsRepo;
+  final ClientRepository _clientRepo;
+  final ProjectClientRepository _projectClientRepo;
+  final StandaloneInvoiceRepository _invoiceRepo;
   final http.Client Function()? _httpClientFactory;
 
   late PocketBase _pb;
@@ -231,6 +260,9 @@ class PocketBaseSyncService {
     required RunningTimerRepository runningTimerRepo,
     required MonthlyHoursTargetRepository monthlyTargetRepo,
     required SettingsRepository settingsRepo,
+    required ClientRepository clientRepo,
+    required ProjectClientRepository projectClientRepo,
+    required StandaloneInvoiceRepository invoiceRepo,
     @visibleForTesting http.Client Function()? httpClientFactory,
   }) : _categoryRepo = categoryRepo,
        _projectRepo = projectRepo,
@@ -239,6 +271,9 @@ class PocketBaseSyncService {
        _runningTimerRepo = runningTimerRepo,
        _monthlyTargetRepo = monthlyTargetRepo,
        _settingsRepo = settingsRepo,
+       _clientRepo = clientRepo,
+       _projectClientRepo = projectClientRepo,
+       _invoiceRepo = invoiceRepo,
        _httpClientFactory = httpClientFactory {
     _pb = _createClient(serverUrl);
     _ledger = SyncLedger.decode(_settingsRepo.getPocketBaseSyncLedger());
@@ -371,6 +406,10 @@ class PocketBaseSyncService {
     await _monthlyTargetRepo.deleteAll();
     await _settingsRepo.restoreAllDayOverrides({});
     await _settingsRepo.clearAllContextSettings();
+    await _clientRepo.deleteAll();
+    await _projectClientRepo.deleteAll();
+    await _invoiceRepo.deleteAll();
+    await _settingsRepo.clearSupplierProfile();
     await _settingsRepo.setPocketBaseLastSync('');
     _ledger.clear();
     await _saveLedger();
@@ -473,6 +512,7 @@ class PocketBaseSyncService {
       await _subscribeMonthlyTargets();
       await _subscribeDayOverrides();
       await _subscribeContextCollections();
+      await _subscribeClientCollections();
 
       _setStatus(SyncStatus.connected);
       _lastError = null;
@@ -502,6 +542,13 @@ class PocketBaseSyncService {
       await _pb.collection(_contextDayOverridesCollection).unsubscribe();
     } catch (e) {
       debugPrint('[PocketBaseSync] Error stopping context listeners: $e');
+    }
+    for (final collection in [_clientsCollection, _projectClientsCollection, _invoicesCollection, _userSettingsCollection]) {
+      try {
+        await _pb.collection(collection).unsubscribe();
+      } catch (e) {
+        debugPrint('[PocketBaseSync] Error stopping $collection listener: $e');
+      }
     }
     _listenersActive = false;
     debugPrint('[PocketBaseSync] Listeners stopped');
@@ -584,8 +631,25 @@ class PocketBaseSyncService {
     return _pushUpsert(_contextDayOverridesCollection, itemId, _contextDayOverrideToMap(itemId, type));
   }
 
-  Future<void> deleteContextDayOverride(String contextId, DateTime date) =>
-      _pushDelete(_contextDayOverridesCollection, _contextDayKey(contextId, _dateKey(date)));
+  Future<void> deleteContextDayOverride(String contextId, DateTime date) => _pushDelete(_contextDayOverridesCollection, _contextDayKey(contextId, _dateKey(date)));
+
+  Future<void> pushClient(ClientModel c) => _pushUpsert(_clientsCollection, c.id, _clientToMap(c));
+
+  Future<void> deleteClient(String id) => _pushDelete(_clientsCollection, id);
+
+  Future<void> pushProjectClient(ProjectClientModel l) => _pushUpsert(_projectClientsCollection, l.id, _projectClientToMap(l));
+
+  Future<void> deleteProjectClient(String id) => _pushDelete(_projectClientsCollection, id);
+
+  Future<void> pushInvoice(StandaloneInvoiceModel i) => _pushUpsert(_invoicesCollection, i.id, _invoiceToMap(i));
+
+  Future<void> deleteInvoice(String id) => _pushDelete(_invoicesCollection, id);
+
+  Future<void> pushSupplierProfile() {
+    final profile = _settingsRepo.getSupplierProfile();
+    if (profile == null) return Future.value();
+    return _pushUpsert(_userSettingsCollection, _supplierProfileItem, _supplierProfileToMap(profile));
+  }
 
   /// Queue the change before sending it, so a push that cannot go out now
   /// (offline, expired token, server error) is retried instead of forgotten.
@@ -666,6 +730,18 @@ class PocketBaseSyncService {
       case _contextDayOverridesCollection:
         final type = _settingsRepo.getAllContextDayOverrides()[itemId];
         return type == null ? null : _contextDayOverrideToMap(itemId, type);
+      case _clientsCollection:
+        final c = _clientRepo.getById(itemId);
+        return c == null ? null : _clientToMap(c);
+      case _projectClientsCollection:
+        final l = _projectClientRepo.getById(itemId);
+        return l == null ? null : _projectClientToMap(l);
+      case _invoicesCollection:
+        final i = _invoiceRepo.getById(itemId);
+        return i == null ? null : _invoiceToMap(i);
+      case _userSettingsCollection:
+        final profile = itemId == _supplierProfileItem ? _settingsRepo.getSupplierProfile() : null;
+        return profile == null ? null : _supplierProfileToMap(profile);
     }
     return null;
   }
@@ -707,8 +783,11 @@ class PocketBaseSyncService {
       final dayOverrides = _settingsRepo.getAllDayOverrides();
       await _replaceRemote('day_overrides', {for (final entry in dayOverrides.entries) entry.key: _dayOverrideToMap(entry.key, entry.value)});
 
-      onProgress?.call('Work contexts…', 0.98);
+      onProgress?.call('Work contexts…', 0.97);
       await _uploadContextData();
+
+      onProgress?.call('Clients and invoices…', 0.99);
+      await _uploadClientData();
 
       _settingsRepo.setPocketBaseLastSync(DateTime.now().toIso8601String());
       onProgress?.call('Done', 1.0);
@@ -773,6 +852,12 @@ class PocketBaseSyncService {
       final remoteContextSettings = await _downloadOptionalCollection<Map<String, dynamic>>(_contextSettingsCollection, (m) => m);
       final remoteContextOverrides = await _downloadOptionalCollection<MapEntry<String, String>>(_contextDayOverridesCollection, _contextDayOverrideFromMap);
 
+      onProgress?.call('Clients and invoices…', 0.89);
+      final remoteClients = await _downloadOptionalCollection(_clientsCollection, _clientFromMap);
+      final remoteProjectClients = await _downloadOptionalCollection(_projectClientsCollection, _projectClientFromMap);
+      final remoteInvoices = await _downloadOptionalCollection(_invoicesCollection, _invoiceFromMap);
+      final remoteUserSettings = await _downloadOptionalCollection<Map<String, dynamic>>(_userSettingsCollection, (m) => m);
+
       // ── Phase 2: apply. Everything is in hand, so a failure here cannot
       // leave us reconciled against a partial download. ─────────────────────
       onProgress?.call('Applying…', 0.90);
@@ -818,7 +903,39 @@ class PocketBaseSyncService {
           (id) => _monthlyTargetRepo.delete(id),
           (m) => m.id,
         );
+        if (remoteClients != null) {
+          await _replaceLocal<ClientModel>(
+            _clientsCollection,
+            remoteClients,
+            _clientRepo.getAll().map((c) => c.id).toSet(),
+            (c) => _clientRepo.add(c),
+            (id) => _clientRepo.delete(id),
+            (c) => c.id,
+          );
+        }
+        if (remoteProjectClients != null) {
+          await _replaceLocal<ProjectClientModel>(
+            _projectClientsCollection,
+            remoteProjectClients,
+            _projectClientRepo.getAll().map((l) => l.id).toSet(),
+            (l) => _projectClientRepo.add(l),
+            (id) => _projectClientRepo.delete(id),
+            (l) => l.id,
+          );
+        }
+        if (remoteInvoices != null) {
+          await _replaceLocal<StandaloneInvoiceModel>(
+            _invoicesCollection,
+            remoteInvoices,
+            _invoiceRepo.getAll().map((i) => i.id).toSet(),
+            (i) => _invoiceRepo.add(i),
+            (id) => _invoiceRepo.delete(id),
+            (i) => i.id,
+          );
+        }
       });
+
+      if (remoteUserSettings != null) await _applyRemoteUserSettings(remoteUserSettings);
 
       // Day overrides are cheap settings keys, not records — but the same
       // "empty remote must not wipe local" rule applies.
@@ -843,17 +960,10 @@ class PocketBaseSyncService {
       if (remoteContextOverrides != null) {
         if (remoteContextOverrides.isEmpty && localContextOverrides.isNotEmpty) {
           _reportGuard(
-            SyncGuardReport(
-              collection: _contextDayOverridesCollection,
-              blockedDeletions: localContextOverrides.length,
-              localCount: localContextOverrides.length,
-              remoteCount: 0,
-            ),
+            SyncGuardReport(collection: _contextDayOverridesCollection, blockedDeletions: localContextOverrides.length, localCount: localContextOverrides.length, remoteCount: 0),
           );
         } else {
-          await _settingsRepo.restoreAllContextDayOverrides(
-            _reconcileKeyed(_contextDayOverridesCollection, Map.fromEntries(remoteContextOverrides), localContextOverrides),
-          );
+          await _settingsRepo.restoreAllContextDayOverrides(_reconcileKeyed(_contextDayOverridesCollection, Map.fromEntries(remoteContextOverrides), localContextOverrides));
         }
       }
 
@@ -903,7 +1013,17 @@ class PocketBaseSyncService {
   Future<int> countRemoteRecords() async {
     if (!isSignedIn) return 0;
     int total = 0;
-    for (final coll in ['categories', 'projects', 'tasks', 'time_entries', 'running_timers', 'monthly_targets', 'day_overrides', _contextSettingsCollection, _contextDayOverridesCollection]) {
+    for (final coll in [
+      'categories',
+      'projects',
+      'tasks',
+      'time_entries',
+      'running_timers',
+      'monthly_targets',
+      'day_overrides',
+      _contextSettingsCollection,
+      _contextDayOverridesCollection,
+    ]) {
       try {
         final result = await _pb.collection(coll).getList(filter: 'user = "$userId"', perPage: 1);
         total += result.totalItems;
@@ -1097,6 +1217,105 @@ class PocketBaseSyncService {
     }
   }
 
+  /// Real-time updates for clients, their project links, invoices and the
+  /// supplier profile. Like the context collections, a server without them
+  /// only turns their real-time sync off.
+  Future<void> _subscribeClientCollections() async {
+    // Subscribing adds the topic to the shared realtime connection, so a
+    // collection the server does not have is never subscribed to at all.
+    if (!await _serverHasCollection(_clientsCollection)) return;
+    try {
+      await _pb.collection(_clientsCollection).subscribe('*', (e) {
+        if (_suppressListeners) return;
+        _handleEvent<ClientModel>(_clientsCollection, e, _clientFromMap, (c) => _clientRepo.add(c), (id) => _clientRepo.delete(id));
+        _collectionChangeController.add(SyncCollection.clients);
+      }, filter: 'user = "$userId"');
+
+      await _pb.collection(_projectClientsCollection).subscribe('*', (e) {
+        if (_suppressListeners) return;
+        _handleEvent<ProjectClientModel>(_projectClientsCollection, e, _projectClientFromMap, (l) => _projectClientRepo.add(l), (id) => _projectClientRepo.delete(id));
+        _collectionChangeController.add(SyncCollection.projectClients);
+      }, filter: 'user = "$userId"');
+
+      await _pb.collection(_invoicesCollection).subscribe('*', (e) {
+        if (_suppressListeners) return;
+        _handleEvent<StandaloneInvoiceModel>(_invoicesCollection, e, _invoiceFromMap, (i) => _invoiceRepo.add(i), (id) => _invoiceRepo.delete(id));
+        _collectionChangeController.add(SyncCollection.invoices);
+      }, filter: 'user = "$userId"');
+
+      await _pb.collection(_userSettingsCollection).subscribe('*', (e) async {
+        if (_suppressListeners) return;
+        final record = e.record;
+        if (record == null || e.action == 'delete') return;
+        await _applyRemoteUserSettings([record.toJson()]);
+        _collectionChangeController.add(SyncCollection.supplierProfile);
+      }, filter: 'user = "$userId"');
+    } catch (e) {
+      debugPrint('[PocketBaseSync] Client collections unavailable, real-time sync for them is off: $e');
+    }
+  }
+
+  Future<bool> _serverHasCollection(String collection) async {
+    try {
+      await _pb.collection(collection).getList(filter: 'user = "$userId"', perPage: 1);
+      return true;
+    } on ClientException catch (e) {
+      debugPrint('[PocketBaseSync] Collection "$collection" unavailable (${e.statusCode}), real-time sync for it is off');
+      return false;
+    }
+  }
+
+  /// Apply downloaded `user_settings` records. The supplier profile is a single
+  /// record per account: the side edited later wins, and a local profile the
+  /// server does not have yet is queued for upload instead of being dropped.
+  Future<void> _applyRemoteUserSettings(List<Map<String, dynamic>> records) async {
+    Map<String, dynamic>? remoteProfileRecord;
+    for (final record in records) {
+      if (record['item_id'] == _supplierProfileItem) remoteProfileRecord = record;
+    }
+
+    final local = _settingsRepo.getSupplierProfile();
+    if (_ledger.pendingOp(_userSettingsCollection, _supplierProfileItem) != null) return;
+
+    if (remoteProfileRecord == null) {
+      if (local != null) _ledger.markPending(_userSettingsCollection, _supplierProfileItem, PendingOp.upsert);
+      await _saveLedger();
+      return;
+    }
+
+    _ledger.confirm(_userSettingsCollection, _supplierProfileItem);
+    final remote = SupplierProfile.fromJson(_decodeJsonMap(remoteProfileRecord['data']));
+    if (local == null || remote.updatedAt.isAfter(local.updatedAt)) {
+      await _settingsRepo.setSupplierProfile(remote);
+    } else if (local.updatedAt.isAfter(remote.updatedAt)) {
+      _ledger.markPending(_userSettingsCollection, _supplierProfileItem, PendingOp.upsert);
+    }
+    await _saveLedger();
+  }
+
+  /// Push clients, links, invoices and the supplier profile. Failures are
+  /// logged, not thrown: the collections are optional on the server.
+  Future<void> _uploadClientData() async {
+    final collections = <String, Map<String, Map<String, dynamic>>>{
+      _clientsCollection: {for (final c in _clientRepo.getAll()) c.id: _clientToMap(c)},
+      _projectClientsCollection: {for (final l in _projectClientRepo.getAll()) l.id: _projectClientToMap(l)},
+      _invoicesCollection: {for (final i in _invoiceRepo.getAll()) i.id: _invoiceToMap(i)},
+    };
+    for (final entry in collections.entries) {
+      try {
+        await _replaceRemote(entry.key, entry.value);
+      } catch (e) {
+        debugPrint('[PocketBaseSync] ${entry.key} upload skipped: $e');
+      }
+    }
+    final profile = _settingsRepo.getSupplierProfile();
+    if (profile != null && await _upsertRecord(_userSettingsCollection, _supplierProfileItem, _supplierProfileToMap(profile))) {
+      _ledger.confirm(_userSettingsCollection, _supplierProfileItem);
+      _ledger.clearPending(_userSettingsCollection, _supplierProfileItem, version: _ledger.pendingVersion(_userSettingsCollection, _supplierProfileItem));
+      await _saveLedger();
+    }
+  }
+
   void _handleEvent<T>(
     String collection,
     RecordSubscriptionEvent event,
@@ -1207,9 +1426,7 @@ class PocketBaseSyncService {
     // not a truncated/empty local store about to wipe a healthy server.
     final orphans = existingRecords.values.toList();
     if (SyncGuard.blocks(deleteCount: orphans.length, localCount: remoteCountBefore, remoteCount: items.length)) {
-      _reportGuard(
-        SyncGuardReport(collection: collection, blockedDeletions: orphans.length, localCount: items.length, remoteCount: remoteCountBefore, remoteSide: true),
-      );
+      _reportGuard(SyncGuardReport(collection: collection, blockedDeletions: orphans.length, localCount: items.length, remoteCount: remoteCountBefore, remoteSide: true));
       return;
     }
 
@@ -1312,9 +1529,7 @@ class PocketBaseSyncService {
 
     final toDelete = plan.deleteLocally;
     if (SyncGuard.blocks(deleteCount: toDelete.length, localCount: localIds.length, remoteCount: remoteItems.length)) {
-      _reportGuard(
-        SyncGuardReport(collection: collection, blockedDeletions: toDelete.length, localCount: localIds.length, remoteCount: remoteItems.length),
-      );
+      _reportGuard(SyncGuardReport(collection: collection, blockedDeletions: toDelete.length, localCount: localIds.length, remoteCount: remoteItems.length));
       return;
     }
 
@@ -1523,6 +1738,72 @@ class PocketBaseSyncService {
     'date': itemId.split(AppConstants.contextKeySeparator).last,
     'override_type': type,
   };
+
+  // --- Client ---
+  Map<String, dynamic> _clientToMap(ClientModel c) => {
+    'item_id': c.id,
+    'name': c.name,
+    'address_line1': c.addressLine1,
+    'address_line2': c.addressLine2,
+    'ico': c.ico,
+    'dic': c.dic,
+    'email': c.email,
+    'phone': c.phone,
+    'notes': c.notes,
+    'is_archived': c.isArchived,
+    'created_at': c.createdAt.toIso8601String(),
+  };
+
+  ClientModel _clientFromMap(Map<String, dynamic> m) => ClientModel(
+    id: m['item_id'] as String? ?? '',
+    name: m['name'] as String? ?? '',
+    addressLine1: m['address_line1'] as String? ?? '',
+    addressLine2: m['address_line2'] as String? ?? '',
+    ico: m['ico'] as String? ?? '',
+    dic: m['dic'] as String? ?? '',
+    email: m['email'] as String? ?? '',
+    phone: m['phone'] as String? ?? '',
+    notes: m['notes'] as String? ?? '',
+    isArchived: m['is_archived'] as bool? ?? false,
+    createdAt: _parseDate(m['created_at']),
+  );
+
+  // --- Project ↔ client link ---
+  Map<String, dynamic> _projectClientToMap(ProjectClientModel l) => {
+    'item_id': l.id,
+    'project_id': l.projectId,
+    'client_id': l.clientId,
+    'service_description': l.serviceDescription,
+    'created_at': l.createdAt.toIso8601String(),
+    'position': l.position,
+  };
+
+  ProjectClientModel _projectClientFromMap(Map<String, dynamic> m) => ProjectClientModel(
+    id: m['item_id'] as String? ?? '',
+    projectId: m['project_id'] as String? ?? '',
+    clientId: m['client_id'] as String? ?? '',
+    serviceDescription: m['service_description'] as String? ?? '',
+    createdAt: _parseDate(m['created_at']),
+    position: (m['position'] as num?)?.toInt() ?? 0,
+  );
+
+  // --- Invoice: searchable columns plus the full invoice as JSON ---
+  Map<String, dynamic> _invoiceToMap(StandaloneInvoiceModel i) => {
+    'item_id': i.id,
+    'invoice_number': i.invoiceNumber,
+    'invoice_type': i.invoiceType,
+    'client_id': i.clientId ?? '',
+    'issue_date': i.issueDate.toIso8601String(),
+    'data': i.toJson(),
+  };
+
+  StandaloneInvoiceModel _invoiceFromMap(Map<String, dynamic> m) {
+    final data = _decodeJsonMap(m['data']);
+    return StandaloneInvoiceModel.fromJson({...data, 'id': m['item_id'] as String? ?? data['id']});
+  }
+
+  // --- Supplier profile (one user_settings record) ---
+  Map<String, dynamic> _supplierProfileToMap(SupplierProfile p) => {'item_id': _supplierProfileItem, 'data': p.toJson()};
 
   static Map<String, dynamic> _decodeJsonMap(dynamic value) {
     if (value is Map) return Map<String, dynamic>.from(value);

@@ -4,10 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../data/models/client_model.dart';
 import '../../data/models/invoice_settings.dart';
 import '../../data/models/standalone_invoice_model.dart';
+import '../../data/repositories/client_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/standalone_invoice_repository.dart';
+import '../blocs/client/client_bloc.dart';
+import '../blocs/client/client_event.dart';
 import '../blocs/standalone_invoice/standalone_invoice_bloc.dart';
 import '../blocs/standalone_invoice/standalone_invoice_event.dart';
 
@@ -63,14 +67,31 @@ class _StandaloneInvoiceFormScreenState extends State<StandaloneInvoiceFormScree
   // Line items
   late List<_LineItemData> _lineItems;
 
+  /// The client picked for this invoice; null for a customer typed by hand.
+  String? _clientId;
+
   @override
   void initState() {
     super.initState();
     final settingsRepo = context.read<SettingsRepository>();
-    final invoiceSettings = settingsRepo.getInvoiceSettings();
+    final profile = settingsRepo.getEffectiveSupplierProfile();
+    final hasClients = context.read<ClientRepository>().getActive().isNotEmpty;
+    final legacy = settingsRepo.getInvoiceSettings();
+    final invoiceSettings = legacy.copyWith(
+      supplier: profile.party,
+      customer: hasClients ? const InvoiceParty() : legacy.customer,
+      bankName: profile.bankName,
+      bankCode: profile.bankCode,
+      swift: profile.swift,
+      accountNumber: profile.accountNumber,
+      iban: profile.iban,
+      issuerName: profile.issuerName,
+      issuerEmail: profile.issuerEmail,
+    );
 
     if (_isEditing) {
       final inv = widget.invoice!;
+      _clientId = inv.clientId;
       _invoiceNumber = inv.invoiceNumber;
       _issueDate = inv.issueDate;
       _dueDate = inv.dueDate;
@@ -215,6 +236,9 @@ class _StandaloneInvoiceFormScreenState extends State<StandaloneInvoiceFormScree
       notes: _notesCtrl.text,
       createdAt: _isEditing ? widget.invoice!.createdAt : DateTime.now(),
       updatedAt: DateTime.now(),
+      invoiceType: widget.invoice?.invoiceType ?? 'standalone',
+      sourceProjectIds: widget.invoice?.sourceProjectIds ?? const [],
+      clientId: _clientId,
     );
 
     if (_isEditing) {
@@ -263,89 +287,80 @@ class _StandaloneInvoiceFormScreenState extends State<StandaloneInvoiceFormScree
     });
   }
 
-  void _loadSupplierFromSettings() {
-    final settingsRepo = context.read<SettingsRepository>();
-    final suppliers = settingsRepo.getSuppliers();
-    if (suppliers.isEmpty) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(tr('standalone_invoices.select_supplier')),
-        children: suppliers
-            .map(
-              (s) => SimpleDialogOption(
-                onPressed: () {
-                  setState(() {
-                    _supplierNameCtrl.text = s.name;
-                    _supplierAddr1Ctrl.text = s.addressLine1;
-                    _supplierAddr2Ctrl.text = s.addressLine2;
-                    _supplierIcoCtrl.text = s.ico;
-                    _supplierDicCtrl.text = s.dic;
-                    _supplierPhoneCtrl.text = s.phone;
-                    _supplierEmailCtrl.text = s.email;
-                  });
-                  Navigator.pop(ctx);
-                },
-                child: Text(s.displayLabel),
-              ),
-            )
-            .toList(),
-      ),
-    );
+  void _loadSupplierFromProfile() {
+    final p = context.read<SettingsRepository>().getEffectiveSupplierProfile();
+    setState(() {
+      _supplierNameCtrl.text = p.party.name;
+      _supplierAddr1Ctrl.text = p.party.addressLine1;
+      _supplierAddr2Ctrl.text = p.party.addressLine2;
+      _supplierIcoCtrl.text = p.party.ico;
+      _supplierDicCtrl.text = p.party.dic;
+      _supplierPhoneCtrl.text = p.party.phone;
+      _supplierEmailCtrl.text = p.party.email;
+      _bankNameCtrl.text = p.bankName;
+      _bankCodeCtrl.text = p.bankCode;
+      _swiftCtrl.text = p.swift;
+      _accountNumberCtrl.text = p.accountNumber;
+      _ibanCtrl.text = p.iban;
+      _issuerNameCtrl.text = p.issuerName;
+      _issuerEmailCtrl.text = p.issuerEmail;
+    });
   }
 
-  void _loadCustomerFromSettings() {
-    final settingsRepo = context.read<SettingsRepository>();
-    final customers = settingsRepo.getCustomers();
-    if (customers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('standalone_invoices.no_saved_customers'))));
+  void _applyCustomer(InvoiceParty c, {String? clientId}) {
+    setState(() {
+      _clientId = clientId;
+      _customerNameCtrl.text = c.name;
+      _customerAddr1Ctrl.text = c.addressLine1;
+      _customerAddr2Ctrl.text = c.addressLine2;
+      _customerIcoCtrl.text = c.ico;
+      _customerDicCtrl.text = c.dic;
+    });
+  }
+
+  void _pickClient() {
+    final clients = context.read<ClientRepository>().getActive();
+    if (clients.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('clients.no_clients_hint'))));
       return;
     }
-
     showDialog(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: Text(tr('standalone_invoices.select_customer')),
-        children: customers
-            .map(
-              (c) => SimpleDialogOption(
-                onPressed: () {
-                  setState(() {
-                    _customerNameCtrl.text = c.name;
-                    _customerAddr1Ctrl.text = c.addressLine1;
-                    _customerAddr2Ctrl.text = c.addressLine2;
-                    _customerIcoCtrl.text = c.ico;
-                    _customerDicCtrl.text = c.dic;
-                  });
-                  Navigator.pop(ctx);
-                },
-                child: Text(c.displayLabel),
-              ),
-            )
-            .toList(),
+        children: [
+          for (final c in clients)
+            SimpleDialogOption(
+              onPressed: () {
+                _applyCustomer(c.toInvoiceParty(), clientId: c.id);
+                Navigator.pop(ctx);
+              },
+              child: Text(c.name),
+            ),
+        ],
       ),
     );
   }
 
-  Future<void> _saveCustomerToGlobal() async {
+  /// Keep a customer typed by hand as a client, so it can be picked next time.
+  void _saveCustomerAsClient() {
     final customer = _buildCustomer();
     if (customer.name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('standalone_invoices.customer_name_required'))));
       return;
     }
-    final settingsRepo = context.read<SettingsRepository>();
-    final customers = settingsRepo.getCustomers();
-    final existingIdx = customers.indexWhere((c) => c.name == customer.name);
-    if (existingIdx >= 0) {
-      customers[existingIdx] = customer;
-    } else {
-      customers.add(customer);
-    }
-    await settingsRepo.setCustomers(customers);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('standalone_invoices.customer_saved'))));
-    }
+    final client = ClientModel(
+      id: const Uuid().v4(),
+      name: customer.name,
+      addressLine1: customer.addressLine1,
+      addressLine2: customer.addressLine2,
+      ico: customer.ico,
+      dic: customer.dic,
+      createdAt: DateTime.now(),
+    );
+    context.read<ClientBloc>().add(AddClient(client));
+    setState(() => _clientId = client.id);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('standalone_invoices.customer_saved'))));
   }
 
   double get _totalAmount {
@@ -505,9 +520,9 @@ class _StandaloneInvoiceFormScreenState extends State<StandaloneInvoiceFormScree
                 Text(tr('standalone_invoices.supplier'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
                 const Spacer(),
                 TextButton.icon(
-                  onPressed: _loadSupplierFromSettings,
-                  icon: const Icon(Icons.person_search, size: 16),
-                  label: Text(tr('standalone_invoices.load_saved'), style: const TextStyle(fontSize: 12)),
+                  onPressed: _loadSupplierFromProfile,
+                  icon: const Icon(Icons.badge_outlined, size: 16),
+                  label: Text(tr('supplier_profile.short'), style: const TextStyle(fontSize: 12)),
                 ),
               ],
             ),
@@ -579,16 +594,17 @@ class _StandaloneInvoiceFormScreenState extends State<StandaloneInvoiceFormScree
               children: [
                 Text(tr('standalone_invoices.customer'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
                 const Spacer(),
-                TextButton.icon(
-                  onPressed: _saveCustomerToGlobal,
-                  icon: const Icon(Icons.save_outlined, size: 16),
-                  label: Text(tr('standalone_invoices.save_customer'), style: const TextStyle(fontSize: 12)),
-                ),
+                if (_clientId == null)
+                  TextButton.icon(
+                    onPressed: _saveCustomerAsClient,
+                    icon: const Icon(Icons.save_outlined, size: 16),
+                    label: Text(tr('standalone_invoices.save_customer'), style: const TextStyle(fontSize: 12)),
+                  ),
                 const SizedBox(width: 4),
                 TextButton.icon(
-                  onPressed: _loadCustomerFromSettings,
-                  icon: const Icon(Icons.person_search, size: 16),
-                  label: Text(tr('standalone_invoices.load_saved'), style: const TextStyle(fontSize: 12)),
+                  onPressed: _pickClient,
+                  icon: const Icon(Icons.business_outlined, size: 16),
+                  label: Text(tr('standalone_invoices.pick_client'), style: const TextStyle(fontSize: 12)),
                 ),
               ],
             ),

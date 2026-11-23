@@ -1,5 +1,318 @@
 # Development Log
 
+## 2026-11-23 (part 8) — feat(projects): richer project cards
+
+### What was done
+
+- `projects_screen.dart` `_ProjectCard` rewritten (the user found the cards too sparse compared to
+  the edit form). It now shows: clients in the project's order (the invoice default in bold) and the
+  default's service description; this month's and total time; rate; amount to invoice this month
+  (billable time × rate); number of tasks; date of the last entry; progress bars for planned time and
+  planned budget (billable amount so far, red when exceeded); start – due dates with "po termínu";
+  the first two lines of the notes; "Nefakturovatelné" / "Archivovaný" badges. The card rebuilds on
+  `ClientBloc` changes.
+- The fixed-aspect `GridView` became rows built with `LayoutBuilder` + `IntrinsicHeight`: up to
+  440 pt per card, cards in a row share the tallest card's height, so no card carries empty space.
+- New strings `projects.this_month/total/rate/month_amount/last_entry/no_entries/plan_time/
+  plan_budget/archived/overdue` (cs/en).
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 105 passed (no
+  widget tests for the card).
+- Checked in the isolated preview with a fresh copy of the real data: 1. Ostatní and 2. Artemis show
+  Medutech s.r.o. with "Vývoj aplikace Artemis", 6h 8m / 52h 40m this month, 3 382 / 28 969 CZK to
+  invoice, last entry 23. 11. 2026; testovací projekt shows "Zatím bez firmy". The plan, date and notes
+  rows are not set on any real project, so they were not seen rendered.
+- Installed: backup `~/Documents/timer_counter_container_backup_2026-11-23_18-39-56/`, release
+  58.3 MB, `codesign --verify` OK, running from `/Applications`.
+
+### Pending / next steps
+
+- Phase 3 (needs the user's OK): PocketBase dump, additive collections, dry run on a copy of both
+  accounts.
+
+## 2026-11-23 (part 7) — feat: the client at the top of a project is the invoice default
+
+### What was done
+
+- User request: the invoice must use the client the user put at the top of a project, not the one
+  added last, so the default can be changed later.
+- `ProjectClientModel.position` (HiveField 5, default 0); adapter regenerated (other adapters
+  restored byte-identical). `ProjectClientRepository._ordered` sorts by position, ties (links from
+  before positions existed) newest first; used by `getByProject`, `getByClient`,
+  `clientIdsForProjects`.
+- Sync: `project_clients.position`; `pocketbase/pb_schema.json` gets the `position` number field
+  (still not applied to any server).
+- `ClientBloc` `SetProjectClients` stores positions 0…n in the order given and updates a link when
+  its description or position changed.
+- Project form: the clients list is a `ReorderableListView` with drag handles; the first row shows
+  "Na faktuře"; hint "Na faktuře se použije firma nahoře. Pořadí změníš přetažením."
+- `ClientMigrationService` appends new links below a project's existing clients.
+- Texts and comments that said "most recently linked/added" updated (cs/en, PDF reports).
+- The migration from part 6 was confirmed by the user at 18:31: `clients.hive` holds Medutech s.r.o.
+  (08975922, CZ08975922) and Mateřská škola (49137182); `project_clients.hive` holds 2 links with
+  "Vývoj aplikace Artemis" (checked with `strings` on the Hive files).
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 105 passed
+  (ordering by position, fallback to newest when all positions are 0, position survives the server
+  round trip; the old "most recently linked first" test replaced).
+- Installed: backup `~/Documents/timer_counter_container_backup_2026-11-23_18-35-54/`, release
+  58.2 MB, `codesign --verify` OK, running from `/Applications`.
+- Not exercised by me: dragging clients in the project form.
+
+### Pending / next steps
+
+- Phase 3 (needs the user's OK): PocketBase dump, import the new collections additively, dry run on
+  a copy of both accounts, compare ids; then the queued clients, links and invoices go up.
+
+## 2026-11-23 (part 6) — feat: create clients from existing invoices (migration with preview)
+
+### What was done
+
+- The user asked to create clients from the existing invoices. This Mac's invoices: no. 3
+  (standalone) to "Mateřská škola" (IČO 49137182); no. 4–10 (time-based) to "Medutech s.r.o."
+  (IČO 08975922), listing 1. Ostatní, 2. Artemis and, on 9–10, the idle "testovací projekt".
+- `core/services/client_migration_service.dart` — `ClientMigrationService.buildPlan()` /
+  `apply(plan, syncService:)`, `ClientMigrationPlan`:
+  - one client per company on the invoices and in the old saved customer list, keyed by IČO (name
+    when there is none); the newest invoice provides the details; an existing client with the same
+    IČO/name is reused;
+  - every invoice without `clientId` gets the client of its customer;
+  - a project is linked to the client only if it is in that client's time invoice *and* had time
+    entries in the invoiced month (so the idle testovací projekt is not linked); the service
+    description comes from the invoice's single line, the link is dated by the latest invoice;
+  - the supplier profile is created once from the old invoice settings;
+  - nothing is deleted; running it again plans nothing; `apply` writes locally, then queues
+    everything for sync.
+- `widgets/client_migration_dialog.dart` — preview per client (projects, number of invoices, new),
+  profile line, "Teď ne" / "Vytvořit firmy". Offered once per device after the first frame of
+  `HomeScreen` (flag `client_migration_offered` in settings) and always available in Settings →
+  Fakturace → "Vytvořit firmy z faktur".
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 103 passed
+  (+7 `client_migration_service_test.dart`: one client per IČO, invoices get their client, only
+  worked projects linked with the invoice text and latest date, idempotent, a hand-made client with the
+  same IČO is reused, nothing deleted / invoices otherwise unchanged, profile created once).
+- On a copy of the real data (isolated preview, no network) the dialog plans exactly: Medutech s.r.o.
+  — 1. Ostatní, 2. Artemis, 7 invoices; Mateřská škola — no project, 1 invoice; profile from
+  "Lubomír Žižka".
+- Installed: backup `~/Documents/timer_counter_container_backup_2026-11-23_18-30-14/`, release
+  58.0 MB, `codesign --verify` OK; the dialog appears in `/Applications/Timer Counter.app` with the
+  same plan. Clicking "Vytvořit firmy" via `cliclick` did not reach the app (dialog stayed open,
+  nothing applied) — the user has to confirm it.
+
+### Pending / next steps
+
+- User confirms "Vytvořit firmy"; then check Firmy, the project links and the invoices' client.
+- Phase 3 (server) with the user's OK; until then the new clients, links and the 8 invoices stay
+  queued locally.
+
+## 2026-11-23 (part 5) — feat: clients UI, per-project clients, supplier profile, new invoice flow, own export (phase 2)
+
+### What was done
+
+- Confirmed with the user's data: categories "Medutech" (1. Ostatní, 2. Artemis) and "testovací
+  kategorie" (testovací projekt) exist only in lzizka's account; eli.zizkova's 2 projects have none
+  (October server dump). "Medutech" will be merged with customer "Medutech s.r.o." in phase 4.
+- Clients:
+  - `ClientBloc` (`blocs/client/`: event/state/bloc) — load, add, update, delete (refused with a
+    message while an invoice refers to the client; links removed with it), `SetProjectClients`
+    (diffs a project's links, new ones get increasing timestamps in the order added); every change
+    is pushed through `PocketBaseSyncService`; reloads on `SyncCollection.clients/projectClients`.
+  - `screens/clients_screen.dart` (sidebar "Firmy" after Projects; Cmd+1…Cmd+8): search, archived
+    filter, grouped list with IČO/city and linked projects, edit/archive/delete menu;
+    `widgets/client_form_dialog.dart`.
+- Project form (`project_form_dialog.dart`): category picker removed (the stored `categoryId` is
+  kept and saved back unchanged); new "Firmy" section — link existing or new clients, a service
+  description per link, remove; saved through `SetProjectClients`.
+- Categories hidden: filter chips, "Add category" and the category dialogs removed from
+  `projects_screen.dart`; `category_form_dialog.dart` deleted. Category data and its sync are untouched.
+- Supplier profile: `widgets/supplier_profile_dialog.dart` replaces the 5-tab `_InvoiceSettingsDialog`
+  (supplier/customer lists by index); reachable from PDF reports ("Můj profil") and Settings →
+  Fakturace. `SettingsRepository.getEffectiveSupplierProfile()` falls back to the old invoice settings
+  (dated at the epoch, so a server profile wins). Saving pushes the profile.
+- Invoices:
+  - `core/services/time_invoice_builder.dart` (`TimeInvoiceBuilder`, `ProjectBillingLine`,
+    `InvoiceLineMode`): one line per project (service description or project name, hours × project
+    rate) or one line (hours × rate when rates match, otherwise 1 × exact sum with the hours in the
+    text); projects without hours are skipped.
+  - PDF reports: client picker (clients of the active projects, most recently linked first; the old
+    customer while no client exists) and line-mode switch in the invoice card; the combined invoice
+    covers the chosen client's projects (all projects while it has none); generating shows
+    `widgets/invoice_lines_dialog.dart` to edit/split/add lines, then writes the two reports and the
+    invoice via `PdfReportService.writeMonthlyPdfs` and stores the invoice through the bloc (synced).
+    Per-project mode bills each project to its most recently linked client. Preview uses the same draft.
+  - The time invoice PDF is now rendered by `generateStandaloneInvoicePdf` from the stored invoice, so
+    the printed number equals the saved one; `generateInvoicePdf`/`generateAllReports` removed.
+    Issue date = today, due +14 days, tax date = last day of the month.
+  - `StandaloneInvoiceRepository.findTimeBasedInvoice` matches by tax-date month and by client
+    (an old invoice without client matches by customer name).
+  - `StandaloneInvoiceBloc` pushes add/update/delete to sync and reloads on `SyncCollection.invoices`.
+  - Invoice form: "Vybrat firmu" picks a client (sets `clientId`), "Uložit jako firmu" creates a
+    client, the supplier button loads the profile; new invoices default to the profile.
+- Export: `core/services/data_export_service.dart` — own JSON format (`timer_counter.export` v1 with
+  period, currency, summary and entries incl. clients) and `;`-separated CSV with Czech decimals;
+  `tyme_export_service.dart` and its test removed.
+
+### What was fixed
+
+- Editing a time-based invoice in the invoice form saved it as `standalone` and dropped its
+  `sourceProjectIds`; the form now keeps the type, the projects and the client.
+- The time invoice PDF printed `year-month` as its number even when the saved invoice got another
+  number (month number already used); it now prints the stored number.
+- "Datum vystavění" typo on the PDF invoice → "Datum vystavení".
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 96 passed
+  (17 Tyme-export tests removed with the service; new: 5 `time_invoice_builder_test.dart`,
+  6 `data_export_service_test.dart`).
+- Visual check in the isolated preview (no network): Clients (empty state) and PDF reports (client
+  hint, line-mode switch, profile button) render.
+- Installed: backup `~/Documents/timer_counter_container_backup_2026-11-23_18-24-06/`, release
+  57.9 MB, `codesign --verify` OK, running from `/Applications` with the user's data (sidebar shows
+  "Firmy").
+- Not exercised: creating a client, linking it in the project form, generating an invoice end to end
+  (needs clicks and the folder picker), the invoice form changes. The server still has none of the new
+  collections, so new clients/invoices stay queued locally until phase 3.
+
+### Pending / next steps
+
+- Click through: add a client, link it to a project with a service description, generate a November
+  invoice in both line modes, edit an invoice in the invoice form.
+- Phase 3 (needs the user's OK): PocketBase dump, import the four collections additively, dry run on a
+  copy of both accounts, compare ids.
+- Phase 4: migration with a preview — customer "Medutech s.r.o." + category "Medutech" → one client
+  (match a client already created by hand by IČO), links for 1. Ostatní / 2. Artemis with
+  "Vývoj aplikace Artemis", supplier profile from the old settings, upload this Mac's invoices with
+  `clientId`.
+
+## 2026-11-23 (part 4) — feat(data): clients, project–client links, synced invoices and supplier profile (phase 1, data layer)
+
+### What was done
+
+- Final decisions from the user: no validity period on a project–client link (the most recently
+  linked client is offered, the user changes it per invoice); every project–client pair has its own
+  service description; one project rate; several projects for one client go either as one line per
+  project or as one summary line, editable before issuing; one supplier per account; the export gets
+  an own format instead of Tyme. Design page updated (`docs/datovy-model.html`, artifact v3).
+- Models: `ClientModel` (Hive typeId 9), `ProjectClientModel` (typeId 10), `SupplierProfile`
+  (JSON in the settings box under `supplier_profile`), `StandaloneInvoiceModel.clientId` (HiveField 20,
+  nullable). New `parseStringOrNull` in `json_utils.dart`. Adapters generated with build_runner;
+  the regenerated adapters of untouched models were reverted, `lib/hive_registrar.g.dart` removed.
+- Repositories: `ClientRepository`, `ProjectClientRepository` (`getByProject`, `getByClient`, `find`,
+  `clientIdsForProjects` — most recently linked first), `SettingsRepository.get/set/clearSupplierProfile`.
+  Both new repositories journal deletions. Wired in `main.dart`.
+- `PocketBaseSyncService`:
+  - new collections `clients`, `project_clients`, `invoices` (searchable columns + full invoice as
+    `data` JSON) and `user_settings` (record `supplier_profile`);
+  - `pushClient/deleteClient`, `pushProjectClient/deleteProjectClient`, `pushInvoice/deleteInvoice`,
+    `pushSupplierProfile`, all through the ledger; `_localRecordMap` covers them for the offline queue;
+  - `downloadAll` fetches them with `_downloadOptionalCollection` (404/403 → skipped, nothing touched)
+    and reconciles with the same `_replaceLocal` + ledger + `SyncGuard` as the other collections;
+  - supplier profile: the side with the later `updatedAt` wins; a local profile the server lacks is
+    queued, never dropped (`_applyRemoteUserSettings`);
+  - `uploadAll` → `_uploadClientData` (failures logged, not thrown);
+  - real-time: `_subscribeClientCollections` subscribes only after `_serverHasCollection` confirms
+    the collection exists, so no unknown topic is added to the shared realtime connection;
+  - `clearLocalData` (account switch / sign-out with clear) now also wipes clients, links, invoices
+    and the profile, journalled like the rest — otherwise account A's invoices would be uploaded
+    into account B.
+- `BackupService`: version 4 adds `clients`, `project_clients`, `supplier_profile`; restoring an
+  older backup that has no `clients` key keeps the current clients and links.
+- `pocketbase/pb_schema.json`: the four collections added (additive only, 318 inserted lines,
+  existing definitions byte-identical). Not applied to any server.
+
+### Design decisions
+
+- No `client_ids` field on projects: the `projects` collection stays exactly as older builds
+  (iPhone 1.0.11, eli.zizkova's device) expect it.
+- Existing collections, `category_id` on projects and `project_id` on entries are untouched.
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues.
+- `TZ=Europe/Prague flutter test --no-pub`: 102 passed (94 + 8 new: 6 in
+  `pocketbase_sync_service_test.dart` — missing collections keep the rest syncing and the new data
+  queued, queued data goes out once the collections exist, full round trip incl. invoice, client
+  order, profile newer-wins both ways, local-only profile uploaded; 2 in `backup_service_test.dart`
+  — v4 round trip, v3 restore keeps clients). The fake server got a `missingCollections` switch.
+- Proven by mutation: using `_downloadCollection` for clients, or clearing clients on every
+  restore, makes the matching test fail; restored afterwards.
+- Installed: backup `~/Documents/timer_counter_container_backup_2026-11-23_18-07-09/`, release build
+  57.9 MB, `codesign --verify` OK, running from `/Applications` with the user's data; the new
+  `clients.hive` / `project_clients.hive` boxes exist and are empty. The live server has none of the
+  new collections, so this build only skips them; nothing new is sent.
+- No UI for clients yet; nothing migrated.
+
+### Pending / next steps
+
+- Phase 2 (screens): Clients section, clients + service descriptions in the project form, new
+  invoice flow (client pick, per-project or single line, editable items), supplier profile in
+  Settings, hide categories, own export format; call the new push methods from the blocs.
+- Phase 3 (server, needs the user's OK): PocketBase dump, import the four collections without
+  deleting anything, dry run on a copy of both accounts, compare ids before/after.
+- Phase 4: migrate this Mac's customers/suppliers/invoices, links from past time invoices.
+
+## 2026-11-23 (part 3) — refactor: remove Tyme import; data model redesign (clients) proposed
+
+### What was done
+
+- Tyme import removed at the user's request (they will never use Tyme again):
+  - deleted `lib/core/services/tyme_import_service.dart`, `tyme_data_import_service.dart`,
+    `tyme_data_import_service_io.dart`, `tyme_data_import_service_stub.dart`;
+  - `settings_screen.dart`: removed the "Import data" tile, `_showImportDialog` and `_ImportDialog`;
+  - removed the `import` translation block and `settings.import_data` from en/cs;
+  - `pubspec.yaml`: dropped `sqlite3` (only the Tyme `.data` reader used it); `pubspec.lock` updated by
+    `flutter pub get`, the release bundle no longer ships `sqlite3.framework`;
+  - README: "Data Export & Import" reduced to export.
+  - The JSON/CSV export (`tyme_export_service.dart`, still Tyme format) and the backup/restore are kept.
+- Data-model review for the planned rework (categories → clients). Page published as an artifact
+  and saved as `docs/datovy-model.html`. Findings from the code:
+  - there is no client entity: category "Medutech" and invoice customer "Medutech s.r.o." are unrelated;
+    the customer is a global, index-based pick (`invoiceSelectedCustomerIndex`);
+  - the invoice rate is the rate of the first entry's project in the month, else hard-coded 550
+    (`pdf_report_service.dart:104–111`); `TaskModel.hourlyRate` is only used by the Tyme export;
+  - customers, suppliers, bank/issuer settings, invoice counter, standalone invoices and the global
+    work schedule are local-only (Hive + backup), not on PocketBase;
+  - `TimeEntryModel`/`RunningTimerModel` store `projectId` next to `taskId`;
+  - categories are only used for the Projects filter chips and Tyme import/export.
+- User decisions: categories go away in the app; a project can have several clients (M:N) and clients
+  sync; everything syncs; all PocketBase data must stay visible and the eli.zizkova account must keep
+  working. Proposed design: new collections `clients`, `project_clients`, `supplier_profiles`,
+  `invoices`, `user_settings`; existing collections unchanged (`projects` keeps `category_id`,
+  `time_entries` keeps `project_id`), categories hidden but never deleted.
+
+### Design decisions
+
+- Project ↔ client as a separate `project_clients` collection instead of a `client_ids` field on
+  projects: the `projects` collection stays byte-for-byte compatible with older builds (iPhone 1.0.11,
+  eli.zizkova's device), the link can carry its own data (default flag, service description), and
+  unlinking never touches issued invoices.
+- Rollout order: PocketBase dump → additive schema import (no "delete missing") → dry run on a copy of
+  both accounts → migration on the user's account only → other devices update whenever.
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 94 passed.
+- Installed: container backup `~/Documents/timer_counter_container_backup_2026-11-23_17-50-18/`,
+  clean `flutter build macos --release` (57.8 MB, `objective_c.framework` present,
+  `codesign --verify --deep --strict` OK), `/Applications/Timer Counter.app` replaced and launched;
+  screenshot shows the user's November entries.
+- No data-model code written yet; nothing on PocketBase changed.
+
+### Pending / next steps
+
+- Open questions to the user: validity period (from–to) on the project–client link; per-link service
+  description / hourly rate; keep or drop the Tyme-format JSON/CSV export; one or several supplier
+  profiles.
+- Then implement the clients model following the rollout order above.
+
 ## 2026-11-23 (part 2) — macOS desktop UI installed into /Applications; shorter sidebar label
 
 ### What was done
@@ -25,348 +338,3 @@
 
 - Same as the previous entry: dialogs, pushed screens and the invoice form in the new theme; dark
   mode; Windows layout; native macOS menu bar.
-
-## 2026-11-23 — feat(desktop): macOS-style desktop UI (sidebar shell, compact theme, pane toolbars)
-
-### What was done
-
-- First step of the UI rework: the desktop app (macOS, Windows, Linux) no longer uses the mobile
-  Material look. Mobile and web keep `AppTheme` and their layouts unchanged.
-- New `lib/core/theme/desktop_theme.dart`:
-  - `DesktopTheme.light` / `.dark` — macOS type scale (13 pt body, 11 pt captions, system font via
-    `Typography.material2021(platform:)`, no Material letter spacing), neutral surfaces instead of the
-    lavender seed tints, systemIndigo accent, no ripples (`NoSplash`), 28 pt buttons with 6 pt radius,
-    dense list tiles (36 pt), compact inputs/dropdowns/chips/segmented controls, macOS-like dialogs,
-    menus, tooltips, scrollbars, snackbars; `AppBarTheme` is a 52 pt toolbar with a chevron back button.
-  - `MacColors` `ThemeExtension` (sidebar, content, group fill/border, control fill/border, separator,
-    label levels) with `MacColors.of(context)`.
-  - `app.dart` picks `DesktopTheme` when `PlatformUtils.isDesktop`.
-- New desktop shell in `HomeScreen._buildDesktopLayout`:
-  - `widgets/desktop/desktop_sidebar.dart` — full-height source-list sidebar (220 pt): section headers
-    (`nav.section_tracking`, `nav.section_reports`, new keys in en/cs), 28 pt rows with accent icons and
-    rounded selection, Settings pinned at the bottom.
-  - Sidebar footer `_SidebarTimerStatus`: the running timer (project colour, task, elapsed) and an
-    "Timer Counter" entry that opens the About dialog (replaces the old rail logo).
-  - The content pane is a nested `Navigator` keyed by section, so pushed screens (project detail,
-    backup history, invoice form, work contexts) stay inside the pane next to the sidebar.
-  - Cmd+1…Cmd+7 switch sections, Cmd+, opens Settings (Ctrl on Windows/Linux), via a
-    `HardwareKeyboard` handler — a focus-based `CallbackShortcuts` stopped working after the first
-    switch because the replaced navigator took the focus with it.
-- `macos/Runner/MainFlutterWindow.swift`: an empty unified `NSToolbar` + transparent, hidden title,
-  full-size content view, so the traffic lights sit centred in a 52 pt titlebar like Mail/Finder.
-- `widgets/desktop/pane_header.dart` `PaneHeader` — 52 pt pane toolbar (title, subtitle, optional
-  centred control, actions), doubles as the window drag area through
-  `widgets/desktop/window_drag_area.dart` (`DragToMoveArea` only on native desktop).
-  Used by every root screen on desktop instead of the old 28 pt headlines:
-  - Time Tracking: title + date, running-timer badge as the action; start button 34 pt.
-  - Time Entries: month navigator centred in the toolbar, "Add manual entry" on the right.
-  - Projects: search, archived filter, add category / add project in the toolbar.
-  - Statistics: Day/Week/Month/Year segmented control + custom range in the toolbar
-    (`_buildRangeSelector`, `_buildCustomRangeButton` extracted; `_buildHeader(pane: true)` keeps
-    only the period navigator).
-  - PDF Reports, Invoices, Settings: title/subtitle/actions in the toolbar; Settings content is
-    capped at 760 pt and centred (`_constrainWidth`).
-- `widgets/desktop/mac_switch.dart` `MacSwitch` (32×19 pt) and `widgets/app_switch_tile.dart`
-  `AppSwitchTile` (SwitchListTile on mobile, dense row + `MacSwitch` on desktop); every
-  `SwitchListTile` (+ the `.adaptive` one in PDF reports) now uses it.
-- Segmented buttons hide the checkmark on desktop (`showSelectedIcon: PlatformUtils.isMobile`).
-- `TimeEntryListItem` renders a 36 pt row on desktop; new `TimeEntryGroup` puts today's entries
-  into one rounded group with separators (Time Tracking screen).
-
-### What was fixed
-
-- The Projects screen stayed empty until a sync event arrived: `ProjectBloc` was created without an
-  initial `LoadProjects` (found offline in the preview). `app.dart` now adds it on creation.
-
-### Current state
-
-- `flutter analyze --no-pub`: no issues.
-- `TZ=Europe/Prague flutter test --no-pub`: 94 passed (no new tests; no widget tests exist).
-- Checked visually on macOS (light mode) with an isolated debug copy (separate bundle id and sandbox
-  container seeded with a copy of the local data, network entitlements removed so nothing synced):
-  all 7 sections, sidebar, toolbars, switches. Clicks on buttons inside the 52 pt titlebar strip
-  work (confirmed by the user in the preview).
-- Not checked: dark mode, Windows/Linux, dialogs and pushed screens (only themed, not reviewed),
-  the Cmd+N shortcuts after the switch to the global handler.
-
-### Pending / next steps
-
-- Review dialogs, pushed screens and the invoice form in the new theme; dark mode pass.
-- Further desktop polish: project cards (still large), Time Tracking summary card, dropdown menu
-  item height (Material minimum 48 pt), native macOS menu bar (`PlatformMenuBar`).
-- Check the Windows layout (WindowCaption + sidebar).
-
-## 2026-11-03 — fix: step date ranges by calendar day across DST; testable sync service; release-check follow-ups
-
-### What was done
-
-- Release check for 1.0.11+12 (`tester-release-check`: runner, release-consistency, gaps) came out
-  NO-GO: the c21afb4 sync fix had tests for `SyncLedger` only, none for the service. This session
-  works through its follow-ups.
-- `PocketBaseSyncService` takes an optional `@visibleForTesting httpClientFactory`, forwarded to
-  `PocketBase(url, httpClientFactory:)` in the constructor and `updateServerUrl` (`_createClient`).
-  Production code passes nothing and behaves as before.
-- New `lib/core/utils/calendar_day.dart` → `addCalendarDays(date, days)` (midnight of the day
-  `days` later, via `DateTime(y, m, d + days)`). Every day/week boundary that was computed as
-  `start.add(Duration(days: n))` now uses it:
-  - `TimeEntryRepository.getToday` / `getThisWeek`;
-  - `StatisticsBloc._onChangeRange` (today / week / default);
-  - `statistics_screen.dart`: `_getDateRange` (today with offset, week with offset), week label end,
-    week picker end, custom range day/week, working-days loop, "today" hours per target, weekly chart
-    day labels;
-  - `time_entries_overview_screen.dart`: "today" hours per target, running seconds for a day, the
-    overlap checks in the add and edit dialogs;
-  - `time_tracking_screen.dart`: "today" hours in `_calculateMonthlyDailyNeeded`.
-  Left alone: due dates (+14 days), date-picker `lastDate`, snapshot retention cutoff, token margin —
-  none of them is a day boundary.
-- `.github/workflows/ci.yml`: the test step runs with `TZ: Europe/Prague`, so the DST tests can fail
-  in CI (it ran in UTC, where the old code passes them too).
-- Tests (all new):
-  - `test/core/utils/calendar_day_test.dart` — 7 tests: autumn/spring change, weeks containing a
-    change, stepping back, time dropped, month/year rollover, walking October once per day.
-  - `test/data/repositories/time_entry_repository_test.dart` — 4 tests: an entry at 23:30 on
-    2026-10-25 belongs to that day and that week; 00:30 on 2026-03-30 is not counted in 2026-03-29.
-  - `test/core/services/backup_service_test.dart` — 4 tests: v3 round trip of work schedule and
-    context settings; v2 restore keeps local context settings; delete data+settings wipes them; a
-    file without `backup_version` is refused before anything is cleared.
-  - `test/core/services/pocketbase_sync_service_test.dart` (written by `tester-regression`) — 7 tests
-    against an in-memory fake PocketBase REST API (`MockClient`) with real Hive repos: `downloadAll`
-    deletes a confirmed record gone from the server, keeps and queues a never-uploaded one, does not
-    overwrite an unsent local edit, uploads both once writes succeed; a rejected push stays queued in
-    the persisted ledger, the next `downloadAll` sends it once in its latest state, a queued upsert for
-    a locally deleted record is dropped.
-- `DEVLOG.md` was 2815 lines with no archive: the 67 entries from 2026-09-11 and older were moved
-  unchanged into `docs/devlog/2025-07.md` … `2026-09.md` (newest first per file). A script check
-  confirmed all 72 entries are byte-identical to the original.
-
-### What was fixed
-
-- **Day and week ranges were an hour off across a DST change.** Adding `Duration(days: 1)` to a
-  midnight gives 23:00 on the 25-hour autumn day and 01:00 the next day after the 23-hour spring
-  day. So on 2026-10-25 entries after 23:00 were missing from "today", from that week, and from the
-  target cards' "worked today"; after the spring change the first hour of the next day was counted
-  in the previous one; and the weekly chart / week labels showed the wrong weekday after the change
-  (Saturday 23:00 instead of Sunday). Same class as b19dab4, which fixed only the calculator.
-
-### Design decisions
-
-- The release check also reported that restoring a v2 backup wipes context settings. It does not:
-  `restoreBackup` calls only `_clearAllData`, which leaves settings alone; `clearAllContextSettings`
-  runs only from `deleteAllDataAndSettings` and sign-out with `clearLocal`. No code change, the
-  behaviour is now locked by `backup_service_test.dart`.
-
-### Current state
-
-- `flutter analyze --no-pub`: no issues.
-- `flutter test --no-pub`: 94 passed (72 before + 22 new), both with `TZ=Europe/Prague` and `TZ=UTC`.
-- The DST tests were proven: with `addCalendarDays` temporarily reverted to `.add(Duration(days:))`,
-  9 of the 11 calendar/repository tests fail under `TZ=Europe/Prague`; restored afterwards.
-- The sync tests were proven by `tester-regression` in a throw-away worktree: 5 of 7 fail against the
-  `c21afb4^` service; the other 2 (confirmed delete, dropping an op for a deleted record) pass pre-fix
-  by design and were checked by mutation instead.
-- Not run in the app: the screen changes are only covered through `addCalendarDays` and the
-  repository, there are no widget tests.
-
-### Pending / next steps
-
-- Manual test plan written by `tester-plan`: `docs/test-plans/1.0.11-test-plan.md` (sections A–L,
-  sync on a throw-away server first, live server only in section F). Not run yet.
-- Found while writing the plan, verified, not fixed yet:
-  - `android/app/src/main/AndroidManifest.xml` has no `android.permission.INTERNET` (only the
-    debug/profile manifests do), so a release APK likely cannot sync at all;
-  - `windows/installer/timer_counter_setup.iss` still hard-codes `AppVersion "1.0.10"`.
-- Still untested in the sync service: token refresh / re-login / 30-min keep-alive (needs `fakeAsync`
-  and a `signIn` path through the mock), real-time events ignored while a change is pending, the
-  keyed collections (day overrides, context day overrides), `uploadAll` ledger bookkeeping, and the
-  `context_settings` / `context_day_overrides` 404/403 handling.
-- Live-server checks from the 2026-10-23 entries are still open (phone sign-in, ~697 entries).
-- The 2026-10-23 (part 2) note "Commit the `ios/Podfile` change" is done (`4cf128f`).
-- Repo has no release tags; tag 1.0.11 after merging develop → master.
-
-## 2026-10-23 (part 2) — iPhone: two stale installs replaced by 1.0.11; Pods deployment target fix
-
-### What was fixed
-
-- **The user's iPhone ran two outdated, separate installs**, both signed in as `lzizka@gmail.com`:
-  `cz.medutech.timerCounter` 1.0.8 (local data up to 2026-06-23, 196 entries behind the server) and
-  `com.example.timerCounter` 1.0.6 (up to 2026-07-09, 164 behind). Their app containers were copied
-  with `xcrun devicectl device copy from` and the Hive boxes read with the project's adapters: no entry
-  existed only on the phone, and all shared entries matched the server.
-  - 1.0.6 predates the startup catch-up and resume resync (added in 1.0.7, `7392df9`), so it only
-    received real-time events while open.
-  - 1.0.8 resyncs on resume but returns early once its 7-day token has expired; its settings box was
-    last written on 2026-06-23, i.e. no successful sign-in since.
-  - Both predate `SyncGuard`, so a manual "upload" from either would have deleted the newer server data.
-- **`flutter build ios --release` failed under Xcode 27**: `IPHONEOS_DEPLOYMENT_TARGET` 13.0 on the
-  remaining CocoaPods target (`printing`, the only plugin without Swift Package Manager support);
-  Xcode 27 accepts 15.0–27.0.
-
-### What was done
-
-- `ios/Podfile` `post_install`: raise every pod target's `IPHONEOS_DEPLOYMENT_TARGET` below 15.0 to
-  15.0 (matches `platform :ios, '15.0'` and the Runner target).
-- The user deleted both old apps; 1.0.11+12 (`c21afb4`) was built and installed with
-  `xcrun devicectl device install app` as `cz.jelazi.timerCounter`.
-
-### Current state
-
-- `flutter build ios --release`: built `build/ios/iphoneos/Runner.app` (27.7 MB), all 15 Pods
-  deployment-target settings at 15.0.
-- `devicectl device info apps` on the iPhone: only `Timer Counter cz.jelazi.timerCounter 1.0.11 (12)`.
-- Not launched by me; the PocketBase account still has to be entered in Settings (the local
-  `lib/config/pocketbase_config.json` holds placeholders, so nothing is bundled).
-
-### Pending / next steps
-
-- Enter URL/e-mail/password in Settings → PocketBase on the phone and check that ~697 entries arrive.
-- Commit the `ios/Podfile` change.
-
-## 2026-10-23 — fix(sync): stop deleting local entries the server never received; restore 75 lost entries
-
-### What was fixed
-
-- **Account `eli.zizkova@gmail.com` lost 75 time entries (96 h) in two batches**, found by diffing her
-  device's daily snapshots (`snapshots/`, 47 files from 2026-07-29 to 2026-10-23) against the live
-  server:
-  - 33 entries dated 2026-08-05 – 2026-09-01 (53.9 h), gone between the 2026-09-07 and 2026-09-08
-    snapshots;
-  - 42 entries dated 2026-09-23 – 2026-10-14 (42.1 h), gone on 2026-10-15 after 11:14 UTC, when a new
-    app build signed in.
-  None of them ever reached the server. Between 2026-10-11 and 2026-10-15 her app ran and its
-  snapshots grew daily, but the server log shows no request from her account at all.
-- **Root cause, three parts in `PocketBaseSyncService`:**
-  1. The app signs in only at startup (`main.dart`) and never refreshes the token. The server issues
-     7-day tokens (`users.authToken.duration = 604800`), and a desktop app can sit in the tray longer.
-  2. With an invalid token, every `push*` returned early on `if (!isSignedIn) return;`, and a failed
-     `_upsertRecord` was only logged. Nothing recorded that the change still had to be sent.
-  3. On the next sign-in, `downloadAll()` → `_replaceLocal()` deleted every local record missing from
-     the server. `SyncGuard` only blocks 10+ deletions that are also over 30 % of the collection;
-     42 of 239 (18 %) passed silently. The deletions went to her device's deletion journal as
-     `syncReconcile`.
-
-### What was done
-
-- New `lib/core/services/sync_ledger.dart` — `SyncLedger`, persisted under the new settings key
-  `pocketbase_sync_ledger` (`AppConstants.pocketBaseSyncLedger`, accessors in `SettingsRepository`):
-  - `confirmed`: per collection, the ids the server is known to hold (set from each download,
-    successful push and real-time event);
-  - `pending`: per collection, local upserts/deletes not sent yet, with an in-memory version so an
-    older in-flight push cannot clear a newer pending change;
-  - `plan()`: a local record missing remotely is deleted only if it is confirmed and has no pending
-    change; everything else is kept and queued for upload. An empty or malformed ledger therefore
-    never deletes anything.
-- `PocketBaseSyncService`:
-  - All `push*`/`delete*` methods go through `_pushUpsert`/`_pushDelete`: queue first, then send, and
-    clear the queue entry only on success. `_upsertRecord`/`_deleteRecord` now return `bool`.
-  - `_flushPending()` sends every queued change, rebuilding upserts from the current local record
-    (`_localRecordMap`). It runs at the start and end of `downloadAll()` and from the keep-alive.
-  - `_replaceLocal()` and the new `_reconcileKeyed()` (day overrides, context day overrides) use
-    `SyncLedger.plan()`; they do not overwrite records with unsent changes, and they queue local-only
-    records for upload. Remote context settings skip contexts with a pending upsert.
-  - Real-time events go through `_acceptRemoteChange()`, which updates `confirmed` and ignores events
-    for records with unsent local changes.
-  - `_replaceRemote()` (`uploadAll`) updates `confirmed` and clears the pending entries it uploaded.
-  - Auth: `_ensureAuth()` refreshes a token with less than a day left (`authRefresh`), and signs in
-    again with the credentials from the last `signIn()` (kept in memory only) once it has expired.
-    `resync`, `uploadAll`, `downloadAll` and every push use it. A 30-minute `Timer.periodic`
-    keep-alive refreshes the token and flushes the queue; after a re-login it runs `resync()`
-    because the real-time subscriptions were authorized with the expired token.
-  - Static `tokenExpiry(token)` reads the JWT `exp` claim (`@visibleForTesting`).
-  - `clearLocalData()` (account switch) also clears the ledger.
-- New `test/core/services/sync_ledger_test.dart`: 11 tests (reconcile plan incl. the 197 synced +
-  42 offline case, pending versioning, encode/decode, `tokenExpiry`).
-
-### Data restore (production server, done with the user's OK)
-
-- Full PocketBase backup first via `POST /api/backups`: `timer_counter_pre_eli_restore_2026-10-23.zip`
-  (1.78 MB), kept on the server and copied to `~/Documents/timer_counter_pb_backup_2026-10-23/`.
-- Created a temporary superuser (`/app/pocketbase superuser upsert … --dir=/app/pb_data` in container
-  `cmmor94eo0006qiadvnesp5qu`), inserted the 75 entries through the records API with their original
-  `item_id` and fields, user `4f3ehkb4t4mod2q`, after checking each `item_id` was absent. One request
-  timed out after 64 inserts; the idempotent rerun added the remaining 11. Then the superuser was
-  deleted again (its token now gets HTTP 401).
-- Working files (not in git, listed in `.git/info/exclude`): `pb_dump_2026-10-23/` with the raw server
-  DB, her snapshots (`eli_device/snapshots/`) and the recovered list (`eli_lost_entries.csv/.json`).
-- Left out on purpose: a few entries that disappeared one by one outside the two batches and look
-  like her own edits (e.g. a 46.5 h runaway timer from 2026-09-18).
-
-### Current state
-
-- `flutter analyze`: No issues found.
-- `flutter test`: **72 tests passed** (61 + 11 new).
-- Server after the restore: 290 entries for Eli (215 + 75), 290 unique `item_id`s, all 75 present with
-  matching start time, duration and project. Per month: Jun 89.3 h, Jul 87.3 h, Aug 79.5 h,
-  Sep 48.5 h, Oct 56.6 h.
-- The fix is **not yet run against the live server in the app**: token refresh, re-login after
-  expiry, the keep-alive and the offline queue are covered by unit tests of `SyncLedger` only.
-
-### Pending / next steps
-
-- Install the new build on Eli's device soon: the build she runs has the old sync, and entries
-  recorded there while its token is expired will be deleted again on the next restart.
-- Manual test: stop the server (or let a token expire), record entries, bring it back, and confirm
-  they upload and survive a restart.
-- First run of the new build on any device: the ledger starts empty, so every local record the server
-  does not have is uploaded rather than deleted. A record deleted on another device while this one was
-  off would come back once.
-- Her 2026-10-19 data has a duplicate entry (two records starting 10:04:28, ending 10:38:26 and
-  10:38:32) — not touched.
-- Commit not made yet.
-
-## 2026-10-02 (part 3) — macOS release build showed only a black window (stale native assets)
-
-### What was fixed
-
-- The 1.0.10 Release build from `develop` (`b19dab4`) opened a black window and never got further.
-  Run from the terminal, it reported `Unhandled Exception: ... Couldn't resolve native function
-  'DOBJC_initializeApi' in 'package:objective_c/objective_c.dylib' : No available native assets`,
-  raised from `path_provider_foundation` inside `HiveX.initFlutter` (`main.dart:55`). No data was
-  opened.
-- The bundle was missing `objective_c.framework` and `sqlite3.framework`, and its
-  `NativeAssetsManifest.json` was empty. `build/native_assets/macos/` only held arm64 dylibs left
-  over from the earlier builds of this session. The code was fine: the stale `build/` state was the
-  cause.
-- Fix: `flutter clean && flutter pub get && flutter build macos --release`. The clean build embeds
-  both frameworks and the manifest maps arm64 and x64.
-
-### Current state
-
-- Clean build: ad-hoc signed, `codesign --verify --deep --strict` OK. It launched with one window
-  showing "Sledování času", with no exceptions in its output, and the projects were listed.
-- Data checked before and after the launch: categories 2, projects 3, tasks 12, time_entries 663,
-  monthly_targets 2, standalone_invoices 6, settings 37. Backup taken right before the first real
-  launch: `~/Documents/timer_counter_container_backup_2026-10-02_08-59-58/`.
-- Not installed into `/Applications`; that still holds the re-signed 1.0.9.
-
-### Pending / next steps
-
-- If a macOS release build ever starts to a black window, run `flutter clean` before rebuilding and
-  check that `Contents/Frameworks` contains `objective_c.framework` and `sqlite3.framework`.
-
-## 2026-10-02 (part 2) — fix: remaining work days skipped the last day of a month with a DST change
-
-### What was fixed
-
-- **`MonthlyTargetCalculator.workDaysBetween` stepped through days with `add(Duration(days: 1))`**,
-  i.e. 24 hours. Across the end of daylight saving time (2026-10-25 in Europe/Prague, a 25-hour day)
-  the loop landed on 23:00 of the same date: 25 October was visited twice and 31 October never.
-  So a day off on the last day of October was ignored, and the work-day count was off by one
-  whenever the 25th and the 31st differ. The same loop already existed in the three screens before
-  the 2026-09-11 refactor; the calculator inherited it.
-- Surfaced by `flutter test` today: "a context's own days off shorten only its own count" puts a day
-  off on the last day of the *current* month, so it only fails in October (expected 29, got 30).
-  It passed on 2026-09-11.
-
-### What was done
-
-- `lib/core/services/monthly_target_calculator.dart`: `workDaysBetween` and the "skip today" step in
-  `remainingWorkDays` now advance with `DateTime(y, m, d + 1)` (calendar day, not 24 hours).
-- `test/core/services/monthly_target_calculator_test.dart`: new test "a month with a daylight saving
-  change visits every day once". It uses fixed October and March 2026 dates, so it does not depend on
-  today's date. It fails against the old loop and passes now; it can only reproduce the bug when the
-  runner's time zone has DST.
-
-### Current state
-
-- `flutter test`: **61 tests passed** (machine time zone CEST).
-- `flutter analyze`: no issues.

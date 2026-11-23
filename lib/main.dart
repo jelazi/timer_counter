@@ -23,14 +23,18 @@ import 'core/services/snapshot_diff_service.dart';
 import 'core/services/work_reminder_service.dart';
 import 'core/utils/platform_utils.dart';
 import 'data/models/category_model.dart';
+import 'data/models/client_model.dart';
 import 'data/models/monthly_hours_target_model.dart';
+import 'data/models/project_client_model.dart';
 import 'data/models/project_model.dart';
 import 'data/models/running_timer_model.dart';
 import 'data/models/standalone_invoice_model.dart';
 import 'data/models/task_model.dart';
 import 'data/models/time_entry_model.dart';
 import 'data/repositories/category_repository.dart';
+import 'data/repositories/client_repository.dart';
 import 'data/repositories/monthly_hours_target_repository.dart';
+import 'data/repositories/project_client_repository.dart';
 import 'data/repositories/project_repository.dart';
 import 'data/repositories/running_timer_repository.dart';
 import 'data/repositories/settings_repository.dart';
@@ -63,6 +67,8 @@ Future<void> main() async {
   Hive.registerAdapter(MonthlyHoursTargetModelAdapter());
   Hive.registerAdapter(InvoiceLineItemAdapter());
   Hive.registerAdapter(StandaloneInvoiceModelAdapter());
+  Hive.registerAdapter(ClientModelAdapter());
+  Hive.registerAdapter(ProjectClientModelAdapter());
 
   // Create & Initialize Repositories
   final categoryRepository = CategoryRepository();
@@ -81,6 +87,10 @@ Future<void> main() async {
   await monthlyHoursTargetRepository.init();
   final standaloneInvoiceRepository = StandaloneInvoiceRepository();
   await standaloneInvoiceRepository.init();
+  final clientRepository = ClientRepository();
+  await clientRepository.init();
+  final projectClientRepository = ProjectClientRepository();
+  await projectClientRepository.init();
 
   // ── Deletion Journal ───────────────────────────────────────────────────
   // Attached before anything can delete, so no deletion goes unrecorded.
@@ -92,6 +102,8 @@ Future<void> main() async {
   timeEntryRepository.attachJournal(deletionJournal);
   monthlyHoursTargetRepository.attachJournal(deletionJournal);
   standaloneInvoiceRepository.attachJournal(deletionJournal);
+  clientRepository.attachJournal(deletionJournal);
+  projectClientRepository.attachJournal(deletionJournal);
 
   final backupService = BackupService(
     timeEntryRepository: timeEntryRepository,
@@ -102,6 +114,8 @@ Future<void> main() async {
     runningTimerRepository: runningTimerRepository,
     monthlyTargetRepository: monthlyHoursTargetRepository,
     standaloneInvoiceRepository: standaloneInvoiceRepository,
+    clientRepository: clientRepository,
+    projectClientRepository: projectClientRepository,
   );
 
   final snapshotService = DailySnapshotService(backupService: backupService, settingsRepository: settingsRepository);
@@ -133,6 +147,9 @@ Future<void> main() async {
     runningTimerRepository: runningTimerRepository,
     monthlyHoursTargetRepository: monthlyHoursTargetRepository,
     settingsRepository: settingsRepository,
+    clientRepository: clientRepository,
+    projectClientRepository: projectClientRepository,
+    standaloneInvoiceRepository: standaloneInvoiceRepository,
     deletionJournal: deletionJournal,
   );
 
@@ -162,6 +179,8 @@ Future<void> main() async {
         settingsRepository: settingsRepository,
         monthlyHoursTargetRepository: monthlyHoursTargetRepository,
         standaloneInvoiceRepository: standaloneInvoiceRepository,
+        clientRepository: clientRepository,
+        projectClientRepository: projectClientRepository,
         systemTrayService: systemTrayService,
         pocketBaseSyncService: pocketBaseSyncService,
         backupService: backupService,
@@ -187,6 +206,9 @@ Future<PocketBaseSyncService?> _initPocketBaseSyncService({
   required RunningTimerRepository runningTimerRepository,
   required MonthlyHoursTargetRepository monthlyHoursTargetRepository,
   required SettingsRepository settingsRepository,
+  required ClientRepository clientRepository,
+  required ProjectClientRepository projectClientRepository,
+  required StandaloneInvoiceRepository standaloneInvoiceRepository,
   required DeletionJournalService deletionJournal,
 }) async {
   PocketBaseSyncService? service;
@@ -206,6 +228,9 @@ Future<PocketBaseSyncService?> _initPocketBaseSyncService({
       runningTimerRepo: runningTimerRepository,
       monthlyTargetRepo: monthlyHoursTargetRepository,
       settingsRepo: settingsRepository,
+      clientRepo: clientRepository,
+      projectClientRepo: projectClientRepository,
+      invoiceRepo: standaloneInvoiceRepository,
     )..attachJournal(deletionJournal);
     // If a token was persisted (e.g. AsyncAuthStore in the future), listeners
     // could be started here. For now we always require explicit login on web.
@@ -224,6 +249,9 @@ Future<PocketBaseSyncService?> _initPocketBaseSyncService({
     runningTimerRepo: runningTimerRepository,
     monthlyTargetRepo: monthlyHoursTargetRepository,
     settingsRepo: settingsRepository,
+    clientRepo: clientRepository,
+    projectClientRepo: projectClientRepository,
+    invoiceRepo: standaloneInvoiceRepository,
   )..attachJournal(deletionJournal);
 
   final error = await service.signIn(pbConfig.email, pbConfig.password);

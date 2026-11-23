@@ -2,9 +2,9 @@
 name: Timer Counter
 description: Time tracking app for desktop and mobile with projects, statistics, PDF reports, invoices and PocketBase sync.
 status: active
-progress: 75
+progress: 80
 tags: [flutter, bloc, hive, pocketbase, desktop, macos]
-next: Review dialogs, pushed screens and the invoice form in the new theme; dark mode pass.
+next: Phase 3 — PocketBase dump, add the new collections additively, dry run on a copy of both accounts (needs the user's OK).
 agent: claude
 ---
 

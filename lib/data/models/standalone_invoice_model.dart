@@ -119,6 +119,10 @@ class StandaloneInvoiceModel extends Equatable {
   @HiveField(19)
   final List<String> sourceProjectIds;
 
+  /// The client billed by this invoice; null for invoices from before clients existed.
+  @HiveField(20)
+  final String? clientId;
+
   const StandaloneInvoiceModel({
     required this.id,
     required this.invoiceNumber,
@@ -140,6 +144,7 @@ class StandaloneInvoiceModel extends Equatable {
     required this.updatedAt,
     this.invoiceType = 'standalone',
     this.sourceProjectIds = const [],
+    this.clientId,
   });
 
   bool get isTimeBased => invoiceType == 'time_based';
@@ -175,6 +180,7 @@ class StandaloneInvoiceModel extends Equatable {
     DateTime? updatedAt,
     String? invoiceType,
     List<String>? sourceProjectIds,
+    String? clientId,
   }) => StandaloneInvoiceModel(
     id: id ?? this.id,
     invoiceNumber: invoiceNumber ?? this.invoiceNumber,
@@ -196,6 +202,7 @@ class StandaloneInvoiceModel extends Equatable {
     updatedAt: updatedAt ?? this.updatedAt,
     invoiceType: invoiceType ?? this.invoiceType,
     sourceProjectIds: sourceProjectIds ?? this.sourceProjectIds,
+    clientId: clientId ?? this.clientId,
   );
 
   Map<String, dynamic> toJson() => {
@@ -219,6 +226,7 @@ class StandaloneInvoiceModel extends Equatable {
     'updatedAt': updatedAt.toIso8601String(),
     'invoiceType': invoiceType,
     'sourceProjectIds': sourceProjectIds,
+    'clientId': clientId,
   };
 
   factory StandaloneInvoiceModel.fromJson(Map<String, dynamic> json) {
@@ -244,6 +252,7 @@ class StandaloneInvoiceModel extends Equatable {
       updatedAt: parseDateOrNull(json['updatedAt']) ?? createdAt,
       invoiceType: parseString(json['invoiceType'], fallback: 'standalone'),
       sourceProjectIds: parseStringList(json['sourceProjectIds']),
+      clientId: parseStringOrNull(json['clientId']),
     );
   }
 
@@ -269,5 +278,6 @@ class StandaloneInvoiceModel extends Equatable {
     updatedAt,
     invoiceType,
     sourceProjectIds,
+    clientId,
   ];
 }

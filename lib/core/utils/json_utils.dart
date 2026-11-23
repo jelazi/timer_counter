@@ -44,6 +44,12 @@ String parseString(dynamic value, {String fallback = ''}) {
   return value.toString();
 }
 
+/// Null for a missing or empty value.
+String? parseStringOrNull(dynamic value) {
+  final s = value?.toString() ?? '';
+  return s.isEmpty ? null : s;
+}
+
 List<String> parseStringList(dynamic value) {
   if (value is List) return value.map((e) => e.toString()).toList();
   return const [];

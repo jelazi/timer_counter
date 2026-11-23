@@ -8,16 +8,24 @@ import 'package:http/testing.dart';
 import 'package:timer_counter/core/services/pocketbase_sync_service.dart';
 import 'package:timer_counter/core/services/sync_ledger.dart';
 import 'package:timer_counter/data/models/category_model.dart';
+import 'package:timer_counter/data/models/client_model.dart';
+import 'package:timer_counter/data/models/invoice_settings.dart';
 import 'package:timer_counter/data/models/monthly_hours_target_model.dart';
+import 'package:timer_counter/data/models/project_client_model.dart';
 import 'package:timer_counter/data/models/project_model.dart';
 import 'package:timer_counter/data/models/running_timer_model.dart';
+import 'package:timer_counter/data/models/standalone_invoice_model.dart';
+import 'package:timer_counter/data/models/supplier_profile.dart';
 import 'package:timer_counter/data/models/task_model.dart';
 import 'package:timer_counter/data/models/time_entry_model.dart';
 import 'package:timer_counter/data/repositories/category_repository.dart';
+import 'package:timer_counter/data/repositories/client_repository.dart';
 import 'package:timer_counter/data/repositories/monthly_hours_target_repository.dart';
+import 'package:timer_counter/data/repositories/project_client_repository.dart';
 import 'package:timer_counter/data/repositories/project_repository.dart';
 import 'package:timer_counter/data/repositories/running_timer_repository.dart';
 import 'package:timer_counter/data/repositories/settings_repository.dart';
+import 'package:timer_counter/data/repositories/standalone_invoice_repository.dart';
 import 'package:timer_counter/data/repositories/task_repository.dart';
 import 'package:timer_counter/data/repositories/time_entry_repository.dart';
 
@@ -29,6 +37,9 @@ class FakePocketBase {
   int _nextId = 0;
 
   bool rejectWrites = false;
+
+  /// Collections this server does not have, as on a server whose schema predates them.
+  final Set<String> missingCollections = {};
 
   void seed(String collection, Map<String, dynamic> fields) {
     final id = 'pb${_nextId++}';
@@ -52,6 +63,7 @@ class FakePocketBase {
       return _json(404, {'message': 'Not found'});
     }
     final collection = segments[2];
+    if (missingCollections.contains(collection)) return _json(404, {'message': 'Missing collection context.'});
     final records = _collections[collection] ??= {};
     final recordId = segments.length > 4 ? segments[4] : null;
 
@@ -87,8 +99,7 @@ class FakePocketBase {
     return _json(405, {'message': 'Method not allowed'});
   }
 
-  static http.Response _json(int status, Map<String, dynamic> body) =>
-      http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json'});
+  static http.Response _json(int status, Map<String, dynamic> body) => http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json'});
 }
 
 String _authToken() {
@@ -106,6 +117,9 @@ void main() {
   late TaskRepository tasks;
   late RunningTimerRepository runningTimers;
   late MonthlyHoursTargetRepository monthlyTargets;
+  late ClientRepository clients;
+  late ProjectClientRepository projectClients;
+  late StandaloneInvoiceRepository invoices;
 
   setUpAll(() {
     Hive.registerAdapter(CategoryModelAdapter());
@@ -114,6 +128,10 @@ void main() {
     Hive.registerAdapter(TimeEntryModelAdapter());
     Hive.registerAdapter(RunningTimerModelAdapter());
     Hive.registerAdapter(MonthlyHoursTargetModelAdapter());
+    Hive.registerAdapter(InvoiceLineItemAdapter());
+    Hive.registerAdapter(StandaloneInvoiceModelAdapter());
+    Hive.registerAdapter(ClientModelAdapter());
+    Hive.registerAdapter(ProjectClientModelAdapter());
   });
 
   setUp(() async {
@@ -127,7 +145,21 @@ void main() {
     tasks = TaskRepository();
     runningTimers = RunningTimerRepository();
     monthlyTargets = MonthlyHoursTargetRepository();
-    for (final init in [settings.init, timeEntries.init, categories.init, projects.init, tasks.init, runningTimers.init, monthlyTargets.init]) {
+    clients = ClientRepository();
+    projectClients = ProjectClientRepository();
+    invoices = StandaloneInvoiceRepository();
+    for (final init in [
+      settings.init,
+      timeEntries.init,
+      categories.init,
+      projects.init,
+      tasks.init,
+      runningTimers.init,
+      monthlyTargets.init,
+      clients.init,
+      projectClients.init,
+      invoices.init,
+    ]) {
       await init();
     }
     await settings.setPocketBaseAuthToken(_authToken());
@@ -149,18 +181,14 @@ void main() {
     runningTimerRepo: runningTimers,
     monthlyTargetRepo: monthlyTargets,
     settingsRepo: settings,
+    clientRepo: clients,
+    projectClientRepo: projectClients,
+    invoiceRepo: invoices,
     httpClientFactory: server.client,
   );
 
-  TimeEntryModel entry(String id, {String notes = ''}) => TimeEntryModel(
-    id: id,
-    projectId: 'p1',
-    taskId: 't1',
-    startTime: DateTime(2026, 10, 1, 8),
-    endTime: DateTime(2026, 10, 1, 9),
-    notes: notes,
-    createdAt: DateTime(2026, 10, 1),
-  );
+  TimeEntryModel entry(String id, {String notes = ''}) =>
+      TimeEntryModel(id: id, projectId: 'p1', taskId: 't1', startTime: DateTime(2026, 10, 1, 8), endTime: DateTime(2026, 10, 1, 9), notes: notes, createdAt: DateTime(2026, 10, 1));
 
   Map<String, dynamic> remoteEntry(String id, {String notes = ''}) => {
     'item_id': id,
@@ -269,6 +297,147 @@ void main() {
       expect(result.error, isNull);
       expect(server.records(_entries), isEmpty);
       expect(savedLedger().pendingCount, 0);
+    });
+  });
+
+  group('clients, links, invoices and the supplier profile', () {
+    const newCollections = ['clients', 'project_clients', 'invoices', 'user_settings'];
+
+    ClientModel client(String id, {String name = 'Medutech s.r.o.'}) => ClientModel(id: id, name: name, ico: '08975922', createdAt: DateTime(2026, 11, 1));
+
+    ProjectClientModel link(String id, {String projectId = 'p1', String clientId = 'c1', DateTime? at}) =>
+        ProjectClientModel(id: id, projectId: projectId, clientId: clientId, serviceDescription: 'Vývoj aplikace Artemis', createdAt: at ?? DateTime(2026, 11, 2));
+
+    StandaloneInvoiceModel invoice(String id) => StandaloneInvoiceModel(
+      id: id,
+      invoiceNumber: 11,
+      issueDate: DateTime(2026, 11, 30),
+      dueDate: DateTime(2026, 12, 14),
+      taxDate: DateTime(2026, 11, 30),
+      customerJson: const {'name': 'Medutech s.r.o.'},
+      lineItems: const [InvoiceLineItem(description: 'Vývoj aplikace Artemis', quantity: 58.75, unit: 'hod', unitPrice: 550)],
+      createdAt: DateTime(2026, 11, 30),
+      updatedAt: DateTime(2026, 11, 30),
+      invoiceType: 'time_based',
+      sourceProjectIds: const ['p1'],
+      clientId: 'c1',
+    );
+
+    SupplierProfile profile(String name, DateTime updatedAt) => SupplierProfile(
+      party: InvoiceParty(name: name, ico: '19164165'),
+      iban: 'CZ00',
+      updatedAt: updatedAt,
+    );
+
+    test('a server without the new collections still syncs everything else and keeps the new data queued', () async {
+      server.missingCollections.addAll(newCollections);
+      server.seed(_entries, remoteEntry('e1', notes: 'from server'));
+      final service = createService();
+      await clients.add(client('c1'));
+      await service.pushClient(clients.getById('c1')!);
+      await invoices.add(invoice('i1'));
+      await service.pushInvoice(invoices.getById('i1')!);
+
+      final result = await service.downloadAll();
+
+      expect(result.error, isNull);
+      expect(timeEntries.getById('e1')?.notes, 'from server');
+      expect(clients.getById('c1')?.name, 'Medutech s.r.o.');
+      expect(invoices.getById('i1')?.clientId, 'c1');
+      expect(savedLedger().pendingOp('clients', 'c1'), PendingOp.upsert);
+      expect(savedLedger().pendingOp('invoices', 'i1'), PendingOp.upsert);
+    });
+
+    test('queued data goes out once the server has the collections', () async {
+      server.missingCollections.addAll(newCollections);
+      final service = createService();
+      await clients.add(client('c1'));
+      await service.pushClient(clients.getById('c1')!);
+      await projectClients.add(link('l1'));
+      await service.pushProjectClient(projectClients.getById('l1')!);
+      await invoices.add(invoice('i1'));
+      await service.pushInvoice(invoices.getById('i1')!);
+
+      server.missingCollections.clear();
+      final result = await service.downloadAll();
+
+      expect(result.error, isNull);
+      expect(server.record('clients', 'c1')?['ico'], '08975922');
+      expect(server.record('project_clients', 'l1')?['service_description'], 'Vývoj aplikace Artemis');
+      expect(server.record('invoices', 'i1')?['client_id'], 'c1');
+      expect(savedLedger().pendingCount, 0);
+    });
+
+    test('data from another device arrives intact, including the full invoice', () async {
+      final source = createService();
+      await clients.add(client('c1'));
+      await source.pushClient(clients.getById('c1')!);
+      await projectClients.add(link('l1'));
+      await source.pushProjectClient(projectClients.getById('l1')!);
+      await invoices.add(invoice('i1'));
+      await source.pushInvoice(invoices.getById('i1')!);
+
+      await clients.deleteAll();
+      await projectClients.deleteAll();
+      await invoices.deleteAll();
+      await settings.setPocketBaseSyncLedger('');
+
+      final result = await createService().downloadAll();
+
+      expect(result.error, isNull);
+      expect(clients.getById('c1'), client('c1'));
+      expect(projectClients.getById('l1'), link('l1'));
+      expect(invoices.getById('i1'), invoice('i1'));
+    });
+
+    test('the client the user put at the top of a project is offered first', () async {
+      await projectClients.add(link('top', clientId: 'first', at: DateTime(2026, 1, 1)).copyWith(position: 0));
+      await projectClients.add(link('below', clientId: 'second', at: DateTime(2026, 6, 1)).copyWith(position: 1));
+      await projectClients.add(link('other', projectId: 'p2', clientId: 'third', at: DateTime(2026, 9, 1)).copyWith(position: 0));
+
+      expect(projectClients.getByProject('p1').map((l) => l.clientId), ['first', 'second']);
+      expect(projectClients.clientIdsForProjects(['p1', 'p2']), ['third', 'first', 'second']);
+    });
+
+    test('links without a position (all 0) fall back to the newest first', () async {
+      await projectClients.add(link('old', clientId: 'first', at: DateTime(2026, 1, 1)));
+      await projectClients.add(link('new', clientId: 'second', at: DateTime(2026, 6, 1)));
+
+      expect(projectClients.clientIdsForProjects(['p1']), ['second', 'first']);
+    });
+
+    test('the order travels with the link through the server', () async {
+      final source = createService();
+      await projectClients.add(link('l1').copyWith(position: 2));
+      await source.pushProjectClient(projectClients.getById('l1')!);
+      await projectClients.deleteAll();
+      await settings.setPocketBaseSyncLedger('');
+
+      await createService().downloadAll();
+
+      expect(projectClients.getById('l1')?.position, 2);
+    });
+
+    test('the supplier profile edited later wins in both directions', () async {
+      server.seed('user_settings', {'item_id': 'supplier_profile', 'data': profile('Server', DateTime(2026, 11, 10)).toJson()});
+      await settings.setSupplierProfile(profile('Older local', DateTime(2026, 11, 1)));
+
+      await createService().downloadAll();
+      expect(settings.getSupplierProfile()?.party.name, 'Server');
+
+      await settings.setSupplierProfile(profile('Newer local', DateTime(2026, 11, 20)));
+      await createService().downloadAll();
+      expect(jsonDecode(jsonEncode(server.record('user_settings', 'supplier_profile')?['data']))['party']['name'], 'Newer local');
+    });
+
+    test('a local supplier profile the server does not have is uploaded, not dropped', () async {
+      await settings.setSupplierProfile(profile('Only local', DateTime(2026, 11, 1)));
+
+      final result = await createService().downloadAll();
+
+      expect(result.error, isNull);
+      expect(settings.getSupplierProfile()?.party.name, 'Only local');
+      expect(server.record('user_settings', 'supplier_profile'), isNotNull);
     });
   });
 }

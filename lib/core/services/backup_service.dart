@@ -5,14 +5,19 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../data/models/category_model.dart';
+import '../../data/models/client_model.dart';
 import '../../data/models/invoice_settings.dart';
 import '../../data/models/monthly_hours_target_model.dart';
+import '../../data/models/project_client_model.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/standalone_invoice_model.dart';
+import '../../data/models/supplier_profile.dart';
 import '../../data/models/task_model.dart';
 import '../../data/models/time_entry_model.dart';
 import '../../data/repositories/category_repository.dart';
+import '../../data/repositories/client_repository.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
+import '../../data/repositories/project_client_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/running_timer_repository.dart';
 import '../../data/repositories/settings_repository.dart';
@@ -26,7 +31,7 @@ class BackupService {
   /// payload, and to 3 for the weekly work schedule and the per-context
   /// schedules, day overrides and month goals. Older files restore fine — their
   /// missing keys read as empty and leave the current values alone.
-  static const int backupVersion = 3;
+  static const int backupVersion = 4;
 
   final TimeEntryRepository _timeEntryRepository;
   final ProjectRepository _projectRepository;
@@ -36,6 +41,8 @@ class BackupService {
   final RunningTimerRepository _runningTimerRepository;
   final MonthlyHoursTargetRepository _monthlyTargetRepository;
   final StandaloneInvoiceRepository _standaloneInvoiceRepository;
+  final ClientRepository _clientRepository;
+  final ProjectClientRepository _projectClientRepository;
 
   BackupService({
     required TimeEntryRepository timeEntryRepository,
@@ -46,6 +53,8 @@ class BackupService {
     required RunningTimerRepository runningTimerRepository,
     required MonthlyHoursTargetRepository monthlyTargetRepository,
     required StandaloneInvoiceRepository standaloneInvoiceRepository,
+    required ClientRepository clientRepository,
+    required ProjectClientRepository projectClientRepository,
   }) : _timeEntryRepository = timeEntryRepository,
        _projectRepository = projectRepository,
        _taskRepository = taskRepository,
@@ -53,7 +62,9 @@ class BackupService {
        _settingsRepository = settingsRepository,
        _runningTimerRepository = runningTimerRepository,
        _monthlyTargetRepository = monthlyTargetRepository,
-       _standaloneInvoiceRepository = standaloneInvoiceRepository;
+       _standaloneInvoiceRepository = standaloneInvoiceRepository,
+       _clientRepository = clientRepository,
+       _projectClientRepository = projectClientRepository;
 
   /// Serialize the complete local dataset.
   ///
@@ -73,6 +84,9 @@ class BackupService {
       'time_entries': _timeEntryRepository.getAll().map((e) => e.toJson()).toList(),
       'monthly_targets': _monthlyTargetRepository.getAll().map((m) => m.toJson()).toList(),
       'standalone_invoices': _standaloneInvoiceRepository.getAll().map((i) => i.toJson()).toList(),
+      'clients': _clientRepository.getAll().map((c) => c.toJson()).toList(),
+      'project_clients': _projectClientRepository.getAll().map((l) => l.toJson()).toList(),
+      'supplier_profile': _settingsRepository.getSupplierProfile()?.toJson(),
       'settings': _exportSettings(),
     };
   }
@@ -106,7 +120,8 @@ class BackupService {
         return const BackupRestoreResult(error: 'Not a backup file (missing backup_version)');
       }
 
-      await _clearAllData();
+      // A backup from before clients existed must not wipe the current ones.
+      await _clearAllData(includeClients: jsonData.containsKey('clients'));
 
       final result = await applyBackupMap(jsonData);
       return result;
@@ -147,6 +162,17 @@ class BackupService {
     for (final i in _mapsIn(jsonData['standalone_invoices'])) {
       await _standaloneInvoiceRepository.add(StandaloneInvoiceModel.fromJson(i));
       invoiceCount++;
+    }
+    // Absent before version 4.
+    for (final c in _mapsIn(jsonData['clients'])) {
+      await _clientRepository.add(ClientModel.fromJson(c));
+    }
+    for (final l in _mapsIn(jsonData['project_clients'])) {
+      await _projectClientRepository.add(ProjectClientModel.fromJson(l));
+    }
+    final profile = jsonData['supplier_profile'];
+    if (profile is Map) {
+      await _settingsRepository.setSupplierProfile(SupplierProfile.fromJson(profile.cast<String, dynamic>()));
     }
 
     final settings = jsonData['settings'] as Map<String, dynamic>?;
@@ -351,7 +377,7 @@ class BackupService {
     }
   }
 
-  Future<void> _clearAllData() async {
+  Future<void> _clearAllData({bool includeClients = true}) async {
     await _runningTimerRepository.stopAll();
 
     // `deleteAll` journals every record as a bulk clear, so a restore that turns
@@ -362,6 +388,10 @@ class BackupService {
     await _categoryRepository.deleteAll();
     await _monthlyTargetRepository.deleteAll();
     await _standaloneInvoiceRepository.deleteAll();
+    if (includeClients) {
+      await _projectClientRepository.deleteAll();
+      await _clientRepository.deleteAll();
+    }
   }
 
   Future<void> _clearSettings() async {

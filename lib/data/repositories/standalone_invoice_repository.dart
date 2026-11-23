@@ -119,21 +119,21 @@ class StandaloneInvoiceRepository {
     return _box.values.map((e) => e.invoiceNumber).reduce((a, b) => a > b ? a : b);
   }
 
-  /// Find an existing time-based invoice for a given month and year.
-  /// If [projectId] is provided, matches only single-project invoices for that project.
-  /// Used for dedup — if we regenerate a time-based invoice for the same month, we overwrite.
-  StandaloneInvoiceModel? findTimeBasedInvoice({required int month, required int year, String? projectId}) {
-    try {
-      return _box.values.firstWhere((inv) {
-        if (inv.invoiceType != 'time_based') return false;
-        if (inv.issueDate.month != month || inv.issueDate.year != year) return false;
-        if (projectId != null) {
-          return inv.sourceProjectIds.length == 1 && inv.sourceProjectIds.contains(projectId);
-        }
-        return true;
-      });
-    } catch (_) {
-      return null;
+  /// Find the time-based invoice already issued for a month, so regenerating
+  /// it overwrites instead of creating a second one.
+  ///
+  /// The month is taken from the tax date (the last day of the invoiced month).
+  /// With [projectId], only that project's own invoice matches. With [clientId],
+  /// only an invoice for that client matches; an invoice from before clients
+  /// existed matches when its customer name equals [customerName].
+  StandaloneInvoiceModel? findTimeBasedInvoice({required int month, required int year, String? projectId, String? clientId, String? customerName}) {
+    for (final inv in _box.values) {
+      if (inv.invoiceType != 'time_based') continue;
+      if (inv.taxDate.month != month || inv.taxDate.year != year) continue;
+      if (projectId != null && !(inv.sourceProjectIds.length == 1 && inv.sourceProjectIds.contains(projectId))) continue;
+      if (clientId != null && inv.clientId != clientId && !(inv.clientId == null && inv.customerJson['name'] == customerName)) continue;
+      return inv;
     }
+    return null;
   }
 }

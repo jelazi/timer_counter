@@ -7,10 +7,13 @@ import '../../core/utils/time_formatter.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/task_model.dart';
 import '../../data/repositories/time_entry_repository.dart';
+import '../blocs/project/project_bloc.dart';
+import '../blocs/project/project_event.dart';
 import '../blocs/task/task_bloc.dart';
 import '../blocs/task/task_event.dart';
 import '../blocs/task/task_state.dart';
 import '../widgets/app_switch_tile.dart';
+import '../widgets/project_form_dialog.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
   final ProjectModel project;
@@ -22,10 +25,25 @@ class ProjectDetailScreen extends StatefulWidget {
 }
 
 class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
+  late ProjectModel _project = widget.project;
+
+  void _editProject() {
+    showDialog(
+      context: context,
+      builder: (_) => ProjectFormDialog(
+        project: _project,
+        onSave: (updated) {
+          context.read<ProjectBloc>().add(UpdateProject(updated));
+          setState(() => _project = updated);
+        },
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
-    context.read<TaskBloc>().add(LoadTasks(widget.project.id));
+    context.read<TaskBloc>().add(LoadTasks(_project.id));
   }
 
   @override
@@ -33,19 +51,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
-        toolbarHeight: kToolbarHeight + 28,
         title: Row(
           children: [
             Container(
               width: 12,
               height: 12,
-              decoration: BoxDecoration(color: Color(widget.project.colorValue), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Color(_project.colorValue), shape: BoxShape.circle),
             ),
             const SizedBox(width: 8),
-            Text(widget.project.name),
+            Text(_project.name),
           ],
         ),
         actions: [
+          OutlinedButton.icon(onPressed: _editProject, icon: const Icon(Icons.edit_outlined, size: 16), label: Text(tr('projects.edit_project'))),
+          const SizedBox(width: 8),
           FilledButton.icon(onPressed: () => _showAddTaskDialog(context), icon: const Icon(Icons.add, size: 18), label: Text(tr('projects.add_task'))),
           const SizedBox(width: 16),
         ],
@@ -68,7 +87,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   Widget _buildProjectInfo(BuildContext context) {
     final timeEntryRepo = context.read<TimeEntryRepository>();
-    final totalSeconds = timeEntryRepo.getTotalDurationForProject(widget.project.id);
+    final totalSeconds = timeEntryRepo.getTotalDurationForProject(_project.id);
 
     return Card(
       child: Padding(
@@ -80,46 +99,40 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             Text(tr('projects.progress'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 16),
             _InfoRow(label: tr('projects.tracked_time'), value: TimeFormatter.formatHumanReadable(totalSeconds)),
-            if (widget.project.plannedTimeHours > 0) ...[
+            if (_project.plannedTimeHours > 0) ...[
               const SizedBox(height: 8),
-              _InfoRow(label: tr('projects.planned_time'), value: '${widget.project.plannedTimeHours}h'),
+              _InfoRow(label: tr('projects.planned_time'), value: '${_project.plannedTimeHours}h'),
               const SizedBox(height: 8),
               LinearProgressIndicator(
-                value: (totalSeconds / 3600) / widget.project.plannedTimeHours,
+                value: (totalSeconds / 3600) / _project.plannedTimeHours,
                 backgroundColor: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
-                valueColor: AlwaysStoppedAnimation(Color(widget.project.colorValue)),
+                valueColor: AlwaysStoppedAnimation(Color(_project.colorValue)),
               ),
             ],
-            if (widget.project.hourlyRate > 0) ...[
+            if (_project.hourlyRate > 0) ...[
               const SizedBox(height: 12),
-              _InfoRow(label: tr('projects.hourly_rate'), value: '${widget.project.hourlyRate.toStringAsFixed(0)} CZK/h'),
+              _InfoRow(label: tr('projects.hourly_rate'), value: '${_project.hourlyRate.toStringAsFixed(0)} CZK/h'),
               const SizedBox(height: 8),
-              _InfoRow(label: tr('statistics.revenue'), value: TimeFormatter.formatCurrency(TimeFormatter.calculateRevenue(totalSeconds, widget.project.hourlyRate), 'CZK')),
+              _InfoRow(label: tr('statistics.revenue'), value: TimeFormatter.formatCurrency(TimeFormatter.calculateRevenue(totalSeconds, _project.hourlyRate), 'CZK')),
             ],
-            if (widget.project.plannedBudget > 0) ...[
+            if (_project.plannedBudget > 0) ...[
               const SizedBox(height: 8),
-              _InfoRow(label: tr('projects.planned_budget'), value: TimeFormatter.formatCurrency(widget.project.plannedBudget, 'CZK')),
+              _InfoRow(label: tr('projects.planned_budget'), value: TimeFormatter.formatCurrency(_project.plannedBudget, 'CZK')),
               const SizedBox(height: 8),
               _InfoRow(
                 label: tr('projects.budget_remaining'),
-                value: TimeFormatter.formatCurrency(widget.project.plannedBudget - TimeFormatter.calculateRevenue(totalSeconds, widget.project.hourlyRate), 'CZK'),
+                value: TimeFormatter.formatCurrency(_project.plannedBudget - TimeFormatter.calculateRevenue(totalSeconds, _project.hourlyRate), 'CZK'),
               ),
             ],
-            if (widget.project.startDate != null) ...[
-              const SizedBox(height: 12),
-              _InfoRow(label: tr('projects.start_date'), value: DateFormat('d.M.yyyy').format(widget.project.startDate!)),
-            ],
-            if (widget.project.dueDate != null) ...[
-              const SizedBox(height: 8),
-              _InfoRow(label: tr('projects.due_date'), value: DateFormat('d.M.yyyy').format(widget.project.dueDate!)),
-            ],
+            if (_project.startDate != null) ...[const SizedBox(height: 12), _InfoRow(label: tr('projects.start_date'), value: DateFormat('d.M.yyyy').format(_project.startDate!))],
+            if (_project.dueDate != null) ...[const SizedBox(height: 8), _InfoRow(label: tr('projects.due_date'), value: DateFormat('d.M.yyyy').format(_project.dueDate!))],
             const SizedBox(height: 12),
-            _InfoRow(label: tr('projects.billable'), value: widget.project.isBillable ? tr('common.yes') : tr('common.no')),
-            if (widget.project.notes.isNotEmpty) ...[
+            _InfoRow(label: tr('projects.billable'), value: _project.isBillable ? tr('common.yes') : tr('common.no')),
+            if (_project.notes.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(tr('projects.notes'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
               const SizedBox(height: 4),
-              Text(widget.project.notes, style: Theme.of(context).textTheme.bodyMedium),
+              Text(_project.notes, style: Theme.of(context).textTheme.bodyMedium),
             ],
           ],
         ),
@@ -154,7 +167,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               final task = state.tasks[index];
               return _TaskListItem(
                 task: task,
-                project: widget.project,
+                project: _project,
                 onDelete: () {
                   // Check if task has time entries
                   final timeEntryRepo = context.read<TimeEntryRepository>();
@@ -163,7 +176,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tr('projects.cannot_delete_task_has_entries')), backgroundColor: Colors.orange));
                     return;
                   }
-                  context.read<TaskBloc>().add(DeleteTask(taskId: task.id, projectId: widget.project.id));
+                  context.read<TaskBloc>().add(DeleteTask(taskId: task.id, projectId: _project.id));
 
                   // Show SnackBar with undo
                   ScaffoldMessenger.of(context).clearSnackBars();
@@ -196,7 +209,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   void _showAddTaskDialog(BuildContext context) {
     final nameController = TextEditingController();
     final notesController = TextEditingController();
-    bool isBillable = widget.project.isBillable;
+    bool isBillable = _project.isBillable;
 
     showDialog(
       context: context,
@@ -231,12 +244,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 if (nameController.text.isNotEmpty) {
                   final task = TaskModel(
                     id: const Uuid().v4(),
-                    projectId: widget.project.id,
+                    projectId: _project.id,
                     name: nameController.text,
                     isBillable: isBillable,
                     notes: notesController.text,
                     createdAt: DateTime.now(),
-                    colorValue: widget.project.colorValue,
+                    colorValue: _project.colorValue,
                   );
                   context.read<TaskBloc>().add(AddTask(task));
                   Navigator.pop(dialogContext);

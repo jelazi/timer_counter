@@ -15,7 +15,9 @@ import '../core/theme/desktop_theme.dart';
 import '../core/utils/platform_utils.dart';
 import '../core/utils/time_formatter.dart';
 import '../data/repositories/category_repository.dart';
+import '../data/repositories/client_repository.dart';
 import '../data/repositories/monthly_hours_target_repository.dart';
+import '../data/repositories/project_client_repository.dart';
 import '../data/repositories/project_repository.dart';
 import '../data/repositories/running_timer_repository.dart';
 import '../data/repositories/settings_repository.dart';
@@ -24,6 +26,8 @@ import '../data/repositories/task_repository.dart';
 import '../data/repositories/time_entry_repository.dart';
 import '../presentation/blocs/category/category_bloc.dart';
 import '../presentation/blocs/category/category_event.dart';
+import '../presentation/blocs/client/client_bloc.dart';
+import '../presentation/blocs/client/client_event.dart';
 import '../presentation/blocs/project/project_bloc.dart';
 import '../presentation/blocs/project/project_event.dart';
 import '../presentation/blocs/settings/settings_bloc.dart';
@@ -49,6 +53,8 @@ class TymeApp extends StatelessWidget {
   final SettingsRepository settingsRepository;
   final MonthlyHoursTargetRepository monthlyHoursTargetRepository;
   final StandaloneInvoiceRepository standaloneInvoiceRepository;
+  final ClientRepository clientRepository;
+  final ProjectClientRepository projectClientRepository;
   final SystemTrayService? systemTrayService;
   final PocketBaseSyncService? pocketBaseSyncService;
   final BackupService backupService;
@@ -66,6 +72,8 @@ class TymeApp extends StatelessWidget {
     required this.settingsRepository,
     required this.monthlyHoursTargetRepository,
     required this.standaloneInvoiceRepository,
+    required this.clientRepository,
+    required this.projectClientRepository,
     required this.backupService,
     required this.snapshotService,
     required this.snapshotDiffService,
@@ -86,6 +94,8 @@ class TymeApp extends StatelessWidget {
         Provider<SettingsRepository>.value(value: settingsRepository),
         Provider<MonthlyHoursTargetRepository>.value(value: monthlyHoursTargetRepository),
         Provider<StandaloneInvoiceRepository>.value(value: standaloneInvoiceRepository),
+        Provider<ClientRepository>.value(value: clientRepository),
+        Provider<ProjectClientRepository>.value(value: projectClientRepository),
         if (systemTrayService != null) Provider<SystemTrayService>.value(value: systemTrayService!),
         Provider<PocketBaseSyncService?>.value(value: pocketBaseSyncService),
         Provider<BackupService>.value(value: backupService),
@@ -118,7 +128,17 @@ class TymeApp extends StatelessWidget {
             create: (context) => StatisticsBloc(timeEntryRepository: timeEntryRepository, projectRepository: projectRepository, settingsRepository: settingsRepository),
           ),
           BlocProvider<SettingsBloc>(create: (context) => SettingsBloc(settingsRepository: settingsRepository)..add(LoadSettings())),
-          BlocProvider<StandaloneInvoiceBloc>(create: (context) => StandaloneInvoiceBloc(repository: standaloneInvoiceRepository)..add(const LoadStandaloneInvoices())),
+          BlocProvider<StandaloneInvoiceBloc>(
+            create: (context) => StandaloneInvoiceBloc(repository: standaloneInvoiceRepository, syncService: pocketBaseSyncService)..add(const LoadStandaloneInvoices()),
+          ),
+          BlocProvider<ClientBloc>(
+            create: (context) => ClientBloc(
+              clientRepository: clientRepository,
+              projectClientRepository: projectClientRepository,
+              invoiceRepository: standaloneInvoiceRepository,
+              syncService: pocketBaseSyncService,
+            )..add(const LoadClients()),
+          ),
         ],
         child: _AppWithTheme(
           settingsRepository: settingsRepository,

@@ -1,0 +1,477 @@
+<title>Vazby dat Timer Counter</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one reading column; diagrams break out to full width, findings as a severity-striped list. */
+:root {
+  --bg: #F6F6F9;
+  --surface: #FFFFFF;
+  --fg: #1C1C24;
+  --muted: #5F6172;
+  --line: #C6C7D2;
+  --accent: #5856D6;
+  --accent-soft: #ECEBFC;
+  --bad: #C8372D;
+  --bad-soft: #FBEAE8;
+  --warn: #A86A12;
+  --warn-soft: #FBF1E0;
+  --ok: #2B7D52;
+  --ok-soft: #E5F4EC;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14141A; --surface: #1E1E26; --fg: #E8E8EF; --muted: #A2A4B4; --line: #3D3E4C;
+    --accent: #8F8DFF; --accent-soft: #262546; --bad: #FF6E62; --bad-soft: #3A1F1E;
+    --warn: #E3AA4E; --warn-soft: #362A17; --ok: #55C78F; --ok-soft: #17301F;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14141A; --surface: #1E1E26; --fg: #E8E8EF; --muted: #A2A4B4; --line: #3D3E4C;
+  --accent: #8F8DFF; --accent-soft: #262546; --bad: #FF6E62; --bad-soft: #3A1F1E;
+  --warn: #E3AA4E; --warn-soft: #362A17; --ok: #55C78F; --ok-soft: #17301F;
+  color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--font-body); }
+.page {
+  max-width: 1000px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+  display: grid; gap: 40px;
+}
+.prose { max-width: 68ch; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: 21px; line-height: 1.3; margin: 0 0 6px; text-wrap: balance; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 0; }
+.lead { color: var(--muted); font-size: 16px; }
+code, .mono { font-family: var(--font-mono); font-size: 0.88em; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+
+.verdict {
+  display: grid; gap: 10px; padding: 18px 20px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--warn);
+}
+.verdict strong { font-size: 17px; }
+.verdict ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+
+section { display: grid; gap: 14px; }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.scroll { overflow-x: auto; padding: 12px; }
+.scroll svg { display: block; width: 100%; min-width: 760px; height: auto; color: var(--fg); }
+figcaption { padding: 12px 16px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; display: grid; gap: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; color: var(--fg); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 26px; height: 12px; border-radius: 3px; background: var(--surface); border: 1.5px solid var(--line); display: inline-block; }
+.sw.local { border: 1.5px dashed var(--warn); background: var(--warn-soft); }
+.sw.new { border-color: var(--accent); background: var(--accent-soft); }
+.ln { width: 26px; height: 0; border-top: 2px solid var(--muted); display: inline-block; }
+.ln.bad { border-top: 2px dashed var(--bad); }
+.ln.acc { border-top: 2px solid var(--accent); }
+.num { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--bad); color: var(--surface); font-size: 11px; font-weight: 700; flex: none; }
+
+svg .box.ghost rect { fill: var(--bg); stroke: var(--line); stroke-dasharray: 4 4; }
+svg .box.ghost .t, svg .box.ghost .f { opacity: 0.6; }
+.sw.ghost { border: 1.5px dashed var(--line); background: var(--bg); }
+.done { color: var(--ok); font-weight: 600; }
+/* SVG parts, styled from the page so both themes work */
+svg .box rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; }
+svg .box.local rect { fill: var(--warn-soft); stroke: var(--warn); stroke-dasharray: 6 4; }
+svg .box.new rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+svg .t { font: 600 14px var(--font-body); fill: var(--fg); }
+svg .f { font: 11.5px var(--font-mono); fill: var(--muted); }
+svg .e { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+svg .e.bad { stroke: var(--bad); stroke-dasharray: 6 4; }
+svg .e.acc { stroke: var(--accent); stroke-width: 2.2; }
+svg .e.soft { stroke-dasharray: 4 4; }
+svg .lbl { font: 500 11.5px var(--font-body); fill: var(--muted); }
+svg .lbl.bad { fill: var(--bad); }
+svg .lbl.acc { fill: var(--accent); }
+svg .head { fill: var(--muted); }
+svg .head.bad { fill: var(--bad); }
+svg .head.acc { fill: var(--accent); }
+svg .mk circle { fill: var(--bad); }
+svg .mk text { font: 700 11px var(--font-body); fill: var(--surface); }
+svg .x circle { fill: var(--surface); stroke: var(--bad); stroke-width: 1.6; }
+svg .x path { stroke: var(--bad); stroke-width: 1.8; }
+
+.findings { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.finding {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: start;
+  padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  border-left: 4px solid var(--line);
+}
+.finding.high { border-left-color: var(--bad); }
+.finding.mid { border-left-color: var(--warn); }
+.finding.low { border-left-color: var(--muted); }
+.finding.good { border-left-color: var(--ok); }
+.finding .num.good { background: var(--ok); }
+.finding .num.low { background: var(--muted); }
+.finding .num.mid { background: var(--warn); }
+.finding > div { min-width: 0; display: grid; gap: 4px; }
+.finding .row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.sev { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 8px; border-radius: 99px; }
+.sev.high { color: var(--bad); background: var(--bad-soft); }
+.sev.mid { color: var(--warn); background: var(--warn-soft); }
+.sev.low { color: var(--muted); background: var(--bg); }
+.sev.good { color: var(--ok); background: var(--ok-soft); }
+.finding p { color: var(--muted); font-size: 14px; }
+.where { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+.cascade { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.chip { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); font-weight: 500; }
+.chip.acc { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.arrow { color: var(--muted); }
+
+table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--surface); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+
+.questions { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+.questions li::marker { color: var(--accent); font-weight: 700; }
+</style>
+
+<div class="page">
+  <header class="prose">
+    <div class="eyebrow">Timer Counter · datový model · návrh 2 · 23. 11. 2026</div>
+    <h1>Jak spolu souvisí projekty, firmy, záznamy a faktury</h1>
+    <p class="lead">Druhá verze návrhu podle tvých rozhodnutí. Kategorie se v aplikaci zruší, firmy se přiřazují k projektům, jeden projekt může mít víc firem a všechno se synchronizuje. Nic, co už je na PocketBase, se nesmaže a účet eli.zizkova musí fungovat beze změny.</p>
+  </header>
+
+  <div class="verdict">
+    <strong>Rozhodnuto</strong>
+    <ul>
+      <li><span class="done">Hotovo:</span> import z Tyme (JSON, CSV i .data) je z aplikace odstraněný.</li>
+      <li>Kategorie: v aplikaci zmizí, na serveru zůstanou beze změny.</li>
+      <li>Firma: nová synchronizovaná entita. Projekt může mít víc firem a firma víc projektů.</li>
+      <li>Synchronizovat se bude vše, co dnes zůstává jen v tomhle Macu: firmy, tvůj profil dodavatele, faktury a pracovní rozvrh.</li>
+      <li>Firma na faktuře: předvybere se naposledy přiřazená firma projektu, změnu děláš ručně u každé faktury. Žádná platnost od–do.</li>
+      <li>Každá dvojice projekt + firma má vlastní popis služby. Sazba je dál jedna, u projektu.</li>
+      <li>Víc projektů jedné firmě: buď řádek za každý projekt, nebo jeden souhrnný řádek. Položky jde před vystavením rozepsat a upravit.</li>
+      <li>Dodavatel je vždy jen jeden, pro každý účet vlastní. Export dostane vlastní formát místo Tyme.</li>
+    </ul>
+  </div>
+
+  <section>
+    <div class="prose">
+      <h2>Návrh</h2>
+      <p>Šipka vede od toho, na koho se odkazuje, k tomu, kdo odkaz drží. Existující kolekce na serveru se nemění. Všechno nové jsou samostatné kolekce, které starší verze aplikace ignorují.</p>
+    </div>
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 1130 570" role="img" aria-label="Navržený model: Firma a Projekt jsou propojené přes vazbu Projekt–firma, takže projekt může mít víc firem. Faktura odkazuje na firmu, na profil dodavatele a na projekty. Úkol, záznam, časovač a měsíční cíl zůstávají beze změny. Kategorie zůstává jen na serveru.">
+          <defs>
+            <marker id="b2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0 L10 5 L0 10 z"/></marker>
+            <marker id="b2acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head acc" d="M0 0 L10 5 L0 10 z"/></marker>
+          </defs>
+
+          <!-- new edges -->
+          <line class="e acc" x1="430" y1="114" x2="430" y2="188" marker-end="url(#b2acc)"/>
+          <text class="lbl acc" x="440" y="156">clientId</text>
+          <line class="e acc" x1="610" y1="232" x2="543" y2="232" marker-end="url(#b2acc)"/>
+          <text class="lbl acc" x="576" y="224" text-anchor="middle">projectId</text>
+          <path class="e acc" d="M320 72 H285 V372 H253" marker-end="url(#b2acc)"/>
+          <text class="lbl acc" x="292" y="250">clientId</text>
+          <line class="e acc" x1="140" y1="114" x2="140" y2="328" marker-end="url(#b2acc)"/>
+          <text class="lbl acc" x="150" y="226">supplierId</text>
+          <path class="e acc" d="M610 262 H575 V410 H253" marker-end="url(#b2acc)"/>
+          <text class="lbl acc" x="420" y="402" text-anchor="middle">projectIds[]</text>
+
+          <!-- unchanged edges -->
+          <line class="e" x1="720" y1="274" x2="720" y2="328" marker-end="url(#b2)"/>
+          <text class="lbl" x="730" y="306">projectId</text>
+          <line class="e" x1="720" y1="414" x2="720" y2="468" marker-end="url(#b2)"/>
+          <text class="lbl" x="730" y="446">taskId</text>
+          <line class="e" x1="900" y1="232" x2="832" y2="232" marker-end="url(#b2)"/>
+          <text class="lbl" x="866" y="224" text-anchor="middle">N:M</text>
+          <line class="e" x1="900" y1="372" x2="832" y2="372" marker-end="url(#b2)"/>
+          <text class="lbl" x="866" y="364" text-anchor="middle">taskId</text>
+          <path class="e soft" d="M900 72 H780 V188" marker-end="url(#b2)"/>
+          <text class="lbl" x="840" y="64" text-anchor="middle">jen na serveru</text>
+
+          <!-- column A -->
+          <g class="box new"><rect x="30" y="30" width="220" height="84" rx="8"/>
+            <text class="t" x="44" y="54">Můj profil (1 na účet)</text>
+            <text class="f" x="44" y="76">název · IČO · DIČ · adresa</text>
+            <text class="f" x="44" y="94">banka · IBAN · vystavil</text></g>
+          <g class="box new"><rect x="30" y="330" width="220" height="84" rx="8"/>
+            <text class="t" x="44" y="354">Faktura</text>
+            <text class="f" x="44" y="376">číslo · období · položky</text>
+            <text class="f" x="44" y="394">+ kopie údajů obou stran</text></g>
+
+          <!-- column B -->
+          <g class="box new"><rect x="320" y="30" width="220" height="84" rx="8"/>
+            <text class="t" x="334" y="54">Firma</text>
+            <text class="f" x="334" y="76">název · IČO · DIČ · adresa</text>
+            <text class="f" x="334" y="94">e-mail · splatnost</text></g>
+          <g class="box new"><rect x="320" y="190" width="220" height="84" rx="8"/>
+            <text class="t" x="334" y="214">Projekt–firma</text>
+            <text class="f" x="334" y="236">projectId · clientId</text>
+            <text class="f" x="334" y="254">popis služby · přidáno</text></g>
+          <g class="box new"><rect x="320" y="470" width="220" height="84" rx="8"/>
+            <text class="t" x="334" y="494">Pracovní rozvrh</text>
+            <text class="f" x="334" y="516">dny a hodiny v týdnu</text>
+            <text class="f" x="334" y="534">dnes jen v zařízení</text></g>
+
+          <!-- column C -->
+          <g class="box"><rect x="610" y="190" width="220" height="84" rx="8"/>
+            <text class="t" x="624" y="214">Projekt</text>
+            <text class="f" x="624" y="236">hourlyRate · isBillable</text>
+            <text class="f" x="624" y="254">beze změny na serveru</text></g>
+          <g class="box"><rect x="610" y="330" width="220" height="84" rx="8"/>
+            <text class="t" x="624" y="354">Úkol</text>
+            <text class="f" x="624" y="376">projectId · hourlyRate?</text>
+            <text class="f" x="624" y="394">isBillable</text></g>
+          <g class="box"><rect x="610" y="470" width="220" height="84" rx="8"/>
+            <text class="t" x="624" y="494">Časový záznam</text>
+            <text class="f" x="624" y="516">taskId · projectId (dál)</text>
+            <text class="f" x="624" y="534">start · end · isBillable</text></g>
+
+          <!-- column D -->
+          <g class="box ghost"><rect x="900" y="30" width="200" height="84" rx="8"/>
+            <text class="t" x="914" y="54">Kategorie</text>
+            <text class="f" x="914" y="76">v aplikaci skrytá</text>
+            <text class="f" x="914" y="94">data na serveru zůstanou</text></g>
+          <g class="box"><rect x="900" y="190" width="200" height="84" rx="8"/>
+            <text class="t" x="914" y="214">Měsíční cíl</text>
+            <text class="f" x="914" y="236">projectIds[] · hodiny</text>
+            <text class="f" x="914" y="254">+ kontext</text></g>
+          <g class="box"><rect x="900" y="330" width="200" height="84" rx="8"/>
+            <text class="t" x="914" y="354">Běžící časovač</text>
+            <text class="f" x="914" y="376">projectId · taskId</text>
+            <text class="f" x="914" y="394">start · notes</text></g>
+        </svg>
+      </div>
+      <figcaption>
+        <div class="legend">
+          <span><i class="sw new"></i>nová kolekce na serveru</span>
+          <span><i class="sw"></i>existující kolekce, beze změny</span>
+          <span><i class="sw ghost"></i>skrytá v aplikaci, data zůstávají</span>
+          <span><i class="ln acc"></i>nová vazba</span>
+        </div>
+        <p>Projekt nemá žádné nové pole. Firmy se k němu přiřazují přes samostatnou vazbu Projekt–firma, která unese víc firem u jednoho projektu. Při vystavení faktury vybereš firmu z firem přiřazených k fakturovaným projektům a faktura si uloží odkaz na ni i kopii jejích údajů.</p>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Proč vazba a ne pole u projektu</h2>
+      <p>Seznam firem by šel uložit přímo do projektu (<code>client_ids</code>). Samostatná vazba je ale bezpečnější a pružnější:</p>
+    </div>
+    <ol class="findings">
+      <li class="finding good"><span class="num good">✓</span><div>
+        <div class="row"><h3>Kolekce projektů zůstane přesně jak je</h3></div>
+        <p>Starší aplikace na iPhonu a u eli.zizkova posílá a stahuje projekty ve stejném tvaru jako dnes. Nová vazba nemůže kolidovat se změnou projektu z jiného zařízení.</p>
+      </div></li>
+      <li class="finding good"><span class="num good">✓</span><div>
+        <div class="row"><h3>Vazba unese vlastní údaje</h3></div>
+        <p>Každý pár projekt + firma může mít vlastní popis služby na faktuře („Vývoj aplikace Artemis“) nebo příznak výchozí firmy. U pole se seznamem id by to nešlo.</p>
+      </div></li>
+      <li class="finding good"><span class="num good">✓</span><div>
+        <div class="row"><h3>Odebrání firmy z projektu nic nemaže</h3></div>
+        <p>Vystavené faktury mají vlastní odkaz na firmu a kopii jejích údajů. Když firmu od projektu odpojíš, staré faktury zůstanou beze změny.</p>
+      </div></li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="prose"><h2>Co se synchronizuje dnes a co potom</h2></div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Data</th><th>Dnes</th><th>Po změně</th></tr></thead>
+        <tbody>
+          <tr><td>Projekty, úkoly, záznamy, časovač</td><td>synchronizuje se</td><td>beze změny</td></tr>
+          <tr><td>Měsíční cíle, dny volna, kontexty</td><td>synchronizuje se</td><td>beze změny</td></tr>
+          <tr><td>Kategorie</td><td>synchronizuje se</td><td>na serveru zůstanou, nová verze je nečte ani nemaže</td></tr>
+          <tr><td>Firmy (dnes „odběratelé“)</td><td>jen tento Mac</td><td>nová kolekce <code>clients</code></td></tr>
+          <tr><td>Firmy u projektů</td><td>neexistuje</td><td>nová kolekce <code>project_clients</code></td></tr>
+          <tr><td>Můj profil, banka, vystavil</td><td>jen tento Mac</td><td>nová kolekce <code>supplier_profiles</code></td></tr>
+          <tr><td>Faktury</td><td>jen tento Mac</td><td>nová kolekce <code>invoices</code></td></tr>
+          <tr><td>Číslo další faktury</td><td>počítadlo v Macu</td><td>dopočítá se z faktur na serveru</td></tr>
+          <tr><td>Pracovní rozvrh (týden)</td><td>jen v zařízení</td><td>nová kolekce <code>user_settings</code></td></tr>
+          <tr><td>Vzhled, jazyk, připomínky, lišta</td><td>jen v zařízení</td><td>zůstane v zařízení (každé zařízení si své)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Jak to zůstane bezpečné pro eli.zizkova</h2>
+      <p>Pořadí kroků je zvolené tak, aby v každé chvíli fungovaly staré i nové verze a nic se nesmazalo.</p>
+    </div>
+    <ol class="findings">
+      <li class="finding low"><span class="num low">1</span><div>
+        <div class="row"><h3>Záloha serveru</h3></div>
+        <p>Kompletní dump PocketBase a počty záznamů pro každý účet a kolekci. To je výchozí stav, se kterým se všechno porovná.</p>
+      </div></li>
+      <li class="finding low"><span class="num low">2</span><div>
+        <div class="row"><h3>Na server jen přidat nové kolekce</h3></div>
+        <p>Pět nových kolekcí se stejnými pravidly přístupu jako ostatní (každý vidí jen svoje). Import schématu bez mazání chybějících kolekcí, nic se nepřejmenuje.</p>
+      </div></li>
+      <li class="finding low"><span class="num low">3</span><div>
+        <div class="row"><h3>Vyzkoušet na kopii</h3></div>
+        <p>Nová verze a převod nejdřív proti zkušebnímu serveru s kopií dat obou účtů. Pak porovnání: každé id, které tam bylo, tam musí zůstat se stejným obsahem.</p>
+      </div></li>
+      <li class="finding low"><span class="num low">4</span><div>
+        <div class="row"><h3>Převod jen na tvém účtu</h3></div>
+        <p>Tvoji odběratelé a dodavatelé z tohoto Macu se nahrají jako firmy a profil a připojí se k projektům podle tvé volby. Faktury z Macu se nahrají na server. Účet eli.zizkova nemá co převádět, jen se ověří počty.</p>
+      </div></li>
+      <li class="finding low"><span class="num low">5</span><div>
+        <div class="row"><h3>Aktualizace ostatních zařízení kdykoli</h3></div>
+        <p>Starší verze dál fungují s tím, co znají. Nová verze dál zapisuje <code>project_id</code> do záznamů a nechává <code>category_id</code> u projektů, takže si obě verze rozumí.</p>
+      </div></li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Dnes</h2>
+      <p>Pro srovnání původní stav, ze kterého návrh vychází.</p>
+    </div>
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 920 560" role="img" aria-label="Současný model: kategorie, projekt, úkol a záznam tvoří řetězec. Odběratelé a dodavatelé jsou seznamy v nastavení bez vazby na projekty nebo kategorie. Faktura z nich jen kopíruje údaje. Záznam navíc drží duplicitní odkaz na projekt.">
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0 L10 5 L0 10 z"/></marker>
+            <marker id="a1bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head bad" d="M0 0 L10 5 L0 10 z"/></marker>
+          </defs>
+
+          <!-- edges -->
+          <line class="e" x1="490" y1="114" x2="490" y2="168" marker-end="url(#a1)"/>
+          <text class="lbl" x="500" y="146">categoryId · nepovinné</text>
+          <line class="e" x1="490" y1="254" x2="490" y2="308" marker-end="url(#a1)"/>
+          <text class="lbl" x="500" y="286">projectId</text>
+          <line class="e" x1="490" y1="394" x2="490" y2="448" marker-end="url(#a1)"/>
+          <text class="lbl" x="500" y="426">taskId</text>
+
+          <path class="e bad" d="M380 236 H336 V500 H378" marker-end="url(#a1bad)"/>
+          <text class="lbl bad" x="326" y="430" text-anchor="end">projectId navíc</text>
+          <text class="lbl" x="326" y="446" text-anchor="end">úkol už projekt určuje</text>
+
+          <line class="e" x1="270" y1="212" x2="378" y2="212" marker-end="url(#a1)"/>
+          <text class="lbl" x="324" y="204" text-anchor="middle">projekty</text>
+
+          <line class="e soft" x1="155" y1="114" x2="155" y2="168" marker-end="url(#a1)"/>
+          <text class="lbl" x="165" y="146">kopie JSON</text>
+          <line class="e soft" x1="155" y1="310" x2="155" y2="256" marker-end="url(#a1)"/>
+          <text class="lbl" x="165" y="288">kopie JSON</text>
+
+          <line class="e bad" x1="270" y1="66" x2="380" y2="66"/>
+          <g class="x"><circle cx="325" cy="66" r="9"/><path d="M320 61 L330 71 M330 61 L320 71"/></g>
+          <text class="lbl bad" x="325" y="94" text-anchor="middle">žádná vazba</text>
+
+          <line class="e" x1="690" y1="212" x2="602" y2="212" marker-end="url(#a1)"/>
+          <text class="lbl" x="646" y="204" text-anchor="middle">N:M</text>
+          <line class="e" x1="690" y1="352" x2="602" y2="352" marker-end="url(#a1)"/>
+          <text class="lbl" x="646" y="344" text-anchor="middle">taskId</text>
+
+          <!-- boxes: invoicing column -->
+          <g class="box local"><rect x="40" y="30" width="230" height="84" rx="8"/>
+            <text class="t" x="54" y="54">Odběratelé</text>
+            <text class="f" x="54" y="76">seznam v nastavení, bez id</text>
+            <text class="f" x="54" y="94">výběr = globální index</text></g>
+
+          <g class="box local"><rect x="40" y="170" width="230" height="84" rx="8"/>
+            <text class="t" x="54" y="194">Faktura</text>
+            <text class="f" x="54" y="216">customerJson · supplierJson</text>
+            <text class="f" x="54" y="234">sourceProjectIds[]</text></g>
+
+          <g class="box local"><rect x="40" y="310" width="230" height="84" rx="8"/>
+            <text class="t" x="54" y="334">Dodavatelé</text>
+            <text class="f" x="54" y="356">seznam v nastavení, bez id</text>
+            <text class="f" x="54" y="374">výběr = globální index</text></g>
+
+          <!-- core chain -->
+          <g class="box"><rect x="380" y="30" width="220" height="84" rx="8"/>
+            <text class="t" x="394" y="54">Kategorie</text>
+            <text class="f" x="394" y="76">id · name · color</text>
+            <text class="f" x="394" y="94">„Medutech“</text></g>
+
+          <g class="box"><rect x="380" y="170" width="220" height="84" rx="8"/>
+            <text class="t" x="394" y="194">Projekt</text>
+            <text class="f" x="394" y="216">categoryId? · hourlyRate</text>
+            <text class="f" x="394" y="234">isBillable · isArchived</text></g>
+
+          <g class="box"><rect x="380" y="310" width="220" height="84" rx="8"/>
+            <text class="t" x="394" y="334">Úkol</text>
+            <text class="f" x="394" y="356">projectId · hourlyRate?</text>
+            <text class="f" x="394" y="374">isBillable</text></g>
+
+          <g class="box"><rect x="380" y="450" width="220" height="84" rx="8"/>
+            <text class="t" x="394" y="474">Časový záznam</text>
+            <text class="f" x="394" y="496">projectId · taskId</text>
+            <text class="f" x="394" y="514">start · end · isBillable</text></g>
+
+          <!-- right column -->
+          <g class="box"><rect x="690" y="170" width="200" height="84" rx="8"/>
+            <text class="t" x="704" y="194">Měsíční cíl</text>
+            <text class="f" x="704" y="216">projectIds[] · hodiny</text>
+            <text class="f" x="704" y="234">+ kontext v nastavení</text></g>
+
+          <g class="box"><rect x="690" y="310" width="200" height="84" rx="8"/>
+            <text class="t" x="704" y="334">Běžící časovač</text>
+            <text class="f" x="704" y="356">projectId · taskId</text>
+            <text class="f" x="704" y="374">start · notes</text></g>
+        </svg>
+      </div>
+      <figcaption>
+        <div class="legend">
+          <span><i class="sw"></i>synchronizuje se přes PocketBase</span>
+          <span><i class="sw local"></i>jen v tomto zařízení (a v záloze)</span>
+          <span><i class="ln"></i>odkaz přes id</span>
+          <span><i class="ln bad"></i>problém</span>
+        </div>
+        <p>Kategorie „Medutech“ a odběratel „Medutech s.r.o.“ popisují stejnou firmu, ale model o tom neví. Fakturu spojuje s projekty jen seznam <code>sourceProjectIds</code>. Odběratele si při generování vybíráš ručně a výběr platí pro všechny faktury.</p>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Faktura z odpracovaného času</h2>
+      <p>Jak bude vypadat vystavení faktury, když fakturuješ víc projektů jedné firmě.</p>
+    </div>
+    <ol class="findings">
+      <li class="finding low"><span class="num low">1</span><div>
+        <div class="row"><h3>Vybereš měsíc a projekty</h3></div>
+        <p>Aplikace nabídne firmu, která byla k vybraným projektům přiřazena naposledy. Můžeš ji změnit na jinou firmu těchto projektů.</p>
+      </div></li>
+      <li class="finding low"><span class="num low">2</span><div>
+        <div class="row"><h3>Zvolíš podobu řádků</h3></div>
+        <p><strong>Po projektech:</strong> každý projekt má svůj řádek s popisem služby z dvojice projekt + firma, hodinami a sazbou projektu. <strong>Jeden řádek:</strong> hodiny se sečtou. Když mají projekty stejnou sazbu, řádek je hodiny × sazba. Když se sazby liší, řádek je 1 × celková částka a hodiny jsou v popisu, aby součet seděl na haléř.</p>
+      </div></li>
+      <li class="finding low"><span class="num low">3</span><div>
+        <div class="row"><h3>Položky upravíš před vystavením</h3></div>
+        <p>Předvyplněné řádky jdou rozepsat, přidat nebo změnit cenu, stejně jako u ručně psané faktury. Pak se vygeneruje PDF a faktura se uloží a synchronizuje.</p>
+      </div></li>
+    </ol>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Postup prací</h2>
+      <p>Každá fáze končí testy a instalací do <code>/Applications</code>. Na živý server sáhnu až ve fázi 3 a jen s tvým souhlasem.</p>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Fáze</th><th>Obsah</th></tr></thead>
+        <tbody>
+          <tr><td>1. Datová vrstva</td><td>Modely a úložiště pro firmy, dvojice projekt + firma a profil. Synchronizace nových kolekcí, která tiše počká, dokud na serveru neexistují. Testy proti falešnému serveru.</td></tr>
+          <tr><td>2. Obrazovky</td><td>Sekce Firmy, firmy a popisy služeb ve formuláři projektu, nový tok faktury (výběr firmy, podoba řádků, úprava položek), profil v Nastavení, skrytí kategorií, export ve vlastním formátu.</td></tr>
+          <tr><td>3. Server</td><td>Záloha serveru, přidání pěti kolekcí do schématu, zkouška na kopii obou účtů a porovnání id. Až potom živý server.</td></tr>
+          <tr><td>4. Převod tvých dat</td><td>Odběratelé → firmy. Dvojice projekt + firma podle dosavadních faktur (které projekty šly které firmě). Profil z vybraného dodavatele a bankovních údajů. Nahrání faktur na server. Kontrola počtů.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>

@@ -4,9 +4,15 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive_ce/hive.dart';
 import 'package:timer_counter/core/services/backup_service.dart';
+import 'package:timer_counter/data/models/client_model.dart';
+import 'package:timer_counter/data/models/invoice_settings.dart';
+import 'package:timer_counter/data/models/project_client_model.dart';
+import 'package:timer_counter/data/models/supplier_profile.dart';
 import 'package:timer_counter/data/models/work_day_schedule.dart';
 import 'package:timer_counter/data/repositories/category_repository.dart';
+import 'package:timer_counter/data/repositories/client_repository.dart';
 import 'package:timer_counter/data/repositories/monthly_hours_target_repository.dart';
+import 'package:timer_counter/data/repositories/project_client_repository.dart';
 import 'package:timer_counter/data/repositories/project_repository.dart';
 import 'package:timer_counter/data/repositories/running_timer_repository.dart';
 import 'package:timer_counter/data/repositories/settings_repository.dart';
@@ -18,9 +24,16 @@ void main() {
   late Directory tempDir;
   late SettingsRepository settings;
   late BackupService backup;
+  late ClientRepository clients;
+  late ProjectClientRepository projectClients;
 
   const contextId = 'ctx-medutech';
   const ownMonday = WorkDaySchedule(start: '07:00', end: '12:00', enabled: true);
+
+  setUpAll(() {
+    Hive.registerAdapter(ClientModelAdapter());
+    Hive.registerAdapter(ProjectClientModelAdapter());
+  });
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('timer_counter_backup_test');
@@ -34,7 +47,20 @@ void main() {
     final runningTimers = RunningTimerRepository();
     final monthlyTargets = MonthlyHoursTargetRepository();
     final invoices = StandaloneInvoiceRepository();
-    for (final init in [settings.init, timeEntries.init, projects.init, tasks.init, categories.init, runningTimers.init, monthlyTargets.init, invoices.init]) {
+    clients = ClientRepository();
+    projectClients = ProjectClientRepository();
+    for (final init in [
+      settings.init,
+      timeEntries.init,
+      projects.init,
+      tasks.init,
+      categories.init,
+      runningTimers.init,
+      monthlyTargets.init,
+      invoices.init,
+      clients.init,
+      projectClients.init,
+    ]) {
       await init();
     }
 
@@ -47,6 +73,8 @@ void main() {
       runningTimerRepository: runningTimers,
       monthlyTargetRepository: monthlyTargets,
       standaloneInvoiceRepository: invoices,
+      clientRepository: clients,
+      projectClientRepository: projectClients,
     );
   });
 
@@ -127,5 +155,53 @@ void main() {
 
     expect(result.hasError, isTrue);
     expectContextSettingsSeeded();
+  });
+
+  group('clients', () {
+    final medutech = ClientModel(id: 'c1', name: 'Medutech s.r.o.', ico: '08975922', createdAt: DateTime(2026, 11, 1));
+    final link = ProjectClientModel(id: 'l1', projectId: 'p1', clientId: 'c1', serviceDescription: 'Vývoj aplikace Artemis', createdAt: DateTime(2026, 11, 2));
+    final profile = SupplierProfile(
+      party: const InvoiceParty(name: 'Lubomír Žižka', ico: '19164165'),
+      iban: 'CZ00',
+      updatedAt: DateTime(2026, 11, 3),
+    );
+
+    test('a v4 backup restores clients, project links and the supplier profile', () async {
+      await clients.add(medutech);
+      await projectClients.add(link);
+      await settings.setSupplierProfile(profile);
+      final path = await backup.exportBackup(outputPath: '${tempDir.path}/v4.json');
+
+      await clients.deleteAll();
+      await projectClients.deleteAll();
+      await settings.clearSupplierProfile();
+
+      final result = await backup.restoreBackup(path);
+
+      expect(result.hasError, isFalse);
+      expect(clients.getById('c1'), medutech);
+      expect(projectClients.getById('l1'), link);
+      expect(settings.getSupplierProfile(), profile);
+    });
+
+    test('restoring a v3 backup keeps the clients it does not know about', () async {
+      await clients.add(medutech);
+      await projectClients.add(link);
+      final path = await writeFile({
+        'backup_version': 3,
+        'categories': <dynamic>[],
+        'projects': <dynamic>[],
+        'tasks': <dynamic>[],
+        'time_entries': <dynamic>[],
+        'monthly_targets': <dynamic>[],
+        'standalone_invoices': <dynamic>[],
+      });
+
+      final result = await backup.restoreBackup(path);
+
+      expect(result.hasError, isFalse);
+      expect(clients.getById('c1'), medutech);
+      expect(projectClients.getById('l1'), link);
+    });
   });
 }

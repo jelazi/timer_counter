@@ -778,5 +778,332 @@
                 "required": true
             }
         ]
+    },
+    {
+        "id": "tc_clients000",
+        "name": "clients",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "cl_item_id",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "cl_user_rel",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "cl_name",
+                "name": "name",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "cl_addr1",
+                "name": "address_line1",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cl_addr2",
+                "name": "address_line2",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cl_ico",
+                "name": "ico",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cl_dic",
+                "name": "dic",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cl_email",
+                "name": "email",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cl_phone",
+                "name": "phone",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cl_notes",
+                "name": "notes",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cl_archived",
+                "name": "is_archived",
+                "type": "bool",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "cl_created",
+                "name": "created_at",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            }
+        ]
+    },
+    {
+        "id": "tc_projclnt00",
+        "name": "project_clients",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "pc_item_id",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "pc_user_rel",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "pc_project",
+                "name": "project_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "pc_client",
+                "name": "client_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true
+            },
+            {
+                "id": "pc_service",
+                "name": "service_description",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "pc_created",
+                "name": "created_at",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "pc_position",
+                "name": "position",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            }
+        ]
+    },
+    {
+        "id": "tc_invoices00",
+        "name": "invoices",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "inv_item_id",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "inv_user_rel",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "inv_number",
+                "name": "invoice_number",
+                "type": "number",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "inv_type",
+                "name": "invoice_type",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "inv_client",
+                "name": "client_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "inv_issue",
+                "name": "issue_date",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": false
+            },
+            {
+                "id": "inv_data",
+                "name": "data",
+                "type": "json",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "maxSize": 2000000
+            }
+        ]
+    },
+    {
+        "id": "tc_usrsets00",
+        "name": "user_settings",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "us_item_id",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "us_user_rel",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "us_data",
+                "name": "data",
+                "type": "json",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "maxSize": 2000000
+            }
+        ]
     }
 ]

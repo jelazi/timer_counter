@@ -11,6 +11,7 @@
         "pdf_reports": "PDF Reports",
         "standalone_invoices": "Invoices",
         "time_entries": "Time Entries",
+        "clients": "Clients",
         "section_tracking": "Tracking",
         "section_reports": "Reports & billing"
     },
@@ -48,6 +49,23 @@
         "recent_tasks": "Recent"
     },
     "projects": {
+        "this_month": "This month",
+        "total": "Total",
+        "rate": "Rate",
+        "month_amount": "To invoice",
+        "last_entry": "Last entry",
+        "no_entries": "none yet",
+        "plan_time": "Time",
+        "plan_budget": "Budget",
+        "archived": "Archived",
+        "overdue": "overdue",
+        "clients": "Clients",
+        "add_client": "Add client",
+        "new_client": "New client…",
+        "service_description": "Service description on the invoice",
+        "no_clients": "No client yet",
+        "invoice_default": "Used on invoices",
+        "default_client_hint": "The client at the top is used on invoices. Drag to change the order.",
         "title": "Projects",
         "add_project": "Add Project",
         "edit_project": "Edit Project",
@@ -136,6 +154,7 @@
         "distribution_all_tasks": "All Tasks"
     },
     "settings": {
+        "billing": "Billing",
         "title": "Settings",
         "general": "General",
         "appearance": "Appearance",
@@ -178,7 +197,6 @@
         "break_after": "After",
         "data": "Data",
         "export_data": "Export Data",
-        "import_data": "Import Data",
         "select_directory": "Select Directory",
         "about": "About",
         "version": "Version",
@@ -283,27 +301,6 @@
         "timeline": "Timeline",
         "month_total": "Month Total"
     },
-    "import": {
-        "title": "Import Data",
-        "select_file": "Select File",
-        "select_file_csv": "Select CSV File",
-        "tyme_data_format": "Tyme .data (SQLite backup from Tyme app)",
-        "overwrite": "Overwrite",
-        "overwrite_desc": "Delete all existing data and replace with imported data",
-        "append": "Append",
-        "append_desc": "Add imported data alongside existing data",
-        "merge": "Merge",
-        "merge_desc": "Update existing entries, add new ones (match by ID)",
-        "success": "Import successful",
-        "error": "Import failed",
-        "entries_imported": "entries imported",
-        "categories_imported": "categories imported",
-        "projects_imported": "projects imported",
-        "tasks_imported": "tasks imported",
-        "import_mode": "Import Mode",
-        "confirm_overwrite": "This will delete ALL existing data. Are you sure?",
-        "no_data": "No valid data found in file"
-    },
     "export": {
         "title": "Export Data",
         "date_range": "Date Range",
@@ -318,6 +315,11 @@
         "csv_format": "CSV"
     },
     "pdf_reports": {
+        "client": "Client",
+        "lines_per_project": "Line per project",
+        "lines_single": "One line",
+        "per_project_client_hint": "Each project is invoiced to the client at the top of its list.",
+        "no_client": "No client yet: the customer from the old invoice settings is used.",
         "title": "PDF Reports",
         "subtitle": "Generate monthly reports and invoices in PDF format",
         "select_period": "Select Period",
@@ -493,6 +495,7 @@
         "badge_month_targets": "{count} month exceptions"
     },
     "standalone_invoices": {
+        "pick_client": "Pick client",
         "title": "Standalone Invoices",
         "subtitle": "Invoices not related to time tracking",
         "create": "New Invoice",
@@ -547,8 +550,8 @@
         "type_standalone": "Standalone",
         "no_saved_customers": "No saved customers. Fill in details and save them.",
         "customer_name_required": "Enter customer name",
-        "customer_saved": "Customer saved to global list",
-        "save_customer": "Save customer"
+        "customer_saved": "Saved as a client",
+        "save_customer": "Save as client"
     },
     "backup_history": {
         "title": "Backups & recovery",
@@ -582,5 +585,65 @@
         "source_syncReconcile": "deleted by sync (reconcile)",
         "source_bulkClear": "bulk wipe",
         "owner_mismatch": "This backup belongs to a different PocketBase account. It can be restored locally, but will not be uploaded to the server."
+    },
+    "clients": {
+        "title": "Clients",
+        "subtitle": "Companies you invoice",
+        "add": "Add client",
+        "edit": "Edit client",
+        "name": "Name",
+        "ico": "Company ID (IČO)",
+        "dic": "VAT ID (DIČ)",
+        "address1": "Street",
+        "address2": "ZIP and city",
+        "email": "E-mail",
+        "phone": "Phone",
+        "notes": "Notes",
+        "name_required": "Enter the client's name",
+        "no_clients": "No clients yet",
+        "no_clients_hint": "Add the companies you invoice, then link them to projects.",
+        "projects": "Projects",
+        "no_projects": "Not linked to any project",
+        "archived": "Archived",
+        "show_archived": "Show archived",
+        "archive": "Archive",
+        "unarchive": "Restore",
+        "delete": "Delete client",
+        "delete_confirm": "Delete {name}? Its links to projects are removed as well.",
+        "delete_has_invoices": "This client has invoices, so it cannot be deleted. Archive it instead.",
+        "search": "Search clients"
+    },
+    "supplier_profile": {
+        "title": "My supplier profile",
+        "short": "My profile",
+        "hint": "Your details as the supplier on every invoice. One profile per account, synced to all your devices.",
+        "iban": "IBAN",
+        "swift": "SWIFT"
+    },
+    "invoice_lines": {
+        "title": "Invoice lines",
+        "subtitle": "Invoice for {client}. Edit, split or add lines before issuing.",
+        "description": "Description",
+        "quantity": "Quantity",
+        "unit": "Unit",
+        "unit_price": "Unit price",
+        "add": "Add line",
+        "total": "Total",
+        "issue": "Issue invoice"
+    },
+    "client_migration": {
+        "title": "Create clients from invoices",
+        "intro": "These clients will be created from the customers on your invoices, linked to the projects they were invoiced for, and recorded on each invoice.",
+        "new": "new",
+        "projects": "Projects",
+        "invoices": "Invoices",
+        "none": "none",
+        "profile": "Your supplier profile will be filled from the current invoice settings ({name}).",
+        "safe": "Nothing is deleted or overwritten. Everything is backed up and can be edited afterwards.",
+        "later": "Not now",
+        "apply": "Create clients",
+        "done": "Clients created",
+        "nothing": "Every invoice already has its client.",
+        "settings_hint": "Adds clients and project links from the customers on existing invoices"
     }
 }

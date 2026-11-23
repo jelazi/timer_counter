@@ -2,6 +2,7 @@ import 'package:hive_ce/hive.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../models/invoice_settings.dart';
+import '../models/supplier_profile.dart';
 import '../models/work_day_schedule.dart';
 
 class SettingsRepository {
@@ -116,6 +117,46 @@ class SettingsRepository {
   // Allow overlapping time entries
   bool getAllowOverlapTimes() => _box.get(AppConstants.allowOverlapTimes, defaultValue: false) as bool;
   Future<void> setAllowOverlapTimes(bool value) => _box.put(AppConstants.allowOverlapTimes, value);
+
+  // === Supplier profile ===
+
+  /// The account's own billing identity, or null if it was never set up.
+  SupplierProfile? getSupplierProfile() {
+    final raw = _box.get(AppConstants.supplierProfile);
+    if (raw is! Map) return null;
+    return SupplierProfile.fromJson(Map<String, dynamic>.from(raw));
+  }
+
+  Future<void> setSupplierProfile(SupplierProfile profile) => _box.put(AppConstants.supplierProfile, profile.toJson());
+
+  Future<void> clearSupplierProfile() => _box.delete(AppConstants.supplierProfile);
+
+  bool getClientMigrationOffered() => _box.get(AppConstants.clientMigrationOffered, defaultValue: false) as bool;
+
+  Future<void> setClientMigrationOffered(bool value) => _box.put(AppConstants.clientMigrationOffered, value);
+
+  /// The stored profile, or one built from the pre-profile invoice settings
+  /// (selected supplier, bank, issuer, file names) so nothing has to be re-typed.
+  /// The fallback is dated at the epoch, so any profile from the server wins over it.
+  SupplierProfile getEffectiveSupplierProfile() {
+    final stored = getSupplierProfile();
+    if (stored != null) return stored;
+    final legacy = getInvoiceSettings();
+    return SupplierProfile(
+      party: legacy.supplier,
+      bankName: legacy.bankName,
+      bankCode: legacy.bankCode,
+      swift: legacy.swift,
+      accountNumber: legacy.accountNumber,
+      iban: legacy.iban,
+      issuerName: legacy.issuerName,
+      issuerEmail: legacy.issuerEmail,
+      reportFilename: legacy.reportFilename,
+      reportRezijniFilename: legacy.reportRezijniFilename,
+      invoiceFilename: legacy.invoiceFilename,
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
 
   // === Invoice Settings ===
 

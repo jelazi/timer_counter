@@ -621,14 +621,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.5"
-  native_toolchain_c:
-    dependency: transitive
-    description:
-      name: native_toolchain_c
-      sha256: f59351d28f49520cd3a74eb1f41c5f19ae15e53c65a3231d14af672e46510a96
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.19.1"
   nested:
     dependency: transitive
     description:
@@ -1042,14 +1034,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.10.2"
-  sqlite3:
-    dependency: "direct main"
-    description:
-      name: sqlite3
-      sha256: "9488c7d2cdb1091c91cacf7e207cff81b28bff8e366f042bad3afe7d34afe189"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.3.2"
   stack_trace:
     dependency: transitive
     description:

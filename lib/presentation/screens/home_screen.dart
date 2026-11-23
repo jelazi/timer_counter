@@ -13,12 +13,15 @@ import '../../core/utils/platform_utils.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/running_timer_model.dart';
 import '../../data/repositories/project_repository.dart';
+import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../blocs/settings/settings_bloc.dart';
 import '../blocs/settings/settings_state.dart';
 import '../blocs/timer/timer_bloc.dart';
 import '../blocs/timer/timer_state.dart';
+import '../widgets/client_migration_dialog.dart';
 import '../widgets/desktop/desktop_sidebar.dart';
+import 'clients_screen.dart';
 import 'pdf_reports_screen.dart';
 import 'projects_screen.dart';
 import 'settings_screen.dart';
@@ -40,12 +43,26 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Desktop and web show the full navigation set; mobile omits PDF Reports and Standalone Invoices.
   List<Widget> get _screens => PlatformUtils.isMobile
       ? const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), SettingsScreen()]
-      : const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), PdfReportsScreen(), StandaloneInvoicesScreen(), SettingsScreen()];
+      : const [
+          TimeTrackingScreen(),
+          TimeEntriesOverviewScreen(),
+          ProjectsScreen(),
+          ClientsScreen(),
+          StatisticsScreen(),
+          PdfReportsScreen(),
+          StandaloneInvoicesScreen(),
+          SettingsScreen(),
+        ];
 
   @override
   void initState() {
     super.initState();
     if (PlatformUtils.isDesktop) HardwareKeyboard.instance.addHandler(_handleNavigationKey);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !context.read<SettingsRepository>().getClientMigrationOffered()) {
+        ClientMigrationDialog.show(context, onlyIfNeeded: true);
+      }
+    });
   }
 
   @override
@@ -144,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _selectedIndex = index);
   }
 
-  /// Cmd+1…Cmd+7 switch sections and Cmd+, opens Settings (Ctrl on Windows/Linux).
+  /// Cmd+1…Cmd+8 switch sections and Cmd+, opens Settings (Ctrl on Windows/Linux).
   /// A global handler, because the pane's focus is lost whenever its navigator is replaced.
   bool _handleNavigationKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
@@ -179,6 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
               SidebarItem(icon: Icons.timer_outlined, label: tr('nav.time_tracking'), section: tr('nav.section_tracking')),
               SidebarItem(icon: Icons.list_alt, label: tr('nav.time_entries'), section: tr('nav.section_tracking')),
               SidebarItem(icon: Icons.folder_outlined, label: tr('nav.projects'), section: tr('nav.section_tracking')),
+              SidebarItem(icon: Icons.business_outlined, label: tr('nav.clients'), section: tr('nav.section_tracking')),
               SidebarItem(icon: Icons.bar_chart, label: tr('nav.statistics'), section: tr('nav.section_reports')),
               SidebarItem(icon: Icons.picture_as_pdf_outlined, label: tr('nav.pdf_reports'), section: tr('nav.section_reports')),
               SidebarItem(icon: Icons.receipt_long_outlined, label: tr('nav.standalone_invoices'), section: tr('nav.section_reports')),

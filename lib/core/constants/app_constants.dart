@@ -13,6 +13,8 @@ class AppConstants {
   static const String runningTimersBox = 'running_timers';
   static const String monthlyHoursTargetsBox = 'monthly_hours_targets';
   static const String standaloneInvoicesBox = 'standalone_invoices';
+  static const String clientsBox = 'clients';
+  static const String projectClientsBox = 'project_clients';
 
   // Settings Keys
   static const String themeMode = 'theme_mode';
@@ -65,6 +67,12 @@ class AppConstants {
   static const String invoiceReportFilename = 'invoice_report_filename';
   static const String invoiceReportRezijniFilename = 'invoice_report_rezijni_filename';
   static const String invoiceInvoiceFilename = 'invoice_invoice_filename';
+
+  // The account's own billing identity (synced as one record)
+  static const String supplierProfile = 'supplier_profile';
+
+  // Whether the "create clients from invoices" preview was already offered on this device
+  static const String clientMigrationOffered = 'client_migration_offered';
 
   // Invoice Numbering
   static const String invoiceNumberCounter = 'invoice_number_counter';
