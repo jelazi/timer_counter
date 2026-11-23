@@ -42,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Desktop and web show the full navigation set; mobile omits PDF Reports and Standalone Invoices.
   List<Widget> get _screens => PlatformUtils.isMobile
-      ? const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), StatisticsScreen(), SettingsScreen()]
+      ? const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), ClientsScreen(), StatisticsScreen(), SettingsScreen()]
       : const [
           TimeTrackingScreen(),
           TimeEntriesOverviewScreen(),
@@ -145,6 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
           NavigationDestination(icon: const Icon(Icons.access_time), selectedIcon: const Icon(Icons.access_time_filled), label: tr('nav.time_tracking')),
           NavigationDestination(icon: const Icon(Icons.list_alt_outlined), selectedIcon: const Icon(Icons.list_alt), label: tr('time_entries.title')),
           NavigationDestination(icon: const Icon(Icons.folder_outlined), selectedIcon: const Icon(Icons.folder), label: tr('nav.projects')),
+          NavigationDestination(icon: const Icon(Icons.business_outlined), selectedIcon: const Icon(Icons.business), label: tr('nav.clients')),
           NavigationDestination(icon: const Icon(Icons.bar_chart_outlined), selectedIcon: const Icon(Icons.bar_chart), label: tr('nav.statistics')),
           NavigationDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings), label: tr('nav.settings')),
         ],

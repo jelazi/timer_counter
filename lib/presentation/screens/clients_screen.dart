@@ -61,31 +61,54 @@ class _ClientsScreenState extends State<ClientsScreen> {
         final query = _query.toLowerCase();
         final visible = clients.where((c) => _showArchived || !c.isArchived).where((c) => query.isEmpty || c.name.toLowerCase().contains(query) || c.ico.contains(query)).toList();
 
+        final isMobile = MediaQuery.of(context).size.width < 600;
+        final searchField = TextField(
+          decoration: InputDecoration(hintText: tr('clients.search'), prefixIcon: const Icon(Icons.search, size: 16)),
+          onChanged: (v) => setState(() => _query = v),
+        );
+        final archivedChip = FilterChip(label: Text(tr('clients.show_archived')), selected: _showArchived, onSelected: (v) => setState(() => _showArchived = v));
+
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.surface,
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              PaneHeader(
-                title: tr('clients.title'),
-                subtitle: tr('clients.subtitle'),
-                actions: [
-                  SizedBox(
-                    width: 200,
-                    child: TextField(
-                      decoration: InputDecoration(hintText: tr('clients.search'), prefixIcon: const Icon(Icons.search, size: 16)),
-                      onChanged: (v) => setState(() => _query = v),
-                    ),
+              if (isMobile)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(tr('clients.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+                          ),
+                          IconButton.filled(onPressed: _add, icon: const Icon(Icons.add), tooltip: tr('clients.add')),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      searchField,
+                      const SizedBox(height: 8),
+                      archivedChip,
+                    ],
                   ),
-                  FilterChip(label: Text(tr('clients.show_archived')), selected: _showArchived, onSelected: (v) => setState(() => _showArchived = v)),
-                  FilledButton.icon(onPressed: _add, icon: const Icon(Icons.add), label: Text(tr('clients.add'))),
-                ],
-              ),
+                )
+              else
+                PaneHeader(
+                  title: tr('clients.title'),
+                  subtitle: tr('clients.subtitle'),
+                  actions: [
+                    SizedBox(width: 200, child: searchField),
+                    archivedChip,
+                    FilledButton.icon(onPressed: _add, icon: const Icon(Icons.add), label: Text(tr('clients.add'))),
+                  ],
+                ),
               Expanded(
                 child: visible.isEmpty
                     ? _EmptyState(onAdd: _add)
                     : ListView(
-                        padding: const EdgeInsets.all(20),
+                        padding: EdgeInsets.all(isMobile ? 16 : 20),
                         children: [
                           _ClientGroup(
                             clients: visible,

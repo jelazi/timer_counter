@@ -1,5 +1,153 @@
 # Development Log
 
+## 2026-11-23 (part 13) — Clients on mobile, Android INTERNET permission, installer versions, tag v1.0.11
+
+### What was done
+
+- A3 — Clients on mobile: `home_screen.dart` mobile tabs are now Tracking, Entries, Projects,
+  **Clients**, Statistics, Settings. `clients_screen.dart` has a phone layout (< 600 pt): title with
+  an add button, search and the archived filter below; the desktop pane toolbar is unchanged.
+- B4 — `android/app/src/main/AndroidManifest.xml`: `android.permission.INTERNET` (it was only in the
+  debug/profile manifests, so a release APK could not sync).
+- B5 — `windows/installer/timer_counter_setup.iss`: `AppVersion` takes `/DAppVersion=…` and defaults
+  to 1.0.12 (was a hard-coded 1.0.10); `inno_setup.iss` default and usage comment 1.0.10 → 1.0.12.
+  `deploy_windows.bat` already passes the pubspec version to `inno_setup.iss`.
+- B6 — annotated tag `v1.0.11` on `c21afb4` (the commit that set 1.0.11+12 and was installed on the
+  devices). Not pushed. 1.0.12 is not tagged: its changes are not committed yet.
+- New `test/presentation/clients_screen_test.dart`: Clients screen at 390×844 (mobile header, no
+  overflow, client and linked project shown) and after resizing to 1100×800 (pane toolbar). The
+  shared-preferences channel is mocked for EasyLocalization.
+- A2 — installs: the user's iPhone got the new iOS build (backup first:
+  `~/Documents/timer_counter_iphone_backup_2026-11-23_19-01-58/`); launch refused because the phone
+  was locked. Eli's iPhone ("Elinka") went from available to unavailable before the install, so it
+  is still on its old build. macOS installed (backup `…container_backup_2026-11-23_19-03-13/`).
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 106 passed.
+- `flutter build apk --release`: 63.3 MB, `aapt2 dump badging`: versionName 1.0.12, versionCode 13,
+  `uses-permission: android.permission.INTERNET`. Not installed on an Android device.
+- iPhone: `devicectl device info apps` → Timer Counter 1.0.12 (13). macOS 1.0.12 running.
+
+### Pending / next steps
+
+- Eli's iPhone: unlock it / bring it on the same network, then back up its container and install.
+- Tag v1.0.12 after the user commits the current changes.
+
+## 2026-11-23 (part 12) — release 1.0.12+13 installed on the user's iPhone and the Mac
+
+### What was done
+
+- `pubspec.yaml` version 1.0.11+12 → 1.0.12+13 (clients, synced invoices, desktop UI).
+- iPhone "Lubomír Žižka’s iPhone" (iPhone 14 Pro, `00008120-000619A10AE8201E`): it ran 1.0.11 (12),
+  signed in as lzizka@gmail.com to the live server, with an empty pending queue. App container
+  (`Documents`, `Library`) backed up first with `xcrun devicectl device copy from` to
+  `~/Documents/timer_counter_iphone_backup_2026-11-23_18-54-54/`.
+- `flutter build ios --release` (26.1 MB, `cz.jelazi.timerCounter`, team BZF32VC6NQ), installed with
+  `xcrun devicectl device install app`, launched with `devicectl device process launch`.
+- macOS 1.0.12 built and installed into `/Applications` (backup
+  `~/Documents/timer_counter_container_backup_2026-11-23_18-57-09/`).
+- The second connected iPhone ("Elinka", iPhone 12) was not touched.
+
+### Current state
+
+- iPhone after launch (container copied back and read): pending empty; confirmed time_entries 726
+  (was 697 — it caught up), clients 2, project_clients 2, invoices 8, user_settings 1;
+  `clients.hive` holds Medutech s.r.o. and Mateřská škola.
+- `devicectl device info apps`: Timer Counter 1.0.12 (13). macOS bundle 1.0.12 (13), running.
+- Not checked on the phone's screen by me.
+
+### Pending / next steps
+
+- Eli's iPhone ("Elinka") when the user wants it: back up its container first, then install.
+- Android release `INTERNET` permission, Windows installer version, git tags.
+
+## 2026-11-23 (part 11) — phase 3 done: new collections on the live server, queued data uploaded
+
+### What was done
+
+- The user made a server backup and imported `pocketbase/pb_schema_clients_addon.json` in the
+  PocketBase Admin UI. In 0.36.6 the import has "Merge with the existing collections" (no "Delete
+  missing"); it had to be ON — OFF would replace the whole schema and delete the collections not in
+  the file. The user was told so before importing.
+- Verification (no superuser, read-only):
+  - anonymous `GET /api/collections/<name>/records`: all 13 app collections answer 200 (a missing
+    one answers 404), and `clients`, `invoices`, `time_entries` return 0 items without auth, so the
+    per-user rules are in place;
+  - sync ledger in this Mac's `settings.hive` before restart: pending clients 2, project_clients 2,
+    invoices 8, user_settings 1; confirmed categories 2, projects 3, tasks 12, time_entries 726,
+    monthly_targets 2, day_overrides 23;
+  - after restarting `/Applications/Timer Counter.app` (startup `downloadAll` flushes the queue):
+    pending empty; confirmed adds clients 2, project_clients 2, invoices 8, user_settings 1; the
+    existing collections' confirmed counts are unchanged;
+  - local Hive still holds both clients and the invoices.
+
+### Current state
+
+- Clients, project links, all 8 invoices and the supplier profile of lzizka's account are on the
+  server. Existing collections were not part of the import.
+- Not verified: eli.zizkova's server records (needs admin access); the import was additive, so they
+  were not touched by it.
+
+### Pending / next steps
+
+- Install the new build on the other devices (iPhone, eli.zizkova's) when convenient; older builds
+  keep working and ignore the new collections.
+
+## 2026-11-23 (part 10) — phase 3: server identified; server-side steps blocked by permissions
+
+### What was done
+
+- With the user's SSH access (`ssh root@91.98.132.127` → ok): the Timer Counter PocketBase is
+  container `cmmor94eo0006qiadvnesp5qu` (image `ghcr.io/coollabsio/pocketbase:latest`, PocketBase
+  0.36.6, `pb_data` with `backups/`), the same one as in the October restore. Read-only checks only.
+- Refused by the Claude Code permission classifier, not retried: creating the temporary superuser
+  (`pocketbase superuser upsert` in the container + auth via the API) and downloading the
+  PocketBase 0.36.6 binary for a local dry run (`gh release download`). Nothing was changed on the server.
+- `pocketbase/pb_schema_clients_addon.json`: only the 4 new collections (`clients`,
+  `project_clients`, `invoices`, `user_settings`), so an import cannot touch the existing
+  collections. Checked against the October server copy: `users` has id `_pb_users_auth_` (the
+  relation target), and no collection id or name collides.
+
+### Current state
+
+- Server unchanged. Clients, links and 8 invoices still queued on this Mac.
+- October copy for reference: lzizka 3 projects / 697 entries, eli.zizkova 2 projects / 215 entries.
+
+### Pending / next steps
+
+- The user decides: (a) do the backup + add-on import in the PocketBase Admin UI ("Delete missing"
+  off), or (b) allow the superuser/API/binary steps for Claude Code. Then compare counts before/after.
+
+## 2026-11-23 (part 9) — feat(projects): edit a project from its detail screen; phase 3 blocked on server access
+
+### What was done
+
+- `project_detail_screen.dart`: "Upravit projekt" button next to "Přidat úkol" in the toolbar; it opens
+  `ProjectFormDialog`, saves through `ProjectBloc` (`UpdateProject`) and keeps the screen in sync via a
+  local `_project` state. The old `toolbarHeight: kToolbarHeight + 28` (traffic-light offset from before
+  the sidebar shell) removed, the theme's 52 pt toolbar applies.
+- Phase 3 preparation: the live server is `http://timer.91.98.132.127.sslip.io/` (from the app
+  settings). The October dump (`pb_dump_2026-10-23/raw/data.db`) has the 10 app collections and
+  PocketBase ≥ 0.23 system tables; no local `pocketbase` binary on this Mac.
+- An SSH check to `root@91.98.132.127` was refused by the Claude Code permission classifier. The user
+  was given the rule to add (`Bash(ssh root@91.98.132.127:*)`, `Bash(scp …)` in
+  `.claude/settings.local.json`) and asked to confirm the SSH user and key login.
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 105 passed.
+- Installed: backup `~/Documents/timer_counter_container_backup_2026-11-23_18-43-20/`, release
+  58.3 MB, `codesign --verify` OK, running from `/Applications`.
+- Edit button not clicked through by me.
+
+### Pending / next steps
+
+- With access: PocketBase backup downloaded to `~/Documents/`, per-account/per-collection counts;
+  dry run on a local copy (old and new app, both accounts); then the additive import of `clients`,
+  `project_clients`, `invoices`, `user_settings` on the live server with a temporary superuser,
+  before/after comparison, superuser removed.
+
 ## 2026-11-23 (part 8) — feat(projects): richer project cards
 
 ### What was done
@@ -191,150 +339,3 @@
   (match a client already created by hand by IČO), links for 1. Ostatní / 2. Artemis with
   "Vývoj aplikace Artemis", supplier profile from the old settings, upload this Mac's invoices with
   `clientId`.
-
-## 2026-11-23 (part 4) — feat(data): clients, project–client links, synced invoices and supplier profile (phase 1, data layer)
-
-### What was done
-
-- Final decisions from the user: no validity period on a project–client link (the most recently
-  linked client is offered, the user changes it per invoice); every project–client pair has its own
-  service description; one project rate; several projects for one client go either as one line per
-  project or as one summary line, editable before issuing; one supplier per account; the export gets
-  an own format instead of Tyme. Design page updated (`docs/datovy-model.html`, artifact v3).
-- Models: `ClientModel` (Hive typeId 9), `ProjectClientModel` (typeId 10), `SupplierProfile`
-  (JSON in the settings box under `supplier_profile`), `StandaloneInvoiceModel.clientId` (HiveField 20,
-  nullable). New `parseStringOrNull` in `json_utils.dart`. Adapters generated with build_runner;
-  the regenerated adapters of untouched models were reverted, `lib/hive_registrar.g.dart` removed.
-- Repositories: `ClientRepository`, `ProjectClientRepository` (`getByProject`, `getByClient`, `find`,
-  `clientIdsForProjects` — most recently linked first), `SettingsRepository.get/set/clearSupplierProfile`.
-  Both new repositories journal deletions. Wired in `main.dart`.
-- `PocketBaseSyncService`:
-  - new collections `clients`, `project_clients`, `invoices` (searchable columns + full invoice as
-    `data` JSON) and `user_settings` (record `supplier_profile`);
-  - `pushClient/deleteClient`, `pushProjectClient/deleteProjectClient`, `pushInvoice/deleteInvoice`,
-    `pushSupplierProfile`, all through the ledger; `_localRecordMap` covers them for the offline queue;
-  - `downloadAll` fetches them with `_downloadOptionalCollection` (404/403 → skipped, nothing touched)
-    and reconciles with the same `_replaceLocal` + ledger + `SyncGuard` as the other collections;
-  - supplier profile: the side with the later `updatedAt` wins; a local profile the server lacks is
-    queued, never dropped (`_applyRemoteUserSettings`);
-  - `uploadAll` → `_uploadClientData` (failures logged, not thrown);
-  - real-time: `_subscribeClientCollections` subscribes only after `_serverHasCollection` confirms
-    the collection exists, so no unknown topic is added to the shared realtime connection;
-  - `clearLocalData` (account switch / sign-out with clear) now also wipes clients, links, invoices
-    and the profile, journalled like the rest — otherwise account A's invoices would be uploaded
-    into account B.
-- `BackupService`: version 4 adds `clients`, `project_clients`, `supplier_profile`; restoring an
-  older backup that has no `clients` key keeps the current clients and links.
-- `pocketbase/pb_schema.json`: the four collections added (additive only, 318 inserted lines,
-  existing definitions byte-identical). Not applied to any server.
-
-### Design decisions
-
-- No `client_ids` field on projects: the `projects` collection stays exactly as older builds
-  (iPhone 1.0.11, eli.zizkova's device) expect it.
-- Existing collections, `category_id` on projects and `project_id` on entries are untouched.
-
-### Current state
-
-- `flutter analyze --no-pub`: no issues.
-- `TZ=Europe/Prague flutter test --no-pub`: 102 passed (94 + 8 new: 6 in
-  `pocketbase_sync_service_test.dart` — missing collections keep the rest syncing and the new data
-  queued, queued data goes out once the collections exist, full round trip incl. invoice, client
-  order, profile newer-wins both ways, local-only profile uploaded; 2 in `backup_service_test.dart`
-  — v4 round trip, v3 restore keeps clients). The fake server got a `missingCollections` switch.
-- Proven by mutation: using `_downloadCollection` for clients, or clearing clients on every
-  restore, makes the matching test fail; restored afterwards.
-- Installed: backup `~/Documents/timer_counter_container_backup_2026-11-23_18-07-09/`, release build
-  57.9 MB, `codesign --verify` OK, running from `/Applications` with the user's data; the new
-  `clients.hive` / `project_clients.hive` boxes exist and are empty. The live server has none of the
-  new collections, so this build only skips them; nothing new is sent.
-- No UI for clients yet; nothing migrated.
-
-### Pending / next steps
-
-- Phase 2 (screens): Clients section, clients + service descriptions in the project form, new
-  invoice flow (client pick, per-project or single line, editable items), supplier profile in
-  Settings, hide categories, own export format; call the new push methods from the blocs.
-- Phase 3 (server, needs the user's OK): PocketBase dump, import the four collections without
-  deleting anything, dry run on a copy of both accounts, compare ids before/after.
-- Phase 4: migrate this Mac's customers/suppliers/invoices, links from past time invoices.
-
-## 2026-11-23 (part 3) — refactor: remove Tyme import; data model redesign (clients) proposed
-
-### What was done
-
-- Tyme import removed at the user's request (they will never use Tyme again):
-  - deleted `lib/core/services/tyme_import_service.dart`, `tyme_data_import_service.dart`,
-    `tyme_data_import_service_io.dart`, `tyme_data_import_service_stub.dart`;
-  - `settings_screen.dart`: removed the "Import data" tile, `_showImportDialog` and `_ImportDialog`;
-  - removed the `import` translation block and `settings.import_data` from en/cs;
-  - `pubspec.yaml`: dropped `sqlite3` (only the Tyme `.data` reader used it); `pubspec.lock` updated by
-    `flutter pub get`, the release bundle no longer ships `sqlite3.framework`;
-  - README: "Data Export & Import" reduced to export.
-  - The JSON/CSV export (`tyme_export_service.dart`, still Tyme format) and the backup/restore are kept.
-- Data-model review for the planned rework (categories → clients). Page published as an artifact
-  and saved as `docs/datovy-model.html`. Findings from the code:
-  - there is no client entity: category "Medutech" and invoice customer "Medutech s.r.o." are unrelated;
-    the customer is a global, index-based pick (`invoiceSelectedCustomerIndex`);
-  - the invoice rate is the rate of the first entry's project in the month, else hard-coded 550
-    (`pdf_report_service.dart:104–111`); `TaskModel.hourlyRate` is only used by the Tyme export;
-  - customers, suppliers, bank/issuer settings, invoice counter, standalone invoices and the global
-    work schedule are local-only (Hive + backup), not on PocketBase;
-  - `TimeEntryModel`/`RunningTimerModel` store `projectId` next to `taskId`;
-  - categories are only used for the Projects filter chips and Tyme import/export.
-- User decisions: categories go away in the app; a project can have several clients (M:N) and clients
-  sync; everything syncs; all PocketBase data must stay visible and the eli.zizkova account must keep
-  working. Proposed design: new collections `clients`, `project_clients`, `supplier_profiles`,
-  `invoices`, `user_settings`; existing collections unchanged (`projects` keeps `category_id`,
-  `time_entries` keeps `project_id`), categories hidden but never deleted.
-
-### Design decisions
-
-- Project ↔ client as a separate `project_clients` collection instead of a `client_ids` field on
-  projects: the `projects` collection stays byte-for-byte compatible with older builds (iPhone 1.0.11,
-  eli.zizkova's device), the link can carry its own data (default flag, service description), and
-  unlinking never touches issued invoices.
-- Rollout order: PocketBase dump → additive schema import (no "delete missing") → dry run on a copy of
-  both accounts → migration on the user's account only → other devices update whenever.
-
-### Current state
-
-- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 94 passed.
-- Installed: container backup `~/Documents/timer_counter_container_backup_2026-11-23_17-50-18/`,
-  clean `flutter build macos --release` (57.8 MB, `objective_c.framework` present,
-  `codesign --verify --deep --strict` OK), `/Applications/Timer Counter.app` replaced and launched;
-  screenshot shows the user's November entries.
-- No data-model code written yet; nothing on PocketBase changed.
-
-### Pending / next steps
-
-- Open questions to the user: validity period (from–to) on the project–client link; per-link service
-  description / hourly rate; keep or drop the Tyme-format JSON/CSV export; one or several supplier
-  profiles.
-- Then implement the clients model following the rollout order above.
-
-## 2026-11-23 (part 2) — macOS desktop UI installed into /Applications; shorter sidebar label
-
-### What was done
-
-- New rule from the user: every change is built and installed into `/Applications/Timer Counter.app`
-  on this Mac.
-- Sidebar uses a new short key `nav.time_entries` ("Time Entries" / "Záznamy"); the Czech
-  `time_entries.title` ("Přehled časových záznamů") was cut off in the 220 pt sidebar.
-- Installed: container backed up to `~/Documents/timer_counter_container_backup_2026-11-23_17-11-47/`,
-  `flutter clean && flutter pub get && flutter build macos --release`, bundle replaced (the previous
-  installed bundle kept in the session scratchpad), app launched.
-
-### Current state
-
-- `flutter analyze --no-pub`: no issues.
-- Release bundle: `objective_c.framework` and `sqlite3.framework` present,
-  `codesign --verify --deep --strict` OK, ad-hoc signed, version 1.0.11.
-- `/Applications/Timer Counter.app` running with the user's real data: the new sidebar and toolbars
-  render (screenshot of "Sledování času"), today's two entries shown.
-- The isolated preview copy was closed.
-
-### Pending / next steps
-
-- Same as the previous entry: dialogs, pushed screens and the invoice form in the new theme; dark
-  mode; Windows layout; native macOS menu bar.

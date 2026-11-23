@@ -1,5 +1,8 @@
 #define AppName "Timer Counter"
-#define AppVersion "1.0.10"
+; Pass the version from pubspec.yaml: ISCC.exe /DAppVersion=1.0.12 timer_counter_setup.iss
+#ifndef AppVersion
+#define AppVersion "1.0.12"
+#endif
 #define AppPublisher "Lubomír Žižka"
 #define AppURL "https://github.com/jelazi/timer_counter"
 #define AppExeName "timer_counter.exe"
