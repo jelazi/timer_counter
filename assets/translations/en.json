@@ -10,6 +10,7 @@
         "settings": "Settings",
         "pdf_reports": "PDF Reports",
         "standalone_invoices": "Invoices",
+        "time_entries": "Time Entries",
         "section_tracking": "Tracking",
         "section_reports": "Reports & billing"
     },

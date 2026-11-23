@@ -177,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onSelected: _select,
             items: [
               SidebarItem(icon: Icons.timer_outlined, label: tr('nav.time_tracking'), section: tr('nav.section_tracking')),
-              SidebarItem(icon: Icons.list_alt, label: tr('time_entries.title'), section: tr('nav.section_tracking')),
+              SidebarItem(icon: Icons.list_alt, label: tr('nav.time_entries'), section: tr('nav.section_tracking')),
               SidebarItem(icon: Icons.folder_outlined, label: tr('nav.projects'), section: tr('nav.section_tracking')),
               SidebarItem(icon: Icons.bar_chart, label: tr('nav.statistics'), section: tr('nav.section_reports')),
               SidebarItem(icon: Icons.picture_as_pdf_outlined, label: tr('nav.pdf_reports'), section: tr('nav.section_reports')),

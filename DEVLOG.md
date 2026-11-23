@@ -1,5 +1,31 @@
 # Development Log
 
+## 2026-11-23 (part 2) — macOS desktop UI installed into /Applications; shorter sidebar label
+
+### What was done
+
+- New rule from the user: every change is built and installed into `/Applications/Timer Counter.app`
+  on this Mac.
+- Sidebar uses a new short key `nav.time_entries` ("Time Entries" / "Záznamy"); the Czech
+  `time_entries.title` ("Přehled časových záznamů") was cut off in the 220 pt sidebar.
+- Installed: container backed up to `~/Documents/timer_counter_container_backup_2026-11-23_17-11-47/`,
+  `flutter clean && flutter pub get && flutter build macos --release`, bundle replaced (the previous
+  installed bundle kept in the session scratchpad), app launched.
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues.
+- Release bundle: `objective_c.framework` and `sqlite3.framework` present,
+  `codesign --verify --deep --strict` OK, ad-hoc signed, version 1.0.11.
+- `/Applications/Timer Counter.app` running with the user's real data: the new sidebar and toolbars
+  render (screenshot of "Sledování času"), today's two entries shown.
+- The isolated preview copy was closed.
+
+### Pending / next steps
+
+- Same as the previous entry: dialogs, pushed screens and the invoice form in the new theme; dark
+  mode; Windows layout; native macOS menu bar.
+
 ## 2026-11-23 — feat(desktop): macOS-style desktop UI (sidebar shell, compact theme, pane toolbars)
 
 ### What was done
