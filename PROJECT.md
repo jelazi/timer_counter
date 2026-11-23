@@ -4,7 +4,7 @@ description: Time tracking app for desktop and mobile with projects, statistics,
 status: active
 progress: 85
 tags: [flutter, bloc, hive, pocketbase, desktop, macos]
-next: Install 1.0.12 on Eli's iPhone (needs it unlocked and reachable; back up first); tag v1.0.12 after commit.
+next: Run setup-Timer-Counter-1.0.12.exe on the Lenovo and check the app; decide on the regenerated plugin registrants.
 agent: claude
 ---
 
