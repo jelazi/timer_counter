@@ -199,6 +199,7 @@ class StandaloneInvoicesScreen extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${tr('standalone_invoices.pdf_saved')}: $filename'),
+            persist: false,
             action: SnackBarAction(label: tr('common.open'), onPressed: () => launchUrl(Uri.file(file.path))),
           ),
         );

@@ -209,6 +209,7 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
         content: Text(tr('sync.guard_blocked', namedArgs: {'count': '${report.blockedDeletions}', 'collection': report.collection})),
         backgroundColor: Colors.orange.shade800,
         duration: const Duration(seconds: 10),
+        persist: false,
         action: SnackBarAction(
           label: tr('sync.guard_review'),
           textColor: Colors.white,

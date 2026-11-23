@@ -1,5 +1,68 @@
 # Development Log
 
+## 2026-11-23 (part 16) — fix: confirm dialogs closed the screen instead of themselves (blank pane)
+
+### What was fixed
+
+- Deleting a monthly target (and a project) left a blank pane: the dialogs were built with
+  `builder: (_)` but popped `Navigator.pop(context)` with the screen's context. Since the desktop
+  shell puts screens in a nested navigator while dialogs open on the root one, that popped the
+  screen's route, not the dialog. 12 pops in 6 dialogs (settings ×4, project delete, entry delete)
+  now use the builder's `dialogContext`.
+- New `test/presentation/dialog_context_test.dart` scans `lib/` and fails when a dialog builder pops
+  the outer `context`; it fails on the old `projects_screen.dart` (line 240) and passes now.
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues; `flutter test`: 112 passed. Installed on the Mac.
+
+### Pending / next steps
+
+- Lenovo installer: ask whether it is Windows or Android (APK 1.0.12 is built). Eli's iPhone install.
+
+## 2026-11-23 (part 15) — fix: undo snackbars stayed on screen
+
+### What was fixed
+
+- After deleting a project the "Projekt smazán" snackbar with "Zpět" never went away. Since the
+  current Flutter, `SnackBar.persist` defaults to `true` whenever an `action` is set
+  (`persist ?? action != null` in `snack_bar.dart`), so `duration` is ignored until the user closes it.
+- `persist: false` added to every snackbar with an action (6): project delete (`projects_screen`),
+  task delete (`project_detail_screen`), entry delete (`time_entries_overview_screen`), invoice delete
+  (`standalone_invoices_screen`), the undo in `settings_screen`, and the sync-guard warning in
+  `app.dart` (10 s) — they disappear after their duration again.
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 111 passed.
+- Installed on the Mac (backup `~/Documents/timer_counter_container_backup_2026-11-23_19-18-08/`);
+  not clicked through by me.
+
+## 2026-11-23 (part 14) — feat: earned amount next to tracked time
+
+### What was done
+
+- User request: every card that sums up time should also show the money earned.
+- `core/services/earnings.dart` `Earnings`: `ofEntries` (billable entries × the project's hourly rate,
+  the rule `StatisticsBloc` uses), `ofRunning` (running timers count at their project's rate — they
+  are saved as billable entries when stopped), `perProject`, `format` (whole units, locale grouping).
+- Time Tracking — "Celkem dnes" card: new column "Vyděláno dnes" (today's entries + running timers,
+  updates every tick) with "Tento měsíc: …" below; on phones it is a third row.
+- Time Entries: month card "Vyděláno …" next to the month total; each day header shows the day's
+  amount (today incl. running timers); each monthly target card shows the amount of its projects
+  for the month. `_EarnedLabel` widget, strings `earnings.earned/today/this_month` (cs/en).
+- `test/core/services/earnings_test.dart`: 5 tests (rate, non-billable / no rate / unknown project,
+  running timer, per project, Czech formatting).
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 111 passed.
+- Preview on a copy of the real data: today 890 CZK, November 32 352 CZK (Artemis target 32 352,
+  testovací cíl 0), Friday 20. 11. 2 814 CZK. The statistics' revenue uses the same rule; the
+  project cards' "K fakturaci" round per project (3 382 + 28 969 = 32 351).
+- Installed on the Mac (backup `~/Documents/timer_counter_container_backup_2026-11-23_19-14-25/`).
+  Not installed on the iPhone.
+
 ## 2026-11-23 (part 13) — Clients on mobile, Android INTERNET permission, installer versions, tag v1.0.11
 
 ### What was done

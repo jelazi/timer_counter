@@ -645,5 +645,10 @@
         "done": "Clients created",
         "nothing": "Every invoice already has its client.",
         "settings_hint": "Adds clients and project links from the customers on existing invoices"
+    },
+    "earnings": {
+        "earned": "Earned",
+        "today": "Earned today",
+        "this_month": "This month"
     }
 }

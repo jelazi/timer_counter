@@ -813,13 +813,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onPressed: () async {
                               final confirm = await showDialog<bool>(
                                 context: context,
-                                builder: (_) => AlertDialog(
+                                builder: (dialogContext) => AlertDialog(
                                   title: Text(tr('monthly_targets.delete_target')),
                                   content: Text(tr('monthly_targets.delete_confirm')),
                                   actions: [
-                                    TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+                                    TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(tr('common.cancel'))),
                                     FilledButton(
-                                      onPressed: () => Navigator.pop(context, true),
+                                      onPressed: () => Navigator.pop(dialogContext, true),
                                       style: FilledButton.styleFrom(backgroundColor: Colors.red),
                                       child: Text(tr('common.delete')),
                                     ),
@@ -838,6 +838,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     SnackBar(
                                       content: Text(tr('monthly_targets.target_deleted')),
                                       duration: const Duration(seconds: 5),
+                                      persist: false,
                                       action: SnackBarAction(
                                         label: tr('common.undo'),
                                         onPressed: () async {
@@ -1034,13 +1035,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _restoreBackup(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(tr('settings.backup_restore_action')),
         content: Text(tr('settings.backup_restore_confirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(tr('common.cancel'))),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.orange),
             child: Text(tr('settings.restore')),
           ),
@@ -1088,14 +1089,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // First confirmation
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         icon: Icon(Icons.warning_amber, size: 48, color: Theme.of(context).colorScheme.error),
         title: Text(tr('settings.delete_all_data')),
         content: Text(tr('settings.delete_all_data_confirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(tr('common.cancel'))),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: Text(tr('common.delete')),
           ),
@@ -1107,13 +1108,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Second confirmation
     final confirmedAgain = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(tr('settings.delete_all_data_final')),
         content: Text(tr('settings.delete_all_data_final_confirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(tr('common.cancel'))),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             child: Text(tr('settings.delete_all_data')),
           ),

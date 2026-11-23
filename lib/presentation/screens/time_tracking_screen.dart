@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../core/services/earnings.dart';
 import '../../core/services/monthly_target_calculator.dart';
 import '../../core/utils/calendar_day.dart';
 import '../../core/utils/time_formatter.dart';
@@ -679,6 +680,31 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
 
     final divider = Container(width: 1, height: 40, color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2));
 
+    final projectOf = context.read<ProjectRepository>().getById;
+    final runningEarned = Earnings.ofRunning(timerState.runningTimers, projectOf);
+    final todayEarned = Earnings.ofEntries(timerState.todayEntries, projectOf) + runningEarned;
+    final monthEarned = Earnings.ofEntries(context.read<TimeEntryRepository>().getThisMonth(), projectOf) + runningEarned;
+    final currency = settingsRepo.getCurrency();
+    final locale = context.locale.toString();
+    final earnedColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(tr('earnings.today'), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6))),
+        const SizedBox(height: 4),
+        Text(
+          Earnings.format(todayEarned, currency, locale),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary, fontFeatures: const [FontFeature.tabularFigures()]),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '${tr('earnings.this_month')}: ${Earnings.format(monthEarned, currency, locale)}',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500, fontSize: 11),
+        ),
+      ],
+    );
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -710,6 +736,13 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                       ],
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const SizedBox(width: 64),
+                      Expanded(child: earnedColumn),
+                    ],
+                  ),
                 ],
               );
             }
@@ -720,6 +753,10 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                 iconWidget,
                 const SizedBox(width: 16),
                 totalTodayColumn,
+                const SizedBox(width: 24),
+                divider,
+                const SizedBox(width: 24),
+                earnedColumn,
                 if (expectedHours > 0) ...[
                   const SizedBox(width: 24),
                   divider,

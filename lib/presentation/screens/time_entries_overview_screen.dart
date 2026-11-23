@@ -8,6 +8,7 @@ import '../../core/services/pocketbase_sync_service.dart';
 import '../../core/utils/calendar_day.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/project_model.dart';
+import '../../core/services/earnings.dart';
 import '../../data/models/running_timer_model.dart';
 import '../../data/models/task_model.dart';
 import '../../data/models/time_entry_model.dart';
@@ -229,6 +230,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     final runningTimersInMonth = _getRunningTimersInRange(timerState, _monthStart, _monthEnd.add(const Duration(seconds: 1)));
     final runningSecondsMonth = runningTimersInMonth.fold(0, (sum, t) => sum + t.elapsedSeconds);
     final totalSeconds = entries.fold(0, (sum, e) => sum + e.actualDurationSeconds) + runningSecondsMonth;
+    final monthEarned = Earnings.ofEntries(entries, projectRepo.getById) + Earnings.ofRunning(runningTimersInMonth, projectRepo.getById);
 
     final summaryWidgets = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,6 +251,8 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                _EarnedLabel(amount: monthEarned),
+                const SizedBox(width: 16),
                 Text('${entries.length} ${tr('time_entries.entries_count')}', style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
@@ -323,6 +327,8 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
       todayHoursPerProject.update(entry.key, (val) => val + entry.value / 3600.0, ifAbsent: () => entry.value / 3600.0);
     }
 
+    final earnedPerProject = Earnings.perProject(monthEntries, _getRunningTimersInRange(timerState, _monthStart, _monthEnd.add(const Duration(seconds: 1))), projectRepo.getById);
+
     final progressList = MonthlyTargetCalculator(
       settingsRepo,
     ).progressFor(targets, monthStart: _monthStart, hoursPerProject: hoursPerProject, todayHoursPerProject: todayHoursPerProject);
@@ -357,6 +363,8 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                       Expanded(
                         child: Text(target.name, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
                       ),
+                      _EarnedLabel(amount: target.projectIds.fold(0.0, (sum, id) => sum + (earnedPerProject[id] ?? 0)), compact: true),
+                      const SizedBox(width: 10),
                       Text(
                         '${workedHours.toStringAsFixed(1)}h / ${progressItem.targetHours.toStringAsFixed(0)}h',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: isComplete ? Colors.green : null),
@@ -424,6 +432,8 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
     final dayEnd = addCalendarDays(dayStart, 1);
     final runningDaySeconds = isToday ? _getRunningTimersInRange(timerState, dayStart, dayEnd).fold(0, (sum, t) => sum + t.elapsedSeconds) : 0;
     final dayTotalWithRunning = dayTotal + runningDaySeconds;
+    final dayEarned =
+        Earnings.ofEntries(entries, projectRepo.getById) + (isToday ? Earnings.ofRunning(_getRunningTimersInRange(timerState, dayStart, dayEnd), projectRepo.getById) : 0.0);
 
     // Calculate daily deficit/surplus based on expected hours for this day
     final expectedDayHours = settingsRepo.getExpectedHoursForDate(day);
@@ -467,6 +477,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
                   '${entries.length} \u2014 ${TimeFormatter.formatDuration(dayTotalWithRunning, showSeconds: false)}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                 ),
+                if (dayEarned > 0) ...[const SizedBox(width: 8), _EarnedLabel(amount: dayEarned, compact: true)],
                 if (hasDayExpectation) ...[
                   const SizedBox(width: 8),
                   Container(
@@ -679,12 +690,12 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
   void _deleteEntry(BuildContext context, TimeEntryModel entry) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(tr('time_tracking.delete_entry')),
         content: Text(tr('time_tracking.delete_confirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(tr('common.cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(tr('common.delete'))),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text(tr('common.cancel'))),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: Text(tr('common.delete'))),
         ],
       ),
     );
@@ -704,6 +715,7 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
       SnackBar(
         content: Text(tr('time_tracking.entry_deleted')),
         duration: const Duration(seconds: 10),
+        persist: false,
         action: SnackBarAction(
           label: tr('common.undo'),
           onPressed: () async {
@@ -1413,5 +1425,24 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
       '${tr('time_tracking.duration')}: ${TimeFormatter.formatDuration(durationSeconds, showSeconds: false)}',
       style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
     );
+  }
+}
+
+/// "Vyděláno 32 351 CZK" — money earned for the time next to it.
+class _EarnedLabel extends StatelessWidget {
+  final double amount;
+  final bool compact;
+
+  const _EarnedLabel({required this.amount, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Earnings.format(amount, context.read<SettingsRepository>().getCurrency(), context.locale.toString());
+    final style = (compact ? Theme.of(context).textTheme.bodySmall : Theme.of(context).textTheme.bodyMedium)?.copyWith(
+      fontWeight: FontWeight.w600,
+      color: Theme.of(context).colorScheme.primary,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    return Text(compact ? text : '${tr('earnings.earned')} $text', style: style);
   }
 }

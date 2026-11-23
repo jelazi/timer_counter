@@ -184,6 +184,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     SnackBar(
                       content: Text(tr('projects.task_deleted')),
                       duration: const Duration(seconds: 5),
+                      persist: false,
                       action: SnackBarAction(
                         label: tr('common.undo'),
                         onPressed: () async {

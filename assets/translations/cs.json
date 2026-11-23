@@ -645,5 +645,10 @@
         "done": "Firmy vytvořeny",
         "nothing": "Všechny faktury už mají svou firmu.",
         "settings_hint": "Doplní firmy a jejich projekty podle odběratelů v existujících fakturách"
+    },
+    "earnings": {
+        "earned": "Vyděláno",
+        "today": "Vyděláno dnes",
+        "this_month": "Tento měsíc"
     }
 }

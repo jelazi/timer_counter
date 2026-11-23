@@ -239,11 +239,11 @@ class ProjectsScreen extends StatelessWidget {
   void _showDeleteProjectDialog(BuildContext context, ProjectModel project) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(tr('projects.delete_project')),
         content: Text(tr('projects.delete_confirm')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(tr('common.cancel'))),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text(tr('common.cancel'))),
           FilledButton(
             onPressed: () {
               // Collect data for undo before deleting
@@ -251,7 +251,7 @@ class ProjectsScreen extends StatelessWidget {
               final entries = context.read<TimeEntryRepository>().getByProject(project.id);
 
               context.read<ProjectBloc>().add(DeleteProject(project.id));
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
 
               // Show SnackBar with undo
               ScaffoldMessenger.of(context).clearSnackBars();
@@ -259,6 +259,7 @@ class ProjectsScreen extends StatelessWidget {
                 SnackBar(
                   content: Text(tr('projects.project_deleted')),
                   duration: const Duration(seconds: 8),
+                  persist: false,
                   action: SnackBarAction(
                     label: tr('common.undo'),
                     onPressed: () async {
