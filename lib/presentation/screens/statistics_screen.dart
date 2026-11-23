@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/services/monthly_target_calculator.dart';
 import '../../core/utils/calendar_day.dart';
+import '../../core/utils/platform_utils.dart';
 import '../../core/utils/time_formatter.dart';
 import '../../data/models/running_timer_model.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
@@ -17,6 +18,7 @@ import '../blocs/statistics/statistics_event.dart';
 import '../blocs/statistics/statistics_state.dart';
 import '../blocs/timer/timer_bloc.dart';
 import '../blocs/timer/timer_state.dart';
+import '../widgets/desktop/pane_header.dart';
 
 class StatisticsScreen extends StatefulWidget {
   const StatisticsScreen({super.key});
@@ -129,12 +131,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         return BlocBuilder<StatisticsBloc, StatisticsState>(
           builder: (context, state) {
             final isMobile = MediaQuery.of(context).size.width < 600;
+            if (!isMobile) {
+              return Scaffold(
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                body: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    PaneHeader(title: tr('statistics.title'), actions: [_buildRangeSelector(), _buildCustomRangeButton(context)]),
+                    Expanded(
+                      child: Padding(padding: const EdgeInsets.fromLTRB(20, 12, 20, 20), child: _buildDesktopStatistics(context, state, isMobile, timerState)),
+                    ),
+                  ],
+                ),
+              );
+            }
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.surface,
-              body: Padding(
-                padding: EdgeInsets.all(isMobile ? 16 : 24),
-                child: isMobile ? _buildMobileStatistics(context, state, isMobile, timerState) : _buildDesktopStatistics(context, state, isMobile, timerState),
-              ),
+              body: Padding(padding: const EdgeInsets.all(16), child: _buildMobileStatistics(context, state, isMobile, timerState)),
             );
           },
         );
@@ -146,10 +159,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(context, state),
+        _buildHeader(context, state, pane: true),
         const SizedBox(height: 8),
         _buildProjectFilter(context, state),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         if (state is StatisticsLoaded) ...[
           _buildSummaryCards(context, state, timerState),
           if (_selectedRange == 'month') ...[const SizedBox(height: 12), _buildMonthlyTargetsProgress(context, state, timerState)],
@@ -231,11 +244,9 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     }
   }
 
-  Widget _buildHeader(BuildContext context, StatisticsState state) {
-    final locale = context.locale.languageCode;
-
-    final titleWidget = Text(tr('statistics.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold));
-    final segmentedButton = SegmentedButton<String>(
+  Widget _buildRangeSelector() {
+    return SegmentedButton<String>(
+      showSelectedIcon: PlatformUtils.isMobile,
       segments: [
         ButtonSegment(value: 'today', label: Text(tr('statistics.select_day'))),
         ButtonSegment(value: 'week', label: Text(tr('statistics.select_week'))),
@@ -254,40 +265,52 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
         }
       },
     );
-    final customRangeButton = FilledButton.tonal(
+  }
+
+  Widget _buildCustomRangeButton(BuildContext context) {
+    return FilledButton.tonal(
       onPressed: () => _showCustomRangePicker(context),
       child: Row(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.date_range, size: 18), const SizedBox(width: 4), Text(tr('statistics.custom_range'))]),
     );
+  }
+
+  Widget _buildHeader(BuildContext context, StatisticsState state, {bool pane = false}) {
+    final locale = context.locale.languageCode;
+
+    final titleWidget = Text(tr('statistics.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold));
+    final segmentedButton = _buildRangeSelector();
+    final customRangeButton = _buildCustomRangeButton(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth < 600) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        if (!pane)
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 600) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    titleWidget,
+                    const SizedBox(height: 12),
+                    SizedBox(width: double.infinity, child: segmentedButton),
+                    const SizedBox(height: 8),
+                    customRangeButton,
+                  ],
+                );
+              }
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   titleWidget,
-                  const SizedBox(height: 12),
-                  SizedBox(width: double.infinity, child: segmentedButton),
-                  const SizedBox(height: 8),
-                  customRangeButton,
+                  Row(mainAxisSize: MainAxisSize.min, children: [segmentedButton, const SizedBox(width: 8), customRangeButton]),
                 ],
               );
-            }
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                titleWidget,
-                Row(mainAxisSize: MainAxisSize.min, children: [segmentedButton, const SizedBox(width: 8), customRangeButton]),
-              ],
-            );
-          },
-        ),
+            },
+          ),
         if (_selectedRange != 'custom')
           Padding(
-            padding: const EdgeInsets.only(top: 12),
+            padding: EdgeInsets.only(top: pane ? 0 : 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -344,6 +367,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     final locale = context.locale.languageCode;
 
     final segmentedButton = SegmentedButton<String>(
+      showSelectedIcon: PlatformUtils.isMobile,
       segments: [
         ButtonSegment(value: 'today', label: Text(tr('statistics.select_day'))),
         ButtonSegment(value: 'week', label: Text(tr('statistics.select_week'))),
@@ -601,6 +625,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SegmentedButton<String>(
+                      showSelectedIcon: PlatformUtils.isMobile,
                       segments: [
                         ButtonSegment(value: 'day', label: Text(tr('statistics.select_day'))),
                         ButtonSegment(value: 'week', label: Text(tr('statistics.select_week'))),
@@ -1107,6 +1132,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                         // Scale font down proportionally when space is tight, min 9px
                         final fontSize = (constraints.maxWidth / 18).clamp(9.0, 11.0);
                         return SegmentedButton<String>(
+                          showSelectedIcon: PlatformUtils.isMobile,
                           segments: [
                             ButtonSegment(
                               value: 'projects',

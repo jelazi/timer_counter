@@ -9,6 +9,18 @@ class MainFlutterWindow: NSWindow {
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
 
+    // An empty unified toolbar gives the 52 pt titlebar of Mail/Finder, so the
+    // window buttons line up with the Flutter sidebar and pane toolbars.
+    let toolbar = NSToolbar(identifier: "MainToolbar")
+    toolbar.showsBaselineSeparator = false
+    self.toolbar = toolbar
+    if #available(macOS 11.0, *) {
+      self.toolbarStyle = .unified
+    }
+    self.titleVisibility = .hidden
+    self.titlebarAppearsTransparent = true
+    self.styleMask.insert(.fullSizeContentView)
+
     // Handle launch_at_startup MethodChannel using SMAppService (macOS 13+)
     let launchChannel = FlutterMethodChannel(
       name: "launch_at_startup",

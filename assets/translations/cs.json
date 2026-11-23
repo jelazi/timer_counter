@@ -9,7 +9,9 @@
         "statistics": "Statistiky",
         "settings": "Nastavení",
         "pdf_reports": "PDF Reporty",
-        "standalone_invoices": "Faktury"
+        "standalone_invoices": "Faktury",
+        "section_tracking": "Sledování",
+        "section_reports": "Přehledy a fakturace"
     },
     "time_tracking": {
         "title": "Sledování času",

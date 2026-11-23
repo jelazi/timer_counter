@@ -17,6 +17,7 @@ import '../blocs/settings/settings_state.dart';
 import '../blocs/timer/timer_bloc.dart';
 import '../blocs/timer/timer_event.dart';
 import '../blocs/timer/timer_state.dart';
+import '../widgets/desktop/pane_header.dart';
 import '../widgets/time_entry_list_item.dart';
 
 class TimeTrackingScreen extends StatefulWidget {
@@ -213,243 +214,244 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
 
     final isMobile = MediaQuery.of(context).size.width < 600;
 
+    final dateLabel = DateFormat('EEEE, d MMMM yyyy', context.locale.languageCode).format(DateTime.now());
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      body: Padding(
-        padding: EdgeInsets.all(isMobile ? 16 : 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            if (isMobile) ...[
-              Text(tr('time_tracking.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              Text(
-                DateFormat('EEEE, d MMMM yyyy', context.locale.languageCode).format(DateTime.now()),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-              ),
-              if (isRunning) ...[const SizedBox(height: 8), _buildRunningBadge(context, timerState, settingsState)],
-            ] else ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!isMobile) PaneHeader(title: tr('time_tracking.title'), subtitle: dateLabel, actions: [if (isRunning) _buildRunningBadge(context, timerState, settingsState)]),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.all(isMobile ? 16 : 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(tr('time_tracking.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(
-                        DateFormat('EEEE, d MMMM yyyy', context.locale.languageCode).format(DateTime.now()),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                      ),
-                    ],
-                  ),
-                  if (isRunning) ...[_buildRunningBadge(context, timerState, settingsState)],
-                ],
-              ),
-            ],
-            const SizedBox(height: 16),
-            // Recent tasks quick-select
-            _buildRecentTasksChips(context, timerState),
-            // Project/Task selector card
-            Card(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 12),
-                child: isMobile
-                    ? Column(
-                        children: [
-                          DropdownButtonFormField<ProjectModel>(
-                            decoration: InputDecoration(
-                              labelText: tr('time_tracking.select_project'),
-                              prefixIcon: const Icon(Icons.folder_outlined),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                            isExpanded: true,
-                            initialValue: _selectedProject,
-                            items: projects.map((project) {
-                              return DropdownMenuItem(
-                                value: project,
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 10,
-                                      height: 10,
-                                      decoration: BoxDecoration(color: Color(project.colorValue), shape: BoxShape.circle),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(child: Text(project.name, overflow: TextOverflow.ellipsis)),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (project) {
-                              setState(() => _selectedProject = project);
-                              if (project != null) _loadTasks(project.id);
-                            },
-                          ),
-                          const SizedBox(height: 8),
-                          DropdownButtonFormField<TaskModel>(
-                            decoration: InputDecoration(
-                              labelText: tr('time_tracking.select_task'),
-                              prefixIcon: const Icon(Icons.task_outlined),
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                            isExpanded: true,
-                            initialValue: _selectedTask,
-                            items: _tasks.map((task) => DropdownMenuItem(value: task, child: Text(task.name))).toList(),
-                            onChanged: (task) => setState(() => _selectedTask = task),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(width: double.infinity, height: 48, child: _buildActionButton(buttonMode, timerState)),
-                        ],
-                      )
-                    : Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: DropdownButtonFormField<ProjectModel>(
-                              decoration: InputDecoration(
-                                labelText: tr('time_tracking.select_project'),
-                                prefixIcon: const Icon(Icons.folder_outlined),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              ),
-                              isExpanded: true,
-                              initialValue: _selectedProject,
-                              items: projects.map((project) {
-                                return DropdownMenuItem(
-                                  value: project,
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(color: Color(project.colorValue), shape: BoxShape.circle),
+                  // Header
+                  if (isMobile) ...[
+                    Text(tr('time_tracking.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(
+                      DateFormat('EEEE, d MMMM yyyy', context.locale.languageCode).format(DateTime.now()),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                    ),
+                    if (isRunning) ...[const SizedBox(height: 8), _buildRunningBadge(context, timerState, settingsState)],
+                    const SizedBox(height: 16),
+                  ],
+                  // Recent tasks quick-select
+                  _buildRecentTasksChips(context, timerState),
+                  // Project/Task selector card
+                  Card(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 12),
+                      child: isMobile
+                          ? Column(
+                              children: [
+                                DropdownButtonFormField<ProjectModel>(
+                                  decoration: InputDecoration(
+                                    labelText: tr('time_tracking.select_project'),
+                                    prefixIcon: const Icon(Icons.folder_outlined),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  ),
+                                  isExpanded: true,
+                                  initialValue: _selectedProject,
+                                  items: projects.map((project) {
+                                    return DropdownMenuItem(
+                                      value: project,
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 10,
+                                            height: 10,
+                                            decoration: BoxDecoration(color: Color(project.colorValue), shape: BoxShape.circle),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(child: Text(project.name, overflow: TextOverflow.ellipsis)),
+                                        ],
                                       ),
-                                      const SizedBox(width: 8),
-                                      Expanded(child: Text(project.name, overflow: TextOverflow.ellipsis)),
-                                    ],
+                                    );
+                                  }).toList(),
+                                  onChanged: (project) {
+                                    setState(() => _selectedProject = project);
+                                    if (project != null) _loadTasks(project.id);
+                                  },
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<TaskModel>(
+                                  decoration: InputDecoration(
+                                    labelText: tr('time_tracking.select_task'),
+                                    prefixIcon: const Icon(Icons.task_outlined),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                   ),
-                                );
-                              }).toList(),
-                              onChanged: (project) {
-                                setState(() => _selectedProject = project);
-                                if (project != null) _loadTasks(project.id);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 3,
-                            child: DropdownButtonFormField<TaskModel>(
-                              decoration: InputDecoration(
-                                labelText: tr('time_tracking.select_task'),
-                                prefixIcon: const Icon(Icons.task_outlined),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              ),
-                              isExpanded: true,
-                              initialValue: _selectedTask,
-                              items: _tasks.map((task) => DropdownMenuItem(value: task, child: Text(task.name))).toList(),
-                              onChanged: (task) => setState(() => _selectedTask = task),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          SizedBox(height: 48, child: _buildActionButton(buttonMode, timerState)),
-                        ],
-                      ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (isMobile) ...[
-              // Cards scroll with entries on mobile
-              Expanded(
-                child: timerState.todayEntries.isEmpty
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
-                          _buildTotalTodayCard(context, timerState, settingsState),
-                          const SizedBox(height: 16),
-                          Expanded(
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.timer_off_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    tr('time_tracking.no_entries_today'),
-                                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : ListView(
-                        children: [
-                          if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
-                          _buildTotalTodayCard(context, timerState, settingsState),
-                          const SizedBox(height: 16),
-                          Text(tr('time_tracking.today'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 12),
-                          ...timerState.todayEntries.map((entry) {
-                            final projectRepo = context.read<ProjectRepository>();
-                            final taskRepo = context.read<TaskRepository>();
-                            final project = projectRepo.getById(entry.projectId);
-                            final task = taskRepo.getById(entry.taskId);
-                            return TimeEntryListItem(entry: entry, project: project, task: task, showSeconds: settingsState.showSeconds);
-                          }),
-                        ],
-                      ),
-              ),
-            ] else ...[
-              if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
-              _buildTotalTodayCard(context, timerState, settingsState),
-              const SizedBox(height: 24),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(tr('time_tracking.today'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: timerState.todayEntries.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.timer_off_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    tr('time_tracking.no_entries_today'),
-                                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
-                                  ),
-                                ],
-                              ),
+                                  isExpanded: true,
+                                  initialValue: _selectedTask,
+                                  items: _tasks.map((task) => DropdownMenuItem(value: task, child: Text(task.name))).toList(),
+                                  onChanged: (task) => setState(() => _selectedTask = task),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(width: double.infinity, height: 48, child: _buildActionButton(buttonMode, timerState)),
+                              ],
                             )
-                          : ListView.builder(
-                              itemCount: timerState.todayEntries.length,
-                              itemBuilder: (context, index) {
-                                final entry = timerState.todayEntries[index];
-                                final projectRepo = context.read<ProjectRepository>();
-                                final taskRepo = context.read<TaskRepository>();
-                                final project = projectRepo.getById(entry.projectId);
-                                final task = taskRepo.getById(entry.taskId);
-                                return TimeEntryListItem(entry: entry, project: project, task: task, showSeconds: settingsState.showSeconds);
-                              },
+                          : Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: DropdownButtonFormField<ProjectModel>(
+                                    decoration: InputDecoration(
+                                      labelText: tr('time_tracking.select_project'),
+                                      prefixIcon: const Icon(Icons.folder_outlined),
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
+                                    isExpanded: true,
+                                    initialValue: _selectedProject,
+                                    items: projects.map((project) {
+                                      return DropdownMenuItem(
+                                        value: project,
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 10,
+                                              height: 10,
+                                              decoration: BoxDecoration(color: Color(project.colorValue), shape: BoxShape.circle),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(child: Text(project.name, overflow: TextOverflow.ellipsis)),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (project) {
+                                      setState(() => _selectedProject = project);
+                                      if (project != null) _loadTasks(project.id);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  flex: 3,
+                                  child: DropdownButtonFormField<TaskModel>(
+                                    decoration: InputDecoration(
+                                      labelText: tr('time_tracking.select_task'),
+                                      prefixIcon: const Icon(Icons.task_outlined),
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
+                                    isExpanded: true,
+                                    initialValue: _selectedTask,
+                                    items: _tasks.map((task) => DropdownMenuItem(value: task, child: Text(task.name))).toList(),
+                                    onChanged: (task) => setState(() => _selectedTask = task),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                SizedBox(height: 34, child: _buildActionButton(buttonMode, timerState)),
+                              ],
                             ),
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (isMobile) ...[
+                    // Cards scroll with entries on mobile
+                    Expanded(
+                      child: timerState.todayEntries.isEmpty
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
+                                _buildTotalTodayCard(context, timerState, settingsState),
+                                const SizedBox(height: 16),
+                                Expanded(
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.timer_off_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          tr('time_tracking.no_entries_today'),
+                                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : ListView(
+                              children: [
+                                if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
+                                _buildTotalTodayCard(context, timerState, settingsState),
+                                const SizedBox(height: 16),
+                                Text(tr('time_tracking.today'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 12),
+                                ...timerState.todayEntries.map((entry) {
+                                  final projectRepo = context.read<ProjectRepository>();
+                                  final taskRepo = context.read<TaskRepository>();
+                                  final project = projectRepo.getById(entry.projectId);
+                                  final task = taskRepo.getById(entry.taskId);
+                                  return TimeEntryListItem(entry: entry, project: project, task: task, showSeconds: settingsState.showSeconds);
+                                }),
+                              ],
+                            ),
+                    ),
+                  ] else ...[
+                    if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
+                    _buildTotalTodayCard(context, timerState, settingsState),
+                    const SizedBox(height: 24),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(tr('time_tracking.today'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 12),
+                          Expanded(
+                            child: timerState.todayEntries.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.timer_off_outlined, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.3)),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          tr('time_tracking.no_entries_today'),
+                                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : TimeEntryGroup(
+                                    child: ListView.builder(
+                                      shrinkWrap: true,
+                                      itemCount: timerState.todayEntries.length,
+                                      itemBuilder: (context, index) {
+                                        final entry = timerState.todayEntries[index];
+                                        final projectRepo = context.read<ProjectRepository>();
+                                        final taskRepo = context.read<TaskRepository>();
+                                        final project = projectRepo.getById(entry.projectId);
+                                        final task = taskRepo.getById(entry.taskId);
+                                        return TimeEntryListItem(
+                                          entry: entry,
+                                          project: project,
+                                          task: task,
+                                          showSeconds: settingsState.showSeconds,
+                                          isLast: index == timerState.todayEntries.length - 1,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
-                ),
+                ],
               ),
-            ],
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -465,7 +467,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 12, vertical: isMobile ? 8 : 4),
       decoration: BoxDecoration(
         color: projectColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(24),

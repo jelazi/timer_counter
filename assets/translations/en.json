@@ -9,7 +9,9 @@
         "statistics": "Statistics",
         "settings": "Settings",
         "pdf_reports": "PDF Reports",
-        "standalone_invoices": "Invoices"
+        "standalone_invoices": "Invoices",
+        "section_tracking": "Tracking",
+        "section_reports": "Reports & billing"
     },
     "time_tracking": {
         "title": "Time Tracking",

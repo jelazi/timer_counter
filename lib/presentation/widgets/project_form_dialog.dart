@@ -7,6 +7,7 @@ import '../../core/constants/app_constants.dart';
 import '../../data/models/project_model.dart';
 import '../blocs/category/category_bloc.dart';
 import '../blocs/category/category_state.dart';
+import 'app_switch_tile.dart';
 
 class ProjectFormDialog extends StatefulWidget {
   final ProjectModel? project;
@@ -209,7 +210,7 @@ class _ProjectFormDialogState extends State<ProjectFormDialog> {
               const SizedBox(height: 12),
 
               // Billable
-              SwitchListTile(title: Text(tr('projects.billable')), value: _isBillable, onChanged: (v) => setState(() => _isBillable = v), contentPadding: EdgeInsets.zero),
+              AppSwitchTile(title: Text(tr('projects.billable')), value: _isBillable, onChanged: (v) => setState(() => _isBillable = v), contentPadding: EdgeInsets.zero),
 
               // Notes
               TextField(

@@ -10,6 +10,7 @@ import '../../data/repositories/time_entry_repository.dart';
 import '../blocs/task/task_bloc.dart';
 import '../blocs/task/task_event.dart';
 import '../blocs/task/task_state.dart';
+import '../widgets/app_switch_tile.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
   final ProjectModel project;
@@ -219,7 +220,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   maxLines: 3,
                 ),
                 const SizedBox(height: 12),
-                SwitchListTile(title: Text(tr('projects.billable')), value: isBillable, onChanged: (v) => setDialogState(() => isBillable = v), contentPadding: EdgeInsets.zero),
+                AppSwitchTile(title: Text(tr('projects.billable')), value: isBillable, onChanged: (v) => setDialogState(() => isBillable = v), contentPadding: EdgeInsets.zero),
               ],
             ),
           ),

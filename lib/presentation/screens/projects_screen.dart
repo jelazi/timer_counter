@@ -17,6 +17,7 @@ import '../blocs/project/project_bloc.dart';
 import '../blocs/project/project_event.dart';
 import '../blocs/project/project_state.dart';
 import '../widgets/category_form_dialog.dart';
+import '../widgets/desktop/pane_header.dart';
 import '../widgets/project_form_dialog.dart';
 import 'project_detail_screen.dart';
 
@@ -30,6 +31,29 @@ class ProjectsScreen extends StatelessWidget {
         return BlocBuilder<CategoryBloc, CategoryState>(
           builder: (context, categoryState) {
             final isMobile = MediaQuery.of(context).size.width < 600;
+            if (!isMobile) {
+              return Scaffold(
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                body: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildHeader(context, projectState, pane: true),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (categoryState is CategoryLoaded) ...[_buildCategoryFilter(context, categoryState, projectState), const SizedBox(height: 16)],
+                            Expanded(child: _buildProjectsList(context, projectState)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.surface,
               body: Padding(
@@ -52,7 +76,7 @@ class ProjectsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, ProjectState projectState) {
+  Widget _buildHeader(BuildContext context, ProjectState projectState, {bool pane = false}) {
     bool showArchived = false;
     if (projectState is ProjectLoaded) {
       showArchived = projectState.showArchived;
@@ -87,6 +111,18 @@ class ProjectsScreen extends StatelessWidget {
     );
 
     final addProjectButton = FilledButton.icon(onPressed: () => _showAddProjectDialog(context), icon: const Icon(Icons.add), label: Text(tr('projects.add_project')));
+
+    if (pane) {
+      return PaneHeader(
+        title: tr('projects.title'),
+        actions: [
+          SizedBox(width: 200, child: searchField),
+          filterChip,
+          addCategoryButton,
+          addProjectButton,
+        ],
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {

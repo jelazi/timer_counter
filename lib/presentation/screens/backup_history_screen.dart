@@ -7,6 +7,7 @@ import '../../core/services/daily_snapshot_service.dart';
 import '../../core/services/deletion_journal_service.dart';
 import '../../core/services/pocketbase_sync_service.dart';
 import '../../core/services/snapshot_diff_service.dart';
+import '../widgets/app_switch_tile.dart';
 
 /// Local snapshot history and the deletion journal — the two places to look
 /// when data has vanished.
@@ -319,7 +320,7 @@ class _DiffScreenState extends State<_DiffScreen> {
                     ),
                   ),
                 if (canPush)
-                  SwitchListTile(
+                  AppSwitchTile(
                     value: _pushToServer,
                     onChanged: (v) => setState(() => _pushToServer = v),
                     title: Text(tr('backup_history.push_to_server')),

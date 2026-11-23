@@ -11,6 +11,7 @@ import '../core/services/deletion_journal_service.dart';
 import '../core/services/pocketbase_sync_service.dart';
 import '../core/services/snapshot_diff_service.dart';
 import '../core/theme/app_theme.dart';
+import '../core/theme/desktop_theme.dart';
 import '../core/utils/platform_utils.dart';
 import '../core/utils/time_formatter.dart';
 import '../data/repositories/category_repository.dart';
@@ -24,6 +25,7 @@ import '../data/repositories/time_entry_repository.dart';
 import '../presentation/blocs/category/category_bloc.dart';
 import '../presentation/blocs/category/category_event.dart';
 import '../presentation/blocs/project/project_bloc.dart';
+import '../presentation/blocs/project/project_event.dart';
 import '../presentation/blocs/settings/settings_bloc.dart';
 import '../presentation/blocs/settings/settings_event.dart';
 import '../presentation/blocs/standalone_invoice/standalone_invoice_bloc.dart';
@@ -98,7 +100,8 @@ class TymeApp extends StatelessWidget {
           ),
           BlocProvider<ProjectBloc>(
             create: (context) =>
-                ProjectBloc(projectRepository: projectRepository, taskRepository: taskRepository, timeEntryRepository: timeEntryRepository, syncService: pocketBaseSyncService),
+                ProjectBloc(projectRepository: projectRepository, taskRepository: taskRepository, timeEntryRepository: timeEntryRepository, syncService: pocketBaseSyncService)
+                  ..add(const LoadProjects()),
           ),
           BlocProvider<TaskBloc>(
             create: (context) => TaskBloc(taskRepository: taskRepository, timeEntryRepository: timeEntryRepository, syncService: pocketBaseSyncService)..add(LoadAllTasks()),
@@ -221,8 +224,8 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
           title: 'Timer Counter',
           debugShowCheckedModeBanner: false,
           scaffoldMessengerKey: _messengerKey,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
+          theme: PlatformUtils.isDesktop ? DesktopTheme.light : AppTheme.lightTheme,
+          darkTheme: PlatformUtils.isDesktop ? DesktopTheme.dark : AppTheme.darkTheme,
           themeMode: mode,
           localizationsDelegates: context.localizationDelegates,
           supportedLocales: context.supportedLocales,

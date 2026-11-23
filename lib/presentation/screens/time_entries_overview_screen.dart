@@ -21,6 +21,8 @@ import '../blocs/settings/settings_state.dart';
 import '../blocs/timer/timer_bloc.dart';
 import '../blocs/timer/timer_event.dart';
 import '../blocs/timer/timer_state.dart';
+import '../widgets/app_switch_tile.dart';
+import '../widgets/desktop/pane_header.dart';
 
 class TimeEntriesOverviewScreen extends StatefulWidget {
   const TimeEntriesOverviewScreen({super.key});
@@ -69,6 +71,30 @@ class _TimeEntriesOverviewScreenState extends State<TimeEntriesOverviewScreen> {
         return BlocBuilder<SettingsBloc, SettingsState>(
           builder: (context, settingsState) {
             final isMobile = MediaQuery.of(context).size.width < 600;
+            if (!isMobile) {
+              return Scaffold(
+                backgroundColor: Theme.of(context).colorScheme.surface,
+                body: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    PaneHeader(
+                      title: tr('time_entries.title'),
+                      center: _buildMonthNavigator(context),
+                      actions: [
+                        FilledButton.icon(
+                          onPressed: () => _showAddManualEntryDialog(context, settingsState),
+                          icon: const Icon(Icons.add),
+                          label: Text(tr('time_entries.add_manual')),
+                        ),
+                      ],
+                    ),
+                    Expanded(
+                      child: Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 0), child: _buildMonthlyView(context, settingsState)),
+                    ),
+                  ],
+                ),
+              );
+            }
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.surface,
               body: Padding(
@@ -983,7 +1009,7 @@ class _AddManualEntryDialogState extends State<_AddManualEntryDialog> {
             const SizedBox(height: 8),
 
             // Billable toggle
-            SwitchListTile(contentPadding: EdgeInsets.zero, title: Text(tr('projects.billable')), value: _isBillable, onChanged: (v) => setState(() => _isBillable = v)),
+            AppSwitchTile(contentPadding: EdgeInsets.zero, title: Text(tr('projects.billable')), value: _isBillable, onChanged: (v) => setState(() => _isBillable = v)),
 
             // Overlap error
             if (_overlapError != null)
@@ -1309,7 +1335,7 @@ class _EditEntryDialogState extends State<_EditEntryDialog> {
             const SizedBox(height: 8),
 
             // Billable toggle
-            SwitchListTile(contentPadding: EdgeInsets.zero, title: Text(tr('projects.billable')), value: _isBillable, onChanged: (v) => setState(() => _isBillable = v)),
+            AppSwitchTile(contentPadding: EdgeInsets.zero, title: Text(tr('projects.billable')), value: _isBillable, onChanged: (v) => setState(() => _isBillable = v)),
 
             // Overlap error
             if (_overlapError != null)

@@ -31,8 +31,10 @@ import '../blocs/settings/settings_state.dart';
 import '../blocs/timer/timer_bloc.dart';
 import '../blocs/timer/timer_event.dart';
 import '../widgets/day_overrides_calendar.dart';
+import '../widgets/desktop/pane_header.dart';
 import 'backup_history_screen.dart';
 import 'work_context_screen.dart';
+import '../widgets/app_switch_tile.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -42,6 +44,13 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  Widget _constrainWidth(bool isMobile, Widget child) {
+    if (isMobile) return child;
+    return Center(
+      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 760), child: child),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<SettingsBloc, SettingsState>(
@@ -49,519 +58,540 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final isMobile = MediaQuery.of(context).size.width < 600;
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.surface,
-          body: Padding(
-            padding: EdgeInsets.all(isMobile ? 16 : 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(tr('settings.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Appearance Section
-                        _buildSectionTitle(context, tr('settings.appearance')),
-                        Card(
-                          child: Column(
-                            children: [
-                              // Theme
-                              ListTile(
-                                leading: const Icon(Icons.palette_outlined),
-                                title: Text(tr('settings.theme')),
-                                trailing: SegmentedButton<String>(
-                                  segments: [
-                                    ButtonSegment(value: 'light', icon: const Icon(Icons.light_mode, size: 18)),
-                                    ButtonSegment(value: 'system', icon: const Icon(Icons.auto_mode, size: 18)),
-                                    ButtonSegment(value: 'dark', icon: const Icon(Icons.dark_mode, size: 18)),
-                                  ],
-                                  selected: {state.themeMode},
-                                  onSelectionChanged: (selected) {
-                                    context.read<SettingsBloc>().add(ChangeThemeMode(selected.first));
-                                  },
-                                ),
-                              ),
-                              const Divider(height: 1),
-                              // Language
-                              ListTile(
-                                leading: const Icon(Icons.language),
-                                title: Text(tr('settings.language')),
-                                trailing: DropdownButton<String>(
-                                  value: state.language,
-                                  underline: const SizedBox(),
-                                  items: const [
-                                    DropdownMenuItem(value: 'en', child: Text('English')),
-                                    DropdownMenuItem(value: 'cs', child: Text('Čeština')),
-                                  ],
-                                  onChanged: (lang) {
-                                    if (lang != null) {
-                                      context.read<SettingsBloc>().add(ChangeLanguage(lang));
-                                      context.setLocale(Locale(lang));
-                                    }
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Timer Settings
-                        _buildSectionTitle(context, tr('settings.timer_settings')),
-                        Card(
-                          child: Column(
-                            children: [
-                              SwitchListTile(
-                                secondary: const Icon(Icons.timer),
-                                title: Text(tr('settings.simultaneous_timers')),
-                                value: state.simultaneousTimers,
-                                onChanged: (v) {
-                                  context.read<SettingsBloc>().add(ToggleSimultaneousTimers(v));
-                                },
-                              ),
-                              const Divider(height: 1),
-                              SwitchListTile(
-                                secondary: const Icon(Icons.av_timer),
-                                title: Text(tr('settings.show_seconds')),
-                                value: state.showSeconds,
-                                onChanged: (v) {
-                                  context.read<SettingsBloc>().add(ToggleShowSeconds(v));
-                                },
-                              ),
-                              const Divider(height: 1),
-                              SwitchListTile(
-                                secondary: const Icon(Icons.rounded_corner),
-                                title: Text(tr('settings.round_time')),
-                                value: state.roundTime,
-                                onChanged: (v) {
-                                  context.read<SettingsBloc>().add(ToggleRoundTime(v));
-                                },
-                              ),
-                              if (state.roundTime) ...[
-                                const Divider(height: 1),
-                                ListTile(
-                                  leading: const SizedBox(width: 24),
-                                  title: Text(tr('settings.round_to')),
-                                  trailing: DropdownButton<int>(
-                                    value: state.roundToMinutes,
-                                    underline: const SizedBox(),
-                                    items: [
-                                      DropdownMenuItem(value: 5, child: Text(tr('settings.minutes_5'))),
-                                      DropdownMenuItem(value: 10, child: Text(tr('settings.minutes_10'))),
-                                      DropdownMenuItem(value: 15, child: Text(tr('settings.minutes_15'))),
-                                      DropdownMenuItem(value: 30, child: Text(tr('settings.minutes_30'))),
-                                    ],
-                                    onChanged: (v) {
-                                      if (v != null) {
-                                        context.read<SettingsBloc>().add(ChangeRoundToMinutes(v));
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Working Hours
-                        _buildSectionTitle(context, tr('settings.working_hours')),
-                        Card(
-                          child: Column(
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(tr('settings.work_schedule'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      tr('settings.work_schedule_desc'),
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    ...List.generate(7, (i) {
-                                      final weekday = i + 1;
-                                      final dayNames = [
-                                        tr('settings.monday'),
-                                        tr('settings.tuesday'),
-                                        tr('settings.wednesday'),
-                                        tr('settings.thursday'),
-                                        tr('settings.friday'),
-                                        tr('settings.saturday'),
-                                        tr('settings.sunday'),
-                                      ];
-                                      final schedule = state.workSchedule[weekday];
-                                      if (schedule == null) return const SizedBox();
-                                      return Padding(
-                                        padding: const EdgeInsets.only(bottom: 8),
-                                        child: Row(
-                                          children: [
-                                            SizedBox(
-                                              width: 28,
-                                              child: Checkbox(
-                                                value: schedule.enabled,
-                                                onChanged: (v) => context.read<SettingsBloc>().add(ChangeWorkSchedule(weekday: weekday, enabled: v ?? false)),
-                                              ),
-                                            ),
-                                            Expanded(
-                                              child: Text(
-                                                dayNames[i],
-                                                style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            _WorkTimeButton(
-                                              time: schedule.start,
-                                              enabled: schedule.enabled,
-                                              onTap: () async {
-                                                final parts = schedule.start.split(':');
-                                                final picked = await showTimePicker(
-                                                  context: context,
-                                                  initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
-                                                );
-                                                if (picked != null && context.mounted) {
-                                                  context.read<SettingsBloc>().add(
-                                                    ChangeWorkSchedule(
-                                                      weekday: weekday,
-                                                      start: '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}',
-                                                    ),
-                                                  );
-                                                }
-                                              },
-                                            ),
-                                            Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                                              child: Text('—', style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4))),
-                                            ),
-                                            _WorkTimeButton(
-                                              time: schedule.end,
-                                              enabled: schedule.enabled,
-                                              onTap: () async {
-                                                final parts = schedule.end.split(':');
-                                                final picked = await showTimePicker(
-                                                  context: context,
-                                                  initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
-                                                );
-                                                if (picked != null && context.mounted) {
-                                                  context.read<SettingsBloc>().add(
-                                                    ChangeWorkSchedule(
-                                                      weekday: weekday,
-                                                      end: '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}',
-                                                    ),
-                                                  );
-                                                }
-                                              },
-                                            ),
-                                            const SizedBox(width: 8),
-                                            if (schedule.enabled)
-                                              Text(
-                                                _calculateDayHours(schedule.start, schedule.end),
-                                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w500),
-                                              ),
-                                          ],
-                                        ),
-                                      );
-                                    }),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Day Overrides (monthly adjustments)
-                        _buildDayOverridesSection(context),
-                        const SizedBox(height: 20),
-
-                        // Monthly Hours Targets
-                        _buildMonthlyTargetsSection(context),
-                        const SizedBox(height: 20),
-
-                        // PocketBase
-                        _buildPocketBaseSection(context),
-                        const SizedBox(height: 20),
-
-                        // Format & Currency
-                        _buildSectionTitle(context, tr('settings.general')),
-                        Card(
-                          child: Column(
-                            children: [
-                              if (isMobile)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!isMobile) PaneHeader(title: tr('settings.title')),
+              Expanded(
+                child: Padding(
+                  padding: isMobile ? const EdgeInsets.all(16) : const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isMobile) ...[
+                        Text(tr('settings.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 24),
+                      ],
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: _constrainWidth(
+                            isMobile,
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Appearance Section
+                                _buildSectionTitle(context, tr('settings.appearance')),
+                                Card(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.access_time),
-                                          const SizedBox(width: 16),
-                                          Text(tr('settings.time_format'), style: Theme.of(context).textTheme.bodyLarge),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      SizedBox(
-                                        width: double.infinity,
-                                        child: SegmentedButton<String>(
+                                      // Theme
+                                      ListTile(
+                                        leading: const Icon(Icons.palette_outlined),
+                                        title: Text(tr('settings.theme')),
+                                        trailing: SegmentedButton<String>(
+                                          showSelectedIcon: PlatformUtils.isMobile,
                                           segments: [
-                                            ButtonSegment(value: 'hm', label: Text(tr('settings.hours_minutes'))),
-                                            ButtonSegment(value: 'decimal', label: Text(tr('settings.decimal'))),
+                                            ButtonSegment(value: 'light', icon: const Icon(Icons.light_mode, size: 18)),
+                                            ButtonSegment(value: 'system', icon: const Icon(Icons.auto_mode, size: 18)),
+                                            ButtonSegment(value: 'dark', icon: const Icon(Icons.dark_mode, size: 18)),
                                           ],
-                                          selected: {state.timeFormat},
+                                          selected: {state.themeMode},
                                           onSelectionChanged: (selected) {
-                                            context.read<SettingsBloc>().add(ChangeTimeFormat(selected.first));
+                                            context.read<SettingsBloc>().add(ChangeThemeMode(selected.first));
+                                          },
+                                        ),
+                                      ),
+                                      const Divider(height: 1),
+                                      // Language
+                                      ListTile(
+                                        leading: const Icon(Icons.language),
+                                        title: Text(tr('settings.language')),
+                                        trailing: DropdownButton<String>(
+                                          value: state.language,
+                                          underline: const SizedBox(),
+                                          items: const [
+                                            DropdownMenuItem(value: 'en', child: Text('English')),
+                                            DropdownMenuItem(value: 'cs', child: Text('Čeština')),
+                                          ],
+                                          onChanged: (lang) {
+                                            if (lang != null) {
+                                              context.read<SettingsBloc>().add(ChangeLanguage(lang));
+                                              context.setLocale(Locale(lang));
+                                            }
                                           },
                                         ),
                                       ),
                                     ],
                                   ),
-                                )
-                              else
-                                ListTile(
-                                  leading: const Icon(Icons.access_time),
-                                  title: Text(tr('settings.time_format')),
-                                  trailing: SegmentedButton<String>(
-                                    segments: [
-                                      ButtonSegment(value: 'hm', label: Text(tr('settings.hours_minutes'))),
-                                      ButtonSegment(value: 'decimal', label: Text(tr('settings.decimal'))),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Timer Settings
+                                _buildSectionTitle(context, tr('settings.timer_settings')),
+                                Card(
+                                  child: Column(
+                                    children: [
+                                      AppSwitchTile(
+                                        secondary: const Icon(Icons.timer),
+                                        title: Text(tr('settings.simultaneous_timers')),
+                                        value: state.simultaneousTimers,
+                                        onChanged: (v) {
+                                          context.read<SettingsBloc>().add(ToggleSimultaneousTimers(v));
+                                        },
+                                      ),
+                                      const Divider(height: 1),
+                                      AppSwitchTile(
+                                        secondary: const Icon(Icons.av_timer),
+                                        title: Text(tr('settings.show_seconds')),
+                                        value: state.showSeconds,
+                                        onChanged: (v) {
+                                          context.read<SettingsBloc>().add(ToggleShowSeconds(v));
+                                        },
+                                      ),
+                                      const Divider(height: 1),
+                                      AppSwitchTile(
+                                        secondary: const Icon(Icons.rounded_corner),
+                                        title: Text(tr('settings.round_time')),
+                                        value: state.roundTime,
+                                        onChanged: (v) {
+                                          context.read<SettingsBloc>().add(ToggleRoundTime(v));
+                                        },
+                                      ),
+                                      if (state.roundTime) ...[
+                                        const Divider(height: 1),
+                                        ListTile(
+                                          leading: const SizedBox(width: 24),
+                                          title: Text(tr('settings.round_to')),
+                                          trailing: DropdownButton<int>(
+                                            value: state.roundToMinutes,
+                                            underline: const SizedBox(),
+                                            items: [
+                                              DropdownMenuItem(value: 5, child: Text(tr('settings.minutes_5'))),
+                                              DropdownMenuItem(value: 10, child: Text(tr('settings.minutes_10'))),
+                                              DropdownMenuItem(value: 15, child: Text(tr('settings.minutes_15'))),
+                                              DropdownMenuItem(value: 30, child: Text(tr('settings.minutes_30'))),
+                                            ],
+                                            onChanged: (v) {
+                                              if (v != null) {
+                                                context.read<SettingsBloc>().add(ChangeRoundToMinutes(v));
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      ],
                                     ],
-                                    selected: {state.timeFormat},
-                                    onSelectionChanged: (selected) {
-                                      context.read<SettingsBloc>().add(ChangeTimeFormat(selected.first));
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Working Hours
+                                _buildSectionTitle(context, tr('settings.working_hours')),
+                                Card(
+                                  child: Column(
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.all(16),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(tr('settings.work_schedule'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              tr('settings.work_schedule_desc'),
+                                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                                            ),
+                                            const SizedBox(height: 12),
+                                            ...List.generate(7, (i) {
+                                              final weekday = i + 1;
+                                              final dayNames = [
+                                                tr('settings.monday'),
+                                                tr('settings.tuesday'),
+                                                tr('settings.wednesday'),
+                                                tr('settings.thursday'),
+                                                tr('settings.friday'),
+                                                tr('settings.saturday'),
+                                                tr('settings.sunday'),
+                                              ];
+                                              final schedule = state.workSchedule[weekday];
+                                              if (schedule == null) return const SizedBox();
+                                              return Padding(
+                                                padding: const EdgeInsets.only(bottom: 8),
+                                                child: Row(
+                                                  children: [
+                                                    SizedBox(
+                                                      width: 28,
+                                                      child: Checkbox(
+                                                        value: schedule.enabled,
+                                                        onChanged: (v) => context.read<SettingsBloc>().add(ChangeWorkSchedule(weekday: weekday, enabled: v ?? false)),
+                                                      ),
+                                                    ),
+                                                    Expanded(
+                                                      child: Text(
+                                                        dayNames[i],
+                                                        style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    _WorkTimeButton(
+                                                      time: schedule.start,
+                                                      enabled: schedule.enabled,
+                                                      onTap: () async {
+                                                        final parts = schedule.start.split(':');
+                                                        final picked = await showTimePicker(
+                                                          context: context,
+                                                          initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
+                                                        );
+                                                        if (picked != null && context.mounted) {
+                                                          context.read<SettingsBloc>().add(
+                                                            ChangeWorkSchedule(
+                                                              weekday: weekday,
+                                                              start: '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}',
+                                                            ),
+                                                          );
+                                                        }
+                                                      },
+                                                    ),
+                                                    Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                      child: Text(
+                                                        '—',
+                                                        style: TextStyle(color: schedule.enabled ? null : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)),
+                                                      ),
+                                                    ),
+                                                    _WorkTimeButton(
+                                                      time: schedule.end,
+                                                      enabled: schedule.enabled,
+                                                      onTap: () async {
+                                                        final parts = schedule.end.split(':');
+                                                        final picked = await showTimePicker(
+                                                          context: context,
+                                                          initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
+                                                        );
+                                                        if (picked != null && context.mounted) {
+                                                          context.read<SettingsBloc>().add(
+                                                            ChangeWorkSchedule(
+                                                              weekday: weekday,
+                                                              end: '${picked.hour.toString().padLeft(2, '0')}:${picked.minute.toString().padLeft(2, '0')}',
+                                                            ),
+                                                          );
+                                                        }
+                                                      },
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    if (schedule.enabled)
+                                                      Text(
+                                                        _calculateDayHours(schedule.start, schedule.end),
+                                                        style: Theme.of(
+                                                          context,
+                                                        ).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w500),
+                                                      ),
+                                                  ],
+                                                ),
+                                              );
+                                            }),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Day Overrides (monthly adjustments)
+                                _buildDayOverridesSection(context),
+                                const SizedBox(height: 20),
+
+                                // Monthly Hours Targets
+                                _buildMonthlyTargetsSection(context),
+                                const SizedBox(height: 20),
+
+                                // PocketBase
+                                _buildPocketBaseSection(context),
+                                const SizedBox(height: 20),
+
+                                // Format & Currency
+                                _buildSectionTitle(context, tr('settings.general')),
+                                Card(
+                                  child: Column(
+                                    children: [
+                                      if (isMobile)
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  const Icon(Icons.access_time),
+                                                  const SizedBox(width: 16),
+                                                  Text(tr('settings.time_format'), style: Theme.of(context).textTheme.bodyLarge),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              SizedBox(
+                                                width: double.infinity,
+                                                child: SegmentedButton<String>(
+                                                  showSelectedIcon: PlatformUtils.isMobile,
+                                                  segments: [
+                                                    ButtonSegment(value: 'hm', label: Text(tr('settings.hours_minutes'))),
+                                                    ButtonSegment(value: 'decimal', label: Text(tr('settings.decimal'))),
+                                                  ],
+                                                  selected: {state.timeFormat},
+                                                  onSelectionChanged: (selected) {
+                                                    context.read<SettingsBloc>().add(ChangeTimeFormat(selected.first));
+                                                  },
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      else
+                                        ListTile(
+                                          leading: const Icon(Icons.access_time),
+                                          title: Text(tr('settings.time_format')),
+                                          trailing: SegmentedButton<String>(
+                                            showSelectedIcon: PlatformUtils.isMobile,
+                                            segments: [
+                                              ButtonSegment(value: 'hm', label: Text(tr('settings.hours_minutes'))),
+                                              ButtonSegment(value: 'decimal', label: Text(tr('settings.decimal'))),
+                                            ],
+                                            selected: {state.timeFormat},
+                                            onSelectionChanged: (selected) {
+                                              context.read<SettingsBloc>().add(ChangeTimeFormat(selected.first));
+                                            },
+                                          ),
+                                        ),
+                                      const Divider(height: 1),
+                                      ListTile(
+                                        leading: const Icon(Icons.attach_money),
+                                        title: Text(tr('settings.currency')),
+                                        trailing: DropdownButton<String>(
+                                          value: state.currency,
+                                          underline: const SizedBox(),
+                                          items: const [
+                                            DropdownMenuItem(value: 'CZK', child: Text('CZK')),
+                                            DropdownMenuItem(value: 'EUR', child: Text('EUR')),
+                                            DropdownMenuItem(value: 'USD', child: Text('USD')),
+                                            DropdownMenuItem(value: 'GBP', child: Text('GBP')),
+                                          ],
+                                          onChanged: (v) {
+                                            if (v != null) {
+                                              context.read<SettingsBloc>().add(ChangeCurrency(v));
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // System Settings
+                                _buildSectionTitle(context, 'System'),
+                                Card(
+                                  child: Column(
+                                    children: [
+                                      if (PlatformUtils.isDesktop) ...[
+                                        AppSwitchTile(
+                                          secondary: const Icon(Icons.launch),
+                                          title: Text(tr('settings.launch_at_startup')),
+                                          value: state.launchAtStartup,
+                                          onChanged: (v) {
+                                            context.read<SettingsBloc>().add(ToggleLaunchAtStartup(v));
+                                          },
+                                        ),
+                                        const Divider(height: 1),
+                                        AppSwitchTile(
+                                          secondary: const Icon(Icons.minimize),
+                                          title: Text(tr('settings.minimize_to_tray')),
+                                          value: state.minimizeToTray,
+                                          onChanged: (v) {
+                                            context.read<SettingsBloc>().add(ToggleMinimizeToTray(v));
+                                          },
+                                        ),
+                                        const Divider(height: 1),
+                                      ],
+                                      AppSwitchTile(
+                                        secondary: const Icon(Icons.layers),
+                                        title: Text(tr('settings.allow_overlap_times')),
+                                        subtitle: Text(tr('settings.allow_overlap_times_desc')),
+                                        value: state.allowOverlapTimes,
+                                        onChanged: (v) {
+                                          context.read<SettingsBloc>().add(ToggleAllowOverlapTimes(v));
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Data Export & Import
+                                _buildSectionTitle(context, tr('settings.data')),
+                                Card(
+                                  child: Column(
+                                    children: [
+                                      ListTile(
+                                        leading: const Icon(Icons.file_download_outlined),
+                                        title: Text(tr('settings.export_data')),
+                                        subtitle: const Text('JSON / CSV'),
+                                        trailing: const Icon(Icons.chevron_right),
+                                        onTap: () => _exportData(context),
+                                      ),
+                                      const Divider(height: 1),
+                                      ListTile(
+                                        leading: const Icon(Icons.file_upload_outlined),
+                                        title: Text(tr('settings.import_data')),
+                                        subtitle: const Text('JSON / CSV / Tyme .data'),
+                                        trailing: const Icon(Icons.chevron_right),
+                                        onTap: () => _showImportDialog(context),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Backup & Restore
+                                _buildSectionTitle(context, tr('settings.backup_restore')),
+                                Card(
+                                  child: Column(
+                                    children: [
+                                      ListTile(
+                                        leading: const Icon(Icons.backup_outlined),
+                                        title: Text(tr('settings.backup_create')),
+                                        subtitle: Text(tr('settings.backup_create_desc')),
+                                        trailing: const Icon(Icons.chevron_right),
+                                        onTap: () => _createBackup(context),
+                                      ),
+                                      const Divider(height: 1),
+                                      ListTile(
+                                        leading: const Icon(Icons.restore),
+                                        title: Text(tr('settings.backup_restore_action')),
+                                        subtitle: Text(tr('settings.backup_restore_desc')),
+                                        trailing: const Icon(Icons.chevron_right),
+                                        onTap: () => _restoreBackup(context),
+                                      ),
+                                      const Divider(height: 1),
+                                      ListTile(
+                                        leading: Icon(Icons.delete_forever, color: Theme.of(context).colorScheme.error),
+                                        title: Text(tr('settings.delete_all_data'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                                        subtitle: Text(tr('settings.delete_all_data_desc')),
+                                        trailing: Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.error),
+                                        onTap: () => _deleteAllData(context),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Automatic local snapshots (not available on web — no filesystem)
+                                if (!PlatformUtils.isWeb) ...[
+                                  _buildSectionTitle(context, tr('settings.snapshot_section')),
+                                  const _SnapshotSettingsSection(),
+                                  const SizedBox(height: 20),
+                                ],
+
+                                // Reminders (desktop-only — uses native macOS notifications)
+                                if (PlatformUtils.isDesktop) ...[
+                                  _buildSectionTitle(context, tr('settings.reminders')),
+                                  Card(
+                                    child: Column(
+                                      children: [
+                                        // ── Remind Start ──
+                                        AppSwitchTile(
+                                          secondary: const Icon(Icons.alarm),
+                                          title: Text(tr('settings.remind_start')),
+                                          subtitle: Text(tr('settings.remind_start_desc')),
+                                          value: state.remindStart,
+                                          onChanged: (v) {
+                                            context.read<SettingsBloc>().add(ToggleRemindStart(v));
+                                          },
+                                        ),
+                                        if (state.remindStart) ...[
+                                          _buildReminderOptions(
+                                            context,
+                                            intervalValue: state.remindStartInterval,
+                                            urgencyValue: state.remindStartUrgency,
+                                            onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStartInterval(v)),
+                                            onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStartUrgency(v)),
+                                          ),
+                                        ],
+                                        const Divider(height: 1),
+                                        // ── Remind Stop ──
+                                        AppSwitchTile(
+                                          secondary: const Icon(Icons.alarm_off),
+                                          title: Text(tr('settings.remind_stop')),
+                                          subtitle: Text(tr('settings.remind_stop_desc')),
+                                          value: state.remindStop,
+                                          onChanged: (v) {
+                                            context.read<SettingsBloc>().add(ToggleRemindStop(v));
+                                          },
+                                        ),
+                                        if (state.remindStop) ...[
+                                          _buildReminderOptions(
+                                            context,
+                                            intervalValue: state.remindStopInterval,
+                                            urgencyValue: state.remindStopUrgency,
+                                            onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStopInterval(v)),
+                                            onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStopUrgency(v)),
+                                          ),
+                                        ],
+                                        const Divider(height: 1),
+                                        // ── Remind Break ──
+                                        AppSwitchTile(
+                                          secondary: const Icon(Icons.free_breakfast),
+                                          title: Text(tr('settings.remind_break')),
+                                          subtitle: Text(tr('settings.remind_break_desc')),
+                                          value: state.remindBreak,
+                                          onChanged: (v) {
+                                            context.read<SettingsBloc>().add(ToggleRemindBreak(v));
+                                          },
+                                        ),
+                                        if (state.remindBreak) ...[
+                                          _buildReminderOptions(
+                                            context,
+                                            intervalValue: state.remindBreakInterval,
+                                            urgencyValue: state.remindBreakUrgency,
+                                            onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakInterval(v)),
+                                            onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakUrgency(v)),
+                                            showBreakAfter: true,
+                                            breakAfterValue: state.remindBreakAfter,
+                                            onBreakAfterChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakAfter(v)),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                ],
+
+                                // About
+                                _buildSectionTitle(context, tr('settings.about')),
+                                Card(
+                                  child: FutureBuilder<PackageInfo>(
+                                    future: PackageInfo.fromPlatform(),
+                                    builder: (context, snapshot) {
+                                      final version = snapshot.hasData ? snapshot.data!.version : '...';
+                                      final buildNumber = snapshot.hasData ? snapshot.data!.buildNumber : '';
+                                      return ListTile(
+                                        leading: const Icon(Icons.info_outline),
+                                        title: Text(tr('app_name')),
+                                        subtitle: Text('${tr('settings.version')}: $version${buildNumber.isNotEmpty ? '+$buildNumber' : ''}'),
+                                      );
                                     },
                                   ),
                                 ),
-                              const Divider(height: 1),
-                              ListTile(
-                                leading: const Icon(Icons.attach_money),
-                                title: Text(tr('settings.currency')),
-                                trailing: DropdownButton<String>(
-                                  value: state.currency,
-                                  underline: const SizedBox(),
-                                  items: const [
-                                    DropdownMenuItem(value: 'CZK', child: Text('CZK')),
-                                    DropdownMenuItem(value: 'EUR', child: Text('EUR')),
-                                    DropdownMenuItem(value: 'USD', child: Text('USD')),
-                                    DropdownMenuItem(value: 'GBP', child: Text('GBP')),
-                                  ],
-                                  onChanged: (v) {
-                                    if (v != null) {
-                                      context.read<SettingsBloc>().add(ChangeCurrency(v));
-                                    }
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // System Settings
-                        _buildSectionTitle(context, 'System'),
-                        Card(
-                          child: Column(
-                            children: [
-                              if (PlatformUtils.isDesktop) ...[
-                                SwitchListTile(
-                                  secondary: const Icon(Icons.launch),
-                                  title: Text(tr('settings.launch_at_startup')),
-                                  value: state.launchAtStartup,
-                                  onChanged: (v) {
-                                    context.read<SettingsBloc>().add(ToggleLaunchAtStartup(v));
-                                  },
-                                ),
-                                const Divider(height: 1),
-                                SwitchListTile(
-                                  secondary: const Icon(Icons.minimize),
-                                  title: Text(tr('settings.minimize_to_tray')),
-                                  value: state.minimizeToTray,
-                                  onChanged: (v) {
-                                    context.read<SettingsBloc>().add(ToggleMinimizeToTray(v));
-                                  },
-                                ),
-                                const Divider(height: 1),
-                              ],
-                              SwitchListTile(
-                                secondary: const Icon(Icons.layers),
-                                title: Text(tr('settings.allow_overlap_times')),
-                                subtitle: Text(tr('settings.allow_overlap_times_desc')),
-                                value: state.allowOverlapTimes,
-                                onChanged: (v) {
-                                  context.read<SettingsBloc>().add(ToggleAllowOverlapTimes(v));
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Data Export & Import
-                        _buildSectionTitle(context, tr('settings.data')),
-                        Card(
-                          child: Column(
-                            children: [
-                              ListTile(
-                                leading: const Icon(Icons.file_download_outlined),
-                                title: Text(tr('settings.export_data')),
-                                subtitle: const Text('JSON / CSV'),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () => _exportData(context),
-                              ),
-                              const Divider(height: 1),
-                              ListTile(
-                                leading: const Icon(Icons.file_upload_outlined),
-                                title: Text(tr('settings.import_data')),
-                                subtitle: const Text('JSON / CSV / Tyme .data'),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () => _showImportDialog(context),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Backup & Restore
-                        _buildSectionTitle(context, tr('settings.backup_restore')),
-                        Card(
-                          child: Column(
-                            children: [
-                              ListTile(
-                                leading: const Icon(Icons.backup_outlined),
-                                title: Text(tr('settings.backup_create')),
-                                subtitle: Text(tr('settings.backup_create_desc')),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () => _createBackup(context),
-                              ),
-                              const Divider(height: 1),
-                              ListTile(
-                                leading: const Icon(Icons.restore),
-                                title: Text(tr('settings.backup_restore_action')),
-                                subtitle: Text(tr('settings.backup_restore_desc')),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () => _restoreBackup(context),
-                              ),
-                              const Divider(height: 1),
-                              ListTile(
-                                leading: Icon(Icons.delete_forever, color: Theme.of(context).colorScheme.error),
-                                title: Text(tr('settings.delete_all_data'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                                subtitle: Text(tr('settings.delete_all_data_desc')),
-                                trailing: Icon(Icons.chevron_right, color: Theme.of(context).colorScheme.error),
-                                onTap: () => _deleteAllData(context),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Automatic local snapshots (not available on web — no filesystem)
-                        if (!PlatformUtils.isWeb) ...[
-                          _buildSectionTitle(context, tr('settings.snapshot_section')),
-                          const _SnapshotSettingsSection(),
-                          const SizedBox(height: 20),
-                        ],
-
-                        // Reminders (desktop-only — uses native macOS notifications)
-                        if (PlatformUtils.isDesktop) ...[
-                          _buildSectionTitle(context, tr('settings.reminders')),
-                          Card(
-                            child: Column(
-                              children: [
-                                // ── Remind Start ──
-                                SwitchListTile(
-                                  secondary: const Icon(Icons.alarm),
-                                  title: Text(tr('settings.remind_start')),
-                                  subtitle: Text(tr('settings.remind_start_desc')),
-                                  value: state.remindStart,
-                                  onChanged: (v) {
-                                    context.read<SettingsBloc>().add(ToggleRemindStart(v));
-                                  },
-                                ),
-                                if (state.remindStart) ...[
-                                  _buildReminderOptions(
-                                    context,
-                                    intervalValue: state.remindStartInterval,
-                                    urgencyValue: state.remindStartUrgency,
-                                    onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStartInterval(v)),
-                                    onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStartUrgency(v)),
-                                  ),
-                                ],
-                                const Divider(height: 1),
-                                // ── Remind Stop ──
-                                SwitchListTile(
-                                  secondary: const Icon(Icons.alarm_off),
-                                  title: Text(tr('settings.remind_stop')),
-                                  subtitle: Text(tr('settings.remind_stop_desc')),
-                                  value: state.remindStop,
-                                  onChanged: (v) {
-                                    context.read<SettingsBloc>().add(ToggleRemindStop(v));
-                                  },
-                                ),
-                                if (state.remindStop) ...[
-                                  _buildReminderOptions(
-                                    context,
-                                    intervalValue: state.remindStopInterval,
-                                    urgencyValue: state.remindStopUrgency,
-                                    onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStopInterval(v)),
-                                    onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindStopUrgency(v)),
-                                  ),
-                                ],
-                                const Divider(height: 1),
-                                // ── Remind Break ──
-                                SwitchListTile(
-                                  secondary: const Icon(Icons.free_breakfast),
-                                  title: Text(tr('settings.remind_break')),
-                                  subtitle: Text(tr('settings.remind_break_desc')),
-                                  value: state.remindBreak,
-                                  onChanged: (v) {
-                                    context.read<SettingsBloc>().add(ToggleRemindBreak(v));
-                                  },
-                                ),
-                                if (state.remindBreak) ...[
-                                  _buildReminderOptions(
-                                    context,
-                                    intervalValue: state.remindBreakInterval,
-                                    urgencyValue: state.remindBreakUrgency,
-                                    onIntervalChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakInterval(v)),
-                                    onUrgencyChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakUrgency(v)),
-                                    showBreakAfter: true,
-                                    breakAfterValue: state.remindBreakAfter,
-                                    onBreakAfterChanged: (v) => context.read<SettingsBloc>().add(ChangeRemindBreakAfter(v)),
-                                  ),
-                                ],
+                                const SizedBox(height: 40),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 20),
-                        ],
-
-                        // About
-                        _buildSectionTitle(context, tr('settings.about')),
-                        Card(
-                          child: FutureBuilder<PackageInfo>(
-                            future: PackageInfo.fromPlatform(),
-                            builder: (context, snapshot) {
-                              final version = snapshot.hasData ? snapshot.data!.version : '...';
-                              final buildNumber = snapshot.hasData ? snapshot.data!.buildNumber : '';
-                              return ListTile(
-                                leading: const Icon(Icons.info_outline),
-                                title: Text(tr('app_name')),
-                                subtitle: Text('${tr('settings.version')}: $version${buildNumber.isNotEmpty ? '+$buildNumber' : ''}'),
-                              );
-                            },
-                          ),
                         ),
-                        const SizedBox(height: 40),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -1227,6 +1257,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             Text(tr('export.format'), style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             SegmentedButton<String>(
+              showSelectedIcon: PlatformUtils.isMobile,
               segments: [
                 ButtonSegment(value: 'json', label: Text(tr('export.json_format'))),
                 ButtonSegment(value: 'csv', label: Text(tr('export.csv_format'))),

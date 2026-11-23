@@ -9,6 +9,7 @@ import '../../data/repositories/monthly_hours_target_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../widgets/day_overrides_calendar.dart';
+import '../widgets/app_switch_tile.dart';
 
 /// Schedule, days off and month goals of a single work context.
 ///
@@ -143,7 +144,7 @@ class _WorkContextScreenState extends State<WorkContextScreen> {
               tr('work_contexts.own_schedule_desc'),
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
             ),
-            SwitchListTile(
+            AppSwitchTile(
               contentPadding: EdgeInsets.zero,
               title: Text(tr('work_contexts.own_schedule')),
               subtitle: Text(usesOwn ? tr('work_contexts.own_schedule_on') : tr('work_contexts.own_schedule_off')),

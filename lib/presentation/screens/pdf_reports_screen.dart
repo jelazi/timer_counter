@@ -18,6 +18,8 @@ import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
 import '../blocs/standalone_invoice/standalone_invoice_bloc.dart';
 import '../blocs/standalone_invoice/standalone_invoice_event.dart';
+import '../widgets/app_switch_tile.dart';
+import '../widgets/desktop/pane_header.dart';
 
 class PdfReportsScreen extends StatefulWidget {
   const PdfReportsScreen({super.key});
@@ -717,375 +719,366 @@ class _PdfReportsScreenState extends State<PdfReportsScreen> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(tr('pdf_reports.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(
-                        tr('pdf_reports.subtitle'),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                      ),
-                    ],
-                  ),
-                ),
-                FilledButton.tonalIcon(onPressed: _openInvoiceSettings, icon: const Icon(Icons.settings), label: Text(tr('pdf_reports.invoice_settings'))),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Scrollable content
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Month/Year selection card
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(tr('pdf_reports.select_period'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                SizedBox(
-                                  width: 200,
-                                  child: DropdownButtonFormField<int>(
-                                    decoration: InputDecoration(labelText: tr('pdf_reports.month'), prefixIcon: const Icon(Icons.calendar_month), isDense: true),
-                                    initialValue: _selectedMonth,
-                                    items: List.generate(12, (i) {
-                                      final m = i + 1;
-                                      final monthName = DateFormat('MMMM', context.locale.languageCode).format(DateTime(2024, m));
-                                      return DropdownMenuItem(value: m, child: Text(monthName[0].toUpperCase() + monthName.substring(1)));
-                                    }),
-                                    onChanged: (v) => setState(() => _selectedMonth = v!),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                SizedBox(
-                                  width: 140,
-                                  child: DropdownButtonFormField<int>(
-                                    decoration: InputDecoration(labelText: tr('pdf_reports.year'), prefixIcon: const Icon(Icons.date_range), isDense: true),
-                                    initialValue: _selectedYear,
-                                    items: List.generate(7, (i) {
-                                      final y = DateTime.now().year - 3 + i;
-                                      return DropdownMenuItem(value: y, child: Text('$y'));
-                                    }),
-                                    onChanged: (v) => setState(() => _selectedYear = v!),
-                                  ),
-                                ),
-                                const SizedBox(width: 24),
-                                IconButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      if (_selectedMonth > 1) {
-                                        _selectedMonth--;
-                                      } else {
-                                        _selectedMonth = 12;
-                                        _selectedYear--;
-                                      }
-                                    });
-                                  },
-                                  icon: const Icon(Icons.chevron_left),
-                                  tooltip: tr('pdf_reports.previous_month'),
-                                ),
-                                IconButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      if (_selectedMonth < 12) {
-                                        _selectedMonth++;
-                                      } else {
-                                        _selectedMonth = 1;
-                                        _selectedYear++;
-                                      }
-                                    });
-                                  },
-                                  icon: const Icon(Icons.chevron_right),
-                                  tooltip: tr('pdf_reports.next_month'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Period summary card
-                    _buildSummaryCard(context, allProjects, timeEntryRepo, pdfService, totalHours, entryCount),
-                    const SizedBox(height: 16),
-
-                    // Project filter
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(tr('pdf_reports.project_filter'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                                const Spacer(),
-                                if (_selectedProjectIds.isNotEmpty)
-                                  TextButton(
-                                    onPressed: () {
-                                      setState(() => _selectedProjectIds = []);
-                                      context.read<SettingsRepository>().setPdfReportProjectIds([]);
-                                    },
-                                    child: Text(tr('common.clear')),
-                                  ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _selectedProjectIds.isEmpty ? tr('pdf_reports.all_projects') : tr('pdf_reports.filtered_projects', args: ['${_selectedProjectIds.length}']),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                            ),
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: allProjects.map((project) {
-                                final allSelected = _selectedProjectIds.isEmpty;
-                                final isSelected = allSelected || _selectedProjectIds.contains(project.id);
-                                return FilterChip(
-                                  label: Text(project.name),
-                                  selected: isSelected,
-                                  selectedColor: Color(project.colorValue).withValues(alpha: 0.3),
-                                  avatar: CircleAvatar(backgroundColor: Color(project.colorValue), radius: 8),
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      if (allSelected) {
-                                        _selectedProjectIds = allProjects.map((p) => p.id).toList();
-                                        if (!selected) {
-                                          _selectedProjectIds.remove(project.id);
-                                        }
-                                      } else {
-                                        if (selected) {
-                                          _selectedProjectIds.add(project.id);
-                                        } else {
-                                          _selectedProjectIds.remove(project.id);
-                                        }
-                                        if (_selectedProjectIds.length == allProjects.length) {
-                                          _selectedProjectIds = [];
-                                        }
-                                      }
-                                    });
-                                    context.read<SettingsRepository>().setPdfReportProjectIds(_selectedProjectIds);
-                                  },
-                                );
-                              }).toList(),
-                            ),
-                            const Divider(height: 24),
-                            SwitchListTile.adaptive(
-                              contentPadding: EdgeInsets.zero,
-                              title: const Text('Generovat pro každý projekt zvlášť'),
-                              subtitle: const Text('Každý projekt dostane vlastní PDF a fakturu v podsložce'),
-                              value: _perProject,
-                              onChanged: (v) => setState(() => _perProject = v),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Invoice info summary
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(tr('pdf_reports.invoice_info'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                                const Spacer(),
-                                TextButton.icon(onPressed: _openInvoiceSettings, icon: const Icon(Icons.edit, size: 16), label: Text(tr('pdf_reports.edit'))),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Supplier
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(tr('pdf_reports.supplier'), style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
-                                      const SizedBox(height: 4),
-                                      Text(invoiceSettings.supplier.name, style: Theme.of(context).textTheme.bodySmall),
-                                      Text(invoiceSettings.supplier.addressLine1, style: Theme.of(context).textTheme.bodySmall),
-                                      Text(invoiceSettings.supplier.addressLine2, style: Theme.of(context).textTheme.bodySmall),
-                                      if (invoiceSettings.supplier.ico.isNotEmpty) Text('IČO: ${invoiceSettings.supplier.ico}', style: Theme.of(context).textTheme.bodySmall),
-                                    ],
-                                  ),
-                                ),
-                                // Customer
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(tr('pdf_reports.customer'), style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
-                                      const SizedBox(height: 4),
-                                      Text(invoiceSettings.customer.name, style: Theme.of(context).textTheme.bodySmall),
-                                      Text(invoiceSettings.customer.addressLine1, style: Theme.of(context).textTheme.bodySmall),
-                                      Text(invoiceSettings.customer.addressLine2, style: Theme.of(context).textTheme.bodySmall),
-                                      if (invoiceSettings.customer.ico.isNotEmpty) Text('IČO: ${invoiceSettings.customer.ico}', style: Theme.of(context).textTheme.bodySmall),
-                                    ],
-                                  ),
-                                ),
-                                // Bank & description
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(tr('pdf_reports.description_label'), style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
-                                      const SizedBox(height: 4),
-                                      Text(invoiceSettings.description, style: Theme.of(context).textTheme.bodySmall),
-                                      const SizedBox(height: 8),
-                                      Text(tr('pdf_reports.bank_info'), style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
-                                      const SizedBox(height: 4),
-                                      Text('${invoiceSettings.accountNumber} / ${invoiceSettings.bankCode}', style: Theme.of(context).textTheme.bodySmall),
-                                      if (invoiceSettings.iban.isNotEmpty) Text('IBAN: ${invoiceSettings.iban}', style: Theme.of(context).textTheme.bodySmall),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Output files info — combined or per-project
-                    if (!_perProject)
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(tr('pdf_reports.generated_files'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 12),
-                              _FileInfoRow(
-                                icon: Icons.table_chart,
-                                filename: '${_resolveFilename(invoiceSettings.reportFilename)}.pdf',
-                                description: tr('pdf_reports.report_desc'),
-                                onPreview: entryCount > 0 ? () => _previewPdf('report') : null,
-                              ),
-                              const SizedBox(height: 8),
-                              _FileInfoRow(
-                                icon: Icons.table_chart_outlined,
-                                filename: '${_resolveFilename(invoiceSettings.reportRezijniFilename)}.pdf',
-                                description: tr('pdf_reports.report_rezijni_desc'),
-                                onPreview: entryCount > 0 ? () => _previewPdf('rezijni') : null,
-                              ),
-                              const SizedBox(height: 8),
-                              _FileInfoRow(
-                                icon: Icons.receipt_long,
-                                filename: '${_resolveFilename(invoiceSettings.invoiceFilename)}.pdf',
-                                description: tr('pdf_reports.invoice_desc'),
-                                onPreview: entryCount > 0 ? () => _previewPdf('invoice') : null,
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      _buildPerProjectOutputSection(context, allProjects, timeEntryRepo, invoiceSettings, pdfService),
-                    const SizedBox(height: 24),
-
-                    // Generate button
-                    Row(
-                      children: [
-                        FilledButton.icon(
-                          onPressed: _isGenerating || entryCount == 0 ? null : (_perProject ? _generatePdfsPerProject : _generatePdfs),
-                          icon: _isGenerating
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Icon(Icons.picture_as_pdf),
-                          label: Text(_isGenerating ? tr('pdf_reports.generating') : tr('pdf_reports.generate')),
-                          style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16)),
-                        ),
-                        if (entryCount == 0) ...[
-                          const SizedBox(width: 16),
-                          Text(tr('pdf_reports.no_entries'), style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.orange)),
-                        ],
-                      ],
-                    ),
-
-                    // Results
-                    if (_generatedFiles != null) ...[
-                      const SizedBox(height: 16),
-                      Card(
-                        color: Colors.green.shade50,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PaneHeader(
+            title: tr('pdf_reports.title'),
+            subtitle: tr('pdf_reports.subtitle'),
+            actions: [FilledButton.tonalIcon(onPressed: _openInvoiceSettings, icon: const Icon(Icons.settings), label: Text(tr('pdf_reports.invoice_settings')))],
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Scrollable content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Month/Year selection card
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(Icons.check_circle, color: Colors.green),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    tr('pdf_reports.success'),
-                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.green.shade800, fontWeight: FontWeight.bold),
+                                  Text(tr('pdf_reports.select_period'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 200,
+                                        child: DropdownButtonFormField<int>(
+                                          decoration: InputDecoration(labelText: tr('pdf_reports.month'), prefixIcon: const Icon(Icons.calendar_month), isDense: true),
+                                          initialValue: _selectedMonth,
+                                          items: List.generate(12, (i) {
+                                            final m = i + 1;
+                                            final monthName = DateFormat('MMMM', context.locale.languageCode).format(DateTime(2024, m));
+                                            return DropdownMenuItem(value: m, child: Text(monthName[0].toUpperCase() + monthName.substring(1)));
+                                          }),
+                                          onChanged: (v) => setState(() => _selectedMonth = v!),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      SizedBox(
+                                        width: 140,
+                                        child: DropdownButtonFormField<int>(
+                                          decoration: InputDecoration(labelText: tr('pdf_reports.year'), prefixIcon: const Icon(Icons.date_range), isDense: true),
+                                          initialValue: _selectedYear,
+                                          items: List.generate(7, (i) {
+                                            final y = DateTime.now().year - 3 + i;
+                                            return DropdownMenuItem(value: y, child: Text('$y'));
+                                          }),
+                                          onChanged: (v) => setState(() => _selectedYear = v!),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 24),
+                                      IconButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            if (_selectedMonth > 1) {
+                                              _selectedMonth--;
+                                            } else {
+                                              _selectedMonth = 12;
+                                              _selectedYear--;
+                                            }
+                                          });
+                                        },
+                                        icon: const Icon(Icons.chevron_left),
+                                        tooltip: tr('pdf_reports.previous_month'),
+                                      ),
+                                      IconButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            if (_selectedMonth < 12) {
+                                              _selectedMonth++;
+                                            } else {
+                                              _selectedMonth = 1;
+                                              _selectedYear++;
+                                            }
+                                          });
+                                        },
+                                        icon: const Icon(Icons.chevron_right),
+                                        tooltip: tr('pdf_reports.next_month'),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
-                              ..._generatedFiles!.map(
-                                (path) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Text(path, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.green.shade700)),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Period summary card
+                          _buildSummaryCard(context, allProjects, timeEntryRepo, pdfService, totalHours, entryCount),
+                          const SizedBox(height: 16),
+
+                          // Project filter
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(tr('pdf_reports.project_filter'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                      const Spacer(),
+                                      if (_selectedProjectIds.isNotEmpty)
+                                        TextButton(
+                                          onPressed: () {
+                                            setState(() => _selectedProjectIds = []);
+                                            context.read<SettingsRepository>().setPdfReportProjectIds([]);
+                                          },
+                                          child: Text(tr('common.clear')),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _selectedProjectIds.isEmpty ? tr('pdf_reports.all_projects') : tr('pdf_reports.filtered_projects', args: ['${_selectedProjectIds.length}']),
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: allProjects.map((project) {
+                                      final allSelected = _selectedProjectIds.isEmpty;
+                                      final isSelected = allSelected || _selectedProjectIds.contains(project.id);
+                                      return FilterChip(
+                                        label: Text(project.name),
+                                        selected: isSelected,
+                                        selectedColor: Color(project.colorValue).withValues(alpha: 0.3),
+                                        avatar: CircleAvatar(backgroundColor: Color(project.colorValue), radius: 8),
+                                        onSelected: (selected) {
+                                          setState(() {
+                                            if (allSelected) {
+                                              _selectedProjectIds = allProjects.map((p) => p.id).toList();
+                                              if (!selected) {
+                                                _selectedProjectIds.remove(project.id);
+                                              }
+                                            } else {
+                                              if (selected) {
+                                                _selectedProjectIds.add(project.id);
+                                              } else {
+                                                _selectedProjectIds.remove(project.id);
+                                              }
+                                              if (_selectedProjectIds.length == allProjects.length) {
+                                                _selectedProjectIds = [];
+                                              }
+                                            }
+                                          });
+                                          context.read<SettingsRepository>().setPdfReportProjectIds(_selectedProjectIds);
+                                        },
+                                      );
+                                    }).toList(),
+                                  ),
+                                  const Divider(height: 24),
+                                  AppSwitchTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: const Text('Generovat pro každý projekt zvlášť'),
+                                    subtitle: const Text('Každý projekt dostane vlastní PDF a fakturu v podsložce'),
+                                    value: _perProject,
+                                    onChanged: (v) => setState(() => _perProject = v),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Invoice info summary
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(tr('pdf_reports.invoice_info'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                      const Spacer(),
+                                      TextButton.icon(onPressed: _openInvoiceSettings, icon: const Icon(Icons.edit, size: 16), label: Text(tr('pdf_reports.edit'))),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Supplier
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(tr('pdf_reports.supplier'), style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
+                                            const SizedBox(height: 4),
+                                            Text(invoiceSettings.supplier.name, style: Theme.of(context).textTheme.bodySmall),
+                                            Text(invoiceSettings.supplier.addressLine1, style: Theme.of(context).textTheme.bodySmall),
+                                            Text(invoiceSettings.supplier.addressLine2, style: Theme.of(context).textTheme.bodySmall),
+                                            if (invoiceSettings.supplier.ico.isNotEmpty) Text('IČO: ${invoiceSettings.supplier.ico}', style: Theme.of(context).textTheme.bodySmall),
+                                          ],
+                                        ),
+                                      ),
+                                      // Customer
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(tr('pdf_reports.customer'), style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
+                                            const SizedBox(height: 4),
+                                            Text(invoiceSettings.customer.name, style: Theme.of(context).textTheme.bodySmall),
+                                            Text(invoiceSettings.customer.addressLine1, style: Theme.of(context).textTheme.bodySmall),
+                                            Text(invoiceSettings.customer.addressLine2, style: Theme.of(context).textTheme.bodySmall),
+                                            if (invoiceSettings.customer.ico.isNotEmpty) Text('IČO: ${invoiceSettings.customer.ico}', style: Theme.of(context).textTheme.bodySmall),
+                                          ],
+                                        ),
+                                      ),
+                                      // Bank & description
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(tr('pdf_reports.description_label'), style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
+                                            const SizedBox(height: 4),
+                                            Text(invoiceSettings.description, style: Theme.of(context).textTheme.bodySmall),
+                                            const SizedBox(height: 8),
+                                            Text(tr('pdf_reports.bank_info'), style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold)),
+                                            const SizedBox(height: 4),
+                                            Text('${invoiceSettings.accountNumber} / ${invoiceSettings.bankCode}', style: Theme.of(context).textTheme.bodySmall),
+                                            if (invoiceSettings.iban.isNotEmpty) Text('IBAN: ${invoiceSettings.iban}', style: Theme.of(context).textTheme.bodySmall),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Output files info — combined or per-project
+                          if (!_perProject)
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(tr('pdf_reports.generated_files'), style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 12),
+                                    _FileInfoRow(
+                                      icon: Icons.table_chart,
+                                      filename: '${_resolveFilename(invoiceSettings.reportFilename)}.pdf',
+                                      description: tr('pdf_reports.report_desc'),
+                                      onPreview: entryCount > 0 ? () => _previewPdf('report') : null,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _FileInfoRow(
+                                      icon: Icons.table_chart_outlined,
+                                      filename: '${_resolveFilename(invoiceSettings.reportRezijniFilename)}.pdf',
+                                      description: tr('pdf_reports.report_rezijni_desc'),
+                                      onPreview: entryCount > 0 ? () => _previewPdf('rezijni') : null,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _FileInfoRow(
+                                      icon: Icons.receipt_long,
+                                      filename: '${_resolveFilename(invoiceSettings.invoiceFilename)}.pdf',
+                                      description: tr('pdf_reports.invoice_desc'),
+                                      onPreview: entryCount > 0 ? () => _previewPdf('invoice') : null,
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+                            )
+                          else
+                            _buildPerProjectOutputSection(context, allProjects, timeEntryRepo, invoiceSettings, pdfService),
+                          const SizedBox(height: 24),
 
-                    if (_errorMessage != null) ...[
-                      const SizedBox(height: 16),
-                      Card(
-                        color: Colors.red.shade50,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
+                          // Generate button
+                          Row(
                             children: [
-                              const Icon(Icons.error, color: Colors.red),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(_errorMessage!, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red.shade700)),
+                              FilledButton.icon(
+                                onPressed: _isGenerating || entryCount == 0 ? null : (_perProject ? _generatePdfsPerProject : _generatePdfs),
+                                icon: _isGenerating
+                                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Icon(Icons.picture_as_pdf),
+                                label: Text(_isGenerating ? tr('pdf_reports.generating') : tr('pdf_reports.generate')),
+                                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16)),
                               ),
+                              if (entryCount == 0) ...[
+                                const SizedBox(width: 16),
+                                Text(tr('pdf_reports.no_entries'), style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.orange)),
+                              ],
                             ],
                           ),
-                        ),
+
+                          // Results
+                          if (_generatedFiles != null) ...[
+                            const SizedBox(height: 16),
+                            Card(
+                              color: Colors.green.shade50,
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.check_circle, color: Colors.green),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          tr('pdf_reports.success'),
+                                          style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.green.shade800, fontWeight: FontWeight.bold),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ..._generatedFiles!.map(
+                                      (path) => Padding(
+                                        padding: const EdgeInsets.only(bottom: 4),
+                                        child: Text(path, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.green.shade700)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+
+                          if (_errorMessage != null) ...[
+                            const SizedBox(height: 16),
+                            Card(
+                              color: Colors.red.shade50,
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.error, color: Colors.red),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(_errorMessage!, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red.shade700)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 24),
+                        ],
                       ),
-                    ],
-                    const SizedBox(height: 24),
-                  ],
-                ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

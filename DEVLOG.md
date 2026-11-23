@@ -1,5 +1,75 @@
 # Development Log
 
+## 2026-11-23 — feat(desktop): macOS-style desktop UI (sidebar shell, compact theme, pane toolbars)
+
+### What was done
+
+- First step of the UI rework: the desktop app (macOS, Windows, Linux) no longer uses the mobile
+  Material look. Mobile and web keep `AppTheme` and their layouts unchanged.
+- New `lib/core/theme/desktop_theme.dart`:
+  - `DesktopTheme.light` / `.dark` — macOS type scale (13 pt body, 11 pt captions, system font via
+    `Typography.material2021(platform:)`, no Material letter spacing), neutral surfaces instead of the
+    lavender seed tints, systemIndigo accent, no ripples (`NoSplash`), 28 pt buttons with 6 pt radius,
+    dense list tiles (36 pt), compact inputs/dropdowns/chips/segmented controls, macOS-like dialogs,
+    menus, tooltips, scrollbars, snackbars; `AppBarTheme` is a 52 pt toolbar with a chevron back button.
+  - `MacColors` `ThemeExtension` (sidebar, content, group fill/border, control fill/border, separator,
+    label levels) with `MacColors.of(context)`.
+  - `app.dart` picks `DesktopTheme` when `PlatformUtils.isDesktop`.
+- New desktop shell in `HomeScreen._buildDesktopLayout`:
+  - `widgets/desktop/desktop_sidebar.dart` — full-height source-list sidebar (220 pt): section headers
+    (`nav.section_tracking`, `nav.section_reports`, new keys in en/cs), 28 pt rows with accent icons and
+    rounded selection, Settings pinned at the bottom.
+  - Sidebar footer `_SidebarTimerStatus`: the running timer (project colour, task, elapsed) and an
+    "Timer Counter" entry that opens the About dialog (replaces the old rail logo).
+  - The content pane is a nested `Navigator` keyed by section, so pushed screens (project detail,
+    backup history, invoice form, work contexts) stay inside the pane next to the sidebar.
+  - Cmd+1…Cmd+7 switch sections, Cmd+, opens Settings (Ctrl on Windows/Linux), via a
+    `HardwareKeyboard` handler — a focus-based `CallbackShortcuts` stopped working after the first
+    switch because the replaced navigator took the focus with it.
+- `macos/Runner/MainFlutterWindow.swift`: an empty unified `NSToolbar` + transparent, hidden title,
+  full-size content view, so the traffic lights sit centred in a 52 pt titlebar like Mail/Finder.
+- `widgets/desktop/pane_header.dart` `PaneHeader` — 52 pt pane toolbar (title, subtitle, optional
+  centred control, actions), doubles as the window drag area through
+  `widgets/desktop/window_drag_area.dart` (`DragToMoveArea` only on native desktop).
+  Used by every root screen on desktop instead of the old 28 pt headlines:
+  - Time Tracking: title + date, running-timer badge as the action; start button 34 pt.
+  - Time Entries: month navigator centred in the toolbar, "Add manual entry" on the right.
+  - Projects: search, archived filter, add category / add project in the toolbar.
+  - Statistics: Day/Week/Month/Year segmented control + custom range in the toolbar
+    (`_buildRangeSelector`, `_buildCustomRangeButton` extracted; `_buildHeader(pane: true)` keeps
+    only the period navigator).
+  - PDF Reports, Invoices, Settings: title/subtitle/actions in the toolbar; Settings content is
+    capped at 760 pt and centred (`_constrainWidth`).
+- `widgets/desktop/mac_switch.dart` `MacSwitch` (32×19 pt) and `widgets/app_switch_tile.dart`
+  `AppSwitchTile` (SwitchListTile on mobile, dense row + `MacSwitch` on desktop); every
+  `SwitchListTile` (+ the `.adaptive` one in PDF reports) now uses it.
+- Segmented buttons hide the checkmark on desktop (`showSelectedIcon: PlatformUtils.isMobile`).
+- `TimeEntryListItem` renders a 36 pt row on desktop; new `TimeEntryGroup` puts today's entries
+  into one rounded group with separators (Time Tracking screen).
+
+### What was fixed
+
+- The Projects screen stayed empty until a sync event arrived: `ProjectBloc` was created without an
+  initial `LoadProjects` (found offline in the preview). `app.dart` now adds it on creation.
+
+### Current state
+
+- `flutter analyze --no-pub`: no issues.
+- `TZ=Europe/Prague flutter test --no-pub`: 94 passed (no new tests; no widget tests exist).
+- Checked visually on macOS (light mode) with an isolated debug copy (separate bundle id and sandbox
+  container seeded with a copy of the local data, network entitlements removed so nothing synced):
+  all 7 sections, sidebar, toolbars, switches. Clicks on buttons inside the 52 pt titlebar strip
+  work (confirmed by the user in the preview).
+- Not checked: dark mode, Windows/Linux, dialogs and pushed screens (only themed, not reviewed),
+  the Cmd+N shortcuts after the switch to the global handler.
+
+### Pending / next steps
+
+- Review dialogs, pushed screens and the invoice form in the new theme; dark mode pass.
+- Further desktop polish: project cards (still large), Time Tracking summary card, dropdown menu
+  item height (Material minimum 48 pt), native macOS menu bar (`PlatformMenuBar`).
+- Check the Windows layout (WindowCaption + sidebar).
+
 ## 2026-11-03 — fix: step date ranges by calendar day across DST; testable sync service; release-check follow-ups
 
 ### What was done
@@ -274,63 +344,3 @@
 
 - `flutter test`: **61 tests passed** (machine time zone CEST).
 - `flutter analyze`: no issues.
-
-## 2026-10-02 — fix: macOS app would not launch (expired signing), switch to ad-hoc signing
-
-### What was fixed
-
-- **`/Applications/Timer Counter.app` refused to start** — `open` failed with
-  `RBSRequestErrorDomain Code=5 "Launch failed"` / `NSPOSIXErrorDomain Code=162 "Launchd job spawn
-  failed"`. Two things had expired: the embedded `Mac Team Provisioning Profile: *` (team
-  BZF32VC6NQ) on **2026-09-30**, and the signing certificate `Apple Development: Lubomír Zizka
-  (SBG5J7LYK5)` on **2026-08-12**. The binary itself was fine.
-- A fresh profile could not be issued: `xcodebuild -allowProvisioningUpdates` reported that the
-  BZF32VC6NQ Account Holder must accept the latest Program License Agreement, and the Xcode account
-  `lzizka@gmail.com` has invalid keychain credentials ("missing Xcode-Token").
-- **`flutter build macos --release` failed** independently of signing: the current Xcode only
-  supports macOS deployment targets 12.0–27.0, the project was at 10.15. The local pub cache was also
-  missing packages (`google_fonts`, `pocketbase`, …); `flutter pub get` restored them,
-  `pubspec.lock` unchanged.
-
-### What was done
-
-- **Release is now ad-hoc signed**, matching Debug/Profile: in `macos/Runner.xcodeproj/project.pbxproj`
-  the Release config of the Runner target went from `CODE_SIGN_IDENTITY = "Apple Development"`,
-  `Automatic`, `DEVELOPMENT_TEAM = BZF32VC6NQ` to `"-"`, `Manual`, `""`. Nothing in the build can
-  expire any more and no paid team is needed.
-- `macos/Runner/Release.entitlements`: removed `com.apple.security.application-groups` and
-  `keychain-access-groups`. Those need a provisioning profile and were only there for Firebase Auth,
-  which is gone; no code references either (checked with grep over `lib/` and `macos/Runner`).
-- `MACOSX_DEPLOYMENT_TARGET` 10.15 → 12.0 in the three Runner configs and in `macos/Podfile`
-  (`platform :osx` and the `post_install` floor); `Podfile.lock` regenerated by `pod install`.
-- **Installed app repaired without changing its code**: copied the existing installed bundle, removed
-  `embedded.provisionprofile`, re-signed every framework and the app ad-hoc with sandbox,
-  `network.client`, `network.server` and `files.user-selected.read-write` only, and replaced
-  `/Applications/Timer Counter.app` with it. The old expired bundle was kept in the session scratchpad
-  only.
-
-### Data safety
-
-- The sandbox container `~/Library/Containers/com.example.timerCounter` (20 MB) was backed up first to
-  `~/Documents/timer_counter_container_backup_2026-10-02_08-38-58/`.
-- The container metadata is bound to team BZF32VC6NQ; the ad-hoc signed app still opened it without
-  a prompt and read the existing Hive boxes.
-- Record counts in the app's own startup snapshots, 2026-09-30 vs 2026-10-02: categories 2/2,
-  projects 3/3, tasks 12/12, time_entries 660/663 (+3 pulled by PocketBase sync), monthly_targets 2/2,
-  standalone_invoices 6/6, settings 37/37.
-
-### Current state
-
-- `/Applications/Timer Counter.app` launches (process running, `Signature=adhoc`); data intact as
-  above. `spctl` says "rejected", as it did for the old developer-signed build. That does not matter
-  for a locally built app without a quarantine attribute.
-- `flutter build macos --release` succeeds: ad-hoc signed, `codesign --verify --deep --strict` OK.
-- No Dart code changed in this fix; `flutter analyze` / `flutter test` were not re-run.
-
-### Pending / next steps
-
-- The installed app is still the 2026-07-12 build. The fresh Release build in `build/macos/` also
-  contains the uncommitted per-context schedule work (2026-09-11 entry), which has never been run in
-  the real app. Install it only after trying it out.
-- Apps copied to another Mac will need "Open Anyway" in System Settings, because ad-hoc signing is not
-  notarised.

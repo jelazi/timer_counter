@@ -14,6 +14,7 @@ import '../../data/repositories/time_entry_repository.dart';
 import '../blocs/standalone_invoice/standalone_invoice_bloc.dart';
 import '../blocs/standalone_invoice/standalone_invoice_event.dart';
 import '../blocs/standalone_invoice/standalone_invoice_state.dart';
+import '../widgets/desktop/pane_header.dart';
 import 'standalone_invoice_form_screen.dart';
 
 class StandaloneInvoicesScreen extends StatelessWidget {
@@ -25,43 +26,31 @@ class StandaloneInvoicesScreen extends StatelessWidget {
       builder: (context, state) {
         return Scaffold(
           backgroundColor: Theme.of(context).colorScheme.surface,
-          body: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(tr('standalone_invoices.title'), style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          Text(
-                            tr('standalone_invoices.subtitle'),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (state is StandaloneInvoiceLoaded)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 12),
-                        child: Chip(
-                          avatar: const Icon(Icons.numbers, size: 16),
-                          label: Text('${tr('standalone_invoices.next_number')}: ${state.nextInvoiceNumber}', style: const TextStyle(fontSize: 12)),
-                        ),
-                      ),
-                    FilledButton.icon(onPressed: () => _openCreateInvoice(context), icon: const Icon(Icons.add), label: Text(tr('standalone_invoices.create'))),
-                  ],
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              PaneHeader(
+                title: tr('standalone_invoices.title'),
+                subtitle: tr('standalone_invoices.subtitle'),
+                actions: [
+                  if (state is StandaloneInvoiceLoaded)
+                    Chip(avatar: const Icon(Icons.numbers, size: 14), label: Text('${tr('standalone_invoices.next_number')}: ${state.nextInvoiceNumber}')),
+                  FilledButton.icon(onPressed: () => _openCreateInvoice(context), icon: const Icon(Icons.add), label: Text(tr('standalone_invoices.create'))),
+                ],
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Content
+                      Expanded(child: _buildContent(context, state)),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
-                // Content
-                Expanded(child: _buildContent(context, state)),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
