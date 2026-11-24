@@ -14,4 +14,15 @@ class PlatformUtils {
 
   /// True when running in a web browser.
   static bool get isWeb => kIsWeb;
+
+  /// Short platform name used to tell devices apart in synced records.
+  static String get deviceLabel {
+    if (kIsWeb) return 'Web';
+    if (Platform.isMacOS) return 'macOS';
+    if (Platform.isWindows) return 'Windows';
+    if (Platform.isLinux) return 'Linux';
+    if (Platform.isIOS) return 'iOS';
+    if (Platform.isAndroid) return 'Android';
+    return Platform.operatingSystem;
+  }
 }

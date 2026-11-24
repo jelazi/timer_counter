@@ -34,6 +34,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     on<ChangeRemindBreakUrgency>(_onChangeRemindBreakUrgency);
     on<ChangeRemindBreakAfter>(_onChangeRemindBreakAfter);
     on<ToggleAllowOverlapTimes>(_onToggleAllowOverlapTimes);
+    on<ChangeTrayDisplay>(_onChangeTrayDisplay);
     on<ChangeWorkSchedule>(_onChangeWorkSchedule);
   }
 
@@ -75,6 +76,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
         remindBreakUrgency: _settingsRepository.getRemindBreakUrgency(),
         remindBreakAfter: _settingsRepository.getRemindBreakAfter(),
         allowOverlapTimes: _settingsRepository.getAllowOverlapTimes(),
+        trayDisplay: _settingsRepository.getTrayDisplay(),
         workSchedule: _loadWorkSchedule(),
       ),
     );
@@ -202,6 +204,11 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   Future<void> _onToggleAllowOverlapTimes(ToggleAllowOverlapTimes event, Emitter<SettingsState> emit) async {
     await _settingsRepository.setAllowOverlapTimes(event.value);
     emit(state.copyWith(allowOverlapTimes: event.value));
+  }
+
+  Future<void> _onChangeTrayDisplay(ChangeTrayDisplay event, Emitter<SettingsState> emit) async {
+    await _settingsRepository.setTrayDisplay(event.value);
+    emit(state.copyWith(trayDisplay: event.value));
   }
 
   Future<void> _onChangeWorkSchedule(ChangeWorkSchedule event, Emitter<SettingsState> emit) async {

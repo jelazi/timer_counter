@@ -19,6 +19,7 @@ import '../blocs/timer/timer_bloc.dart';
 import '../blocs/timer/timer_event.dart';
 import '../blocs/timer/timer_state.dart';
 import '../widgets/desktop/pane_header.dart';
+import '../widgets/pomodoro_card.dart';
 import '../widgets/time_entry_list_item.dart';
 
 class TimeTrackingScreen extends StatefulWidget {
@@ -361,6 +362,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                           ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                const PomodoroCard(),
                                 if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
                                 _buildTotalTodayCard(context, timerState, settingsState),
                                 const SizedBox(height: 16),
@@ -383,6 +385,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                             )
                           : ListView(
                               children: [
+                                const PomodoroCard(),
                                 if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
                                 _buildTotalTodayCard(context, timerState, settingsState),
                                 const SizedBox(height: 16),
@@ -399,6 +402,7 @@ class _TimeTrackingScreenState extends State<TimeTrackingScreen> {
                             ),
                     ),
                   ] else ...[
+                    const PomodoroCard(),
                     if (isRunning) ...[_buildRunningTimerCard(context, timerState, settingsState), const SizedBox(height: 16)],
                     _buildTotalTodayCard(context, timerState, settingsState),
                     const SizedBox(height: 24),

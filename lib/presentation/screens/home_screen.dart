@@ -15,6 +15,8 @@ import '../../data/models/running_timer_model.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../data/repositories/task_repository.dart';
+import '../blocs/pomodoro/pomodoro_bloc.dart';
+import '../blocs/pomodoro/pomodoro_state.dart';
 import '../blocs/settings/settings_bloc.dart';
 import '../blocs/settings/settings_state.dart';
 import '../blocs/timer/timer_bloc.dart';
@@ -23,6 +25,7 @@ import '../widgets/client_migration_dialog.dart';
 import '../widgets/desktop/desktop_sidebar.dart';
 import 'clients_screen.dart';
 import 'pdf_reports_screen.dart';
+import 'pomodoro_screen.dart';
 import 'projects_screen.dart';
 import 'settings_screen.dart';
 import 'standalone_invoices_screen.dart';
@@ -37,22 +40,49 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  int _selectedIndex = 0;
+enum _Section { tracking, pomodoro, entries, projects, clients, statistics, pdfReports, invoices, settings }
 
-  /// Desktop and web show the full navigation set; mobile omits PDF Reports and Standalone Invoices.
-  List<Widget> get _screens => PlatformUtils.isMobile
-      ? const [TimeTrackingScreen(), TimeEntriesOverviewScreen(), ProjectsScreen(), ClientsScreen(), StatisticsScreen(), SettingsScreen()]
-      : const [
-          TimeTrackingScreen(),
-          TimeEntriesOverviewScreen(),
-          ProjectsScreen(),
-          ClientsScreen(),
-          StatisticsScreen(),
-          PdfReportsScreen(),
-          StandaloneInvoicesScreen(),
-          SettingsScreen(),
+class _HomeScreenState extends State<HomeScreen> {
+  _Section _selected = _Section.tracking;
+  List<_Section> _sections = const [];
+
+  /// Desktop and web show the full navigation set; mobile omits PDF Reports and Standalone Invoices
+  /// and shows the pomodoro only when its bottom-bar tab is switched on.
+  static List<_Section> _sectionsFor(PomodoroState pomodoro) => PlatformUtils.isMobile
+      ? [
+          _Section.tracking,
+          if (pomodoro.showOnTimeTracking && pomodoro.mobileTab) _Section.pomodoro,
+          _Section.entries,
+          _Section.projects,
+          _Section.clients,
+          _Section.statistics,
+          _Section.settings,
+        ]
+      : [
+          _Section.tracking,
+          if (pomodoro.showOnTimeTracking) _Section.pomodoro,
+          _Section.entries,
+          _Section.projects,
+          _Section.clients,
+          _Section.statistics,
+          _Section.pdfReports,
+          _Section.invoices,
+          _Section.settings,
         ];
+
+  static Widget _screenFor(_Section section) => switch (section) {
+    _Section.tracking => const TimeTrackingScreen(),
+    _Section.pomodoro => const PomodoroScreen(),
+    _Section.entries => const TimeEntriesOverviewScreen(),
+    _Section.projects => const ProjectsScreen(),
+    _Section.clients => const ClientsScreen(),
+    _Section.statistics => const StatisticsScreen(),
+    _Section.pdfReports => const PdfReportsScreen(),
+    _Section.invoices => const StandaloneInvoicesScreen(),
+    _Section.settings => const SettingsScreen(),
+  };
+
+  int get _selectedIndex => _sections.indexOf(_selected);
 
   @override
   void initState() {
@@ -123,11 +153,42 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return BlocBuilder<SettingsBloc, SettingsState>(
       builder: (context, settingsState) {
-        if (PlatformUtils.isMobile) return _buildMobileLayout(context);
-        return _buildDesktopLayout(context);
+        return BlocBuilder<PomodoroBloc, PomodoroState>(
+          buildWhen: (previous, current) => previous.showOnTimeTracking != current.showOnTimeTracking || previous.mobileTab != current.mobileTab,
+          builder: (context, pomodoroState) {
+            _sections = _sectionsFor(pomodoroState);
+            if (!_sections.contains(_selected)) _selected = _Section.tracking;
+            if (PlatformUtils.isMobile) return _buildMobileLayout(context);
+            return _buildDesktopLayout(context);
+          },
+        );
       },
     );
   }
+
+  NavigationDestination _destination(_Section section) => switch (section) {
+    _Section.tracking => NavigationDestination(icon: const Icon(Icons.access_time), selectedIcon: const Icon(Icons.access_time_filled), label: tr('nav.time_tracking')),
+    _Section.pomodoro => NavigationDestination(icon: const Icon(Icons.timelapse_outlined), selectedIcon: const Icon(Icons.timelapse), label: tr('pomodoro.title')),
+    _Section.entries => NavigationDestination(icon: const Icon(Icons.list_alt_outlined), selectedIcon: const Icon(Icons.list_alt), label: tr('time_entries.title')),
+    _Section.projects => NavigationDestination(icon: const Icon(Icons.folder_outlined), selectedIcon: const Icon(Icons.folder), label: tr('nav.projects')),
+    _Section.clients => NavigationDestination(icon: const Icon(Icons.business_outlined), selectedIcon: const Icon(Icons.business), label: tr('nav.clients')),
+    _Section.statistics => NavigationDestination(icon: const Icon(Icons.bar_chart_outlined), selectedIcon: const Icon(Icons.bar_chart), label: tr('nav.statistics')),
+    _Section.pdfReports => NavigationDestination(icon: const Icon(Icons.picture_as_pdf_outlined), label: tr('nav.pdf_reports')),
+    _Section.invoices => NavigationDestination(icon: const Icon(Icons.receipt_long_outlined), label: tr('nav.standalone_invoices')),
+    _Section.settings => NavigationDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings), label: tr('nav.settings')),
+  };
+
+  SidebarItem _sidebarItem(_Section section) => switch (section) {
+    _Section.tracking => SidebarItem(icon: Icons.timer_outlined, label: tr('nav.time_tracking'), section: tr('nav.section_tracking')),
+    _Section.pomodoro => SidebarItem(icon: Icons.timelapse_outlined, label: tr('pomodoro.title'), section: tr('nav.section_tracking')),
+    _Section.entries => SidebarItem(icon: Icons.list_alt, label: tr('nav.time_entries'), section: tr('nav.section_tracking')),
+    _Section.projects => SidebarItem(icon: Icons.folder_outlined, label: tr('nav.projects'), section: tr('nav.section_tracking')),
+    _Section.clients => SidebarItem(icon: Icons.business_outlined, label: tr('nav.clients'), section: tr('nav.section_tracking')),
+    _Section.statistics => SidebarItem(icon: Icons.bar_chart, label: tr('nav.statistics'), section: tr('nav.section_reports')),
+    _Section.pdfReports => SidebarItem(icon: Icons.picture_as_pdf_outlined, label: tr('nav.pdf_reports'), section: tr('nav.section_reports')),
+    _Section.invoices => SidebarItem(icon: Icons.receipt_long_outlined, label: tr('nav.standalone_invoices'), section: tr('nav.section_reports')),
+    _Section.settings => SidebarItem(icon: Icons.settings_outlined, label: tr('nav.settings')),
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   // Mobile layout: BottomNavigationBar
@@ -135,20 +196,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildMobileLayout(BuildContext context) {
     return Scaffold(
-      body: SafeArea(child: _screens[_selectedIndex]),
+      body: SafeArea(child: _screenFor(_selected)),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) => setState(() => _selectedIndex = index),
+        onDestinationSelected: _select,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
         height: 56,
-        destinations: [
-          NavigationDestination(icon: const Icon(Icons.access_time), selectedIcon: const Icon(Icons.access_time_filled), label: tr('nav.time_tracking')),
-          NavigationDestination(icon: const Icon(Icons.list_alt_outlined), selectedIcon: const Icon(Icons.list_alt), label: tr('time_entries.title')),
-          NavigationDestination(icon: const Icon(Icons.folder_outlined), selectedIcon: const Icon(Icons.folder), label: tr('nav.projects')),
-          NavigationDestination(icon: const Icon(Icons.business_outlined), selectedIcon: const Icon(Icons.business), label: tr('nav.clients')),
-          NavigationDestination(icon: const Icon(Icons.bar_chart_outlined), selectedIcon: const Icon(Icons.bar_chart), label: tr('nav.statistics')),
-          NavigationDestination(icon: const Icon(Icons.settings_outlined), selectedIcon: const Icon(Icons.settings), label: tr('nav.settings')),
-        ],
+        destinations: [for (final section in _sections) _destination(section)],
       ),
     );
   }
@@ -158,8 +212,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // ─────────────────────────────────────────────────────────────────────────
 
   void _select(int index) {
-    if (index == _selectedIndex || index < 0 || index >= _screens.length) return;
-    setState(() => _selectedIndex = index);
+    if (index == _selectedIndex || index < 0 || index >= _sections.length) return;
+    setState(() => _selected = _sections[index]);
   }
 
   /// Cmd+1…Cmd+8 switch sections and Cmd+, opens Settings (Ctrl on Windows/Linux).
@@ -172,11 +226,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!modifier || keyboard.isShiftPressed || keyboard.isAltPressed) return false;
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.comma) {
-      _select(_screens.length - 1);
+      _select(_sections.length - 1);
       return true;
     }
     final index = key.keyId - LogicalKeyboardKey.digit1.keyId;
-    if (index < 0 || index >= _screens.length || index > 8) return false;
+    if (index < 0 || index >= _sections.length || index > 8) return false;
     _select(index);
     return true;
   }
@@ -193,16 +247,8 @@ class _HomeScreenState extends State<HomeScreen> {
             topInset: isWindows ? 12 : DesktopTheme.toolbarHeight,
             selectedIndex: _selectedIndex,
             onSelected: _select,
-            items: [
-              SidebarItem(icon: Icons.timer_outlined, label: tr('nav.time_tracking'), section: tr('nav.section_tracking')),
-              SidebarItem(icon: Icons.list_alt, label: tr('nav.time_entries'), section: tr('nav.section_tracking')),
-              SidebarItem(icon: Icons.folder_outlined, label: tr('nav.projects'), section: tr('nav.section_tracking')),
-              SidebarItem(icon: Icons.business_outlined, label: tr('nav.clients'), section: tr('nav.section_tracking')),
-              SidebarItem(icon: Icons.bar_chart, label: tr('nav.statistics'), section: tr('nav.section_reports')),
-              SidebarItem(icon: Icons.picture_as_pdf_outlined, label: tr('nav.pdf_reports'), section: tr('nav.section_reports')),
-              SidebarItem(icon: Icons.receipt_long_outlined, label: tr('nav.standalone_invoices'), section: tr('nav.section_reports')),
-            ],
-            bottomItems: [SidebarItem(icon: Icons.settings_outlined, label: tr('nav.settings'))],
+            items: [for (final section in _sections.where((s) => s != _Section.settings)) _sidebarItem(section)],
+            bottomItems: [_sidebarItem(_Section.settings)],
             footer: _SidebarTimerStatus(onTap: () => _select(0), onAbout: () => _showAboutDialog(context)),
           ),
         ),
@@ -210,8 +256,8 @@ class _HomeScreenState extends State<HomeScreen> {
         Expanded(
           child: ClipRect(
             child: Navigator(
-              key: ValueKey(_selectedIndex),
-              onGenerateRoute: (settings) => PageRouteBuilder(settings: settings, transitionDuration: Duration.zero, pageBuilder: (_, _, _) => _screens[_selectedIndex]),
+              key: ValueKey(_selected),
+              onGenerateRoute: (settings) => PageRouteBuilder(settings: settings, transitionDuration: Duration.zero, pageBuilder: (_, _, _) => _screenFor(_selected)),
             ),
           ),
         ),

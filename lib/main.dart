@@ -19,6 +19,7 @@ import 'core/services/daily_snapshot_service.dart';
 import 'core/services/deletion_journal_service.dart';
 import 'core/services/pocketbase_config.dart';
 import 'core/services/pocketbase_sync_service.dart';
+import 'core/services/pomodoro_alerts_service.dart';
 import 'core/services/snapshot_diff_service.dart';
 import 'core/services/work_reminder_service.dart';
 import 'core/utils/platform_utils.dart';
@@ -34,6 +35,7 @@ import 'data/models/time_entry_model.dart';
 import 'data/repositories/category_repository.dart';
 import 'data/repositories/client_repository.dart';
 import 'data/repositories/monthly_hours_target_repository.dart';
+import 'data/repositories/pomodoro_repository.dart';
 import 'data/repositories/project_client_repository.dart';
 import 'data/repositories/project_repository.dart';
 import 'data/repositories/running_timer_repository.dart';
@@ -91,6 +93,8 @@ Future<void> main() async {
   await clientRepository.init();
   final projectClientRepository = ProjectClientRepository();
   await projectClientRepository.init();
+  final pomodoroRepository = PomodoroRepository();
+  await pomodoroRepository.init();
 
   // ── Deletion Journal ───────────────────────────────────────────────────
   // Attached before anything can delete, so no deletion goes unrecorded.
@@ -150,6 +154,7 @@ Future<void> main() async {
     clientRepository: clientRepository,
     projectClientRepository: projectClientRepository,
     standaloneInvoiceRepository: standaloneInvoiceRepository,
+    pomodoroRepository: pomodoroRepository,
     deletionJournal: deletionJournal,
   );
 
@@ -164,6 +169,8 @@ Future<void> main() async {
     final workReminderService = WorkReminderService(settingsRepo: settingsRepository, timerRepo: runningTimerRepository, timeEntryRepo: timeEntryRepository);
     workReminderService.start();
   }
+
+  final pomodoroAlerts = DefaultPomodoroAlerts(repository: pomodoroRepository);
 
   runApp(
     EasyLocalization(
@@ -181,6 +188,8 @@ Future<void> main() async {
         standaloneInvoiceRepository: standaloneInvoiceRepository,
         clientRepository: clientRepository,
         projectClientRepository: projectClientRepository,
+        pomodoroRepository: pomodoroRepository,
+        pomodoroAlerts: pomodoroAlerts,
         systemTrayService: systemTrayService,
         pocketBaseSyncService: pocketBaseSyncService,
         backupService: backupService,
@@ -209,6 +218,7 @@ Future<PocketBaseSyncService?> _initPocketBaseSyncService({
   required ClientRepository clientRepository,
   required ProjectClientRepository projectClientRepository,
   required StandaloneInvoiceRepository standaloneInvoiceRepository,
+  required PomodoroRepository pomodoroRepository,
   required DeletionJournalService deletionJournal,
 }) async {
   PocketBaseSyncService? service;
@@ -231,6 +241,7 @@ Future<PocketBaseSyncService?> _initPocketBaseSyncService({
       clientRepo: clientRepository,
       projectClientRepo: projectClientRepository,
       invoiceRepo: standaloneInvoiceRepository,
+      pomodoroRepo: pomodoroRepository,
     )..attachJournal(deletionJournal);
     // If a token was persisted (e.g. AsyncAuthStore in the future), listeners
     // could be started here. For now we always require explicit login on web.
@@ -252,6 +263,7 @@ Future<PocketBaseSyncService?> _initPocketBaseSyncService({
     clientRepo: clientRepository,
     projectClientRepo: projectClientRepository,
     invoiceRepo: standaloneInvoiceRepository,
+    pomodoroRepo: pomodoroRepository,
   )..attachJournal(deletionJournal);
 
   final error = await service.signIn(pbConfig.email, pbConfig.password);

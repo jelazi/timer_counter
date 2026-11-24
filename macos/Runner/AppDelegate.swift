@@ -8,6 +8,10 @@ class AppDelegate: FlutterAppDelegate, UNUserNotificationCenterDelegate {
   /// Keep a reference to the notification channel so we can call back to Dart.
   private var notifChannel: FlutterMethodChannel?
 
+  /// Pomodoro notifications: shown silently (the app plays its own sounds) and,
+  /// when tapped while a phase waits, reported back instead of raising the window.
+  private var pomodoroChannel: FlutterMethodChannel?
+
   /// Maps category identifier → reminder type string for "mute today" callback.
   private let categoryToType: [String: String] = [
     "REMIND_START": "start",
@@ -50,6 +54,16 @@ class AppDelegate: FlutterAppDelegate, UNUserNotificationCenterDelegate {
     let actionId = response.actionIdentifier
     let categoryId = response.notification.request.content.categoryIdentifier
 
+    if categoryId.hasPrefix("POMODORO") {
+      if categoryId == "POMODORO_AWAITING" && actionId == UNNotificationDefaultActionIdentifier {
+        DispatchQueue.main.async { [weak self] in
+          self?.pomodoroChannel?.invokeMethod("onStartPending", arguments: nil)
+        }
+      }
+      completionHandler()
+      return
+    }
+
     if actionId == "MUTE_TODAY_ACTION" {
       // User tapped "Don't remind today" — send back to Dart
       if let type = categoryToType[categoryId] {
@@ -81,6 +95,8 @@ class AppDelegate: FlutterAppDelegate, UNUserNotificationCenterDelegate {
       UNNotificationCategory(identifier: "REMIND_START", actions: [muteAction], intentIdentifiers: [], options: []),
       UNNotificationCategory(identifier: "REMIND_STOP", actions: [muteAction], intentIdentifiers: [], options: []),
       UNNotificationCategory(identifier: "REMIND_BREAK", actions: [muteAction], intentIdentifiers: [], options: []),
+      UNNotificationCategory(identifier: "POMODORO", actions: [], intentIdentifiers: [], options: []),
+      UNNotificationCategory(identifier: "POMODORO_AWAITING", actions: [], intentIdentifiers: [], options: []),
     ]
 
     UNUserNotificationCenter.current().setNotificationCategories(categories)
@@ -107,6 +123,41 @@ class AppDelegate: FlutterAppDelegate, UNUserNotificationCenterDelegate {
         DispatchQueue.main.async {
           NSApp.activate(ignoringOtherApps: true)
         }
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    let pomodoro = FlutterMethodChannel(name: "com.timer_counter/pomodoro", binaryMessenger: controller.engine.binaryMessenger)
+    self.pomodoroChannel = pomodoro
+    pomodoro.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
+      switch call.method {
+      case "show":
+        guard let args = call.arguments as? [String: Any],
+              let title = args["title"] as? String,
+              let body = args["body"] as? String else {
+          result(FlutterError(code: "BAD_ARGS", message: "Missing title or body", details: nil))
+          return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.categoryIdentifier = (args["awaiting"] as? Bool ?? false) ? "POMODORO_AWAITING" : "POMODORO"
+        let identifier = args["identifier"] as? String ?? "pomodoro"
+        let center = UNUserNotificationCenter.current()
+        center.removeDeliveredNotifications(withIdentifiers: [identifier])
+        center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil)) { error in
+          DispatchQueue.main.async {
+            if let error = error {
+              result(FlutterError(code: "NOTIFICATION_ERROR", message: error.localizedDescription, details: nil))
+            } else {
+              result(nil)
+            }
+          }
+        }
+      case "clear":
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["pomodoro_phase"])
         result(nil)
       default:
         result(FlutterMethodNotImplemented)

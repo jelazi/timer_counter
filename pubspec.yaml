@@ -54,6 +54,11 @@ dependencies:
   pocketbase: ^0.23.2
   share_plus: ^12.0.1
 
+  # Pomodoro sounds and notifications (22.x: the last line that builds with AGP 8)
+  audioplayers: ^6.8.1
+  flutter_local_notifications: ^22.3.3
+  timezone: ^0.11.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -84,6 +89,7 @@ flutter:
     - assets/translations/
     - assets/icons/
     - assets/fonts/
+    - assets/sounds/
     - lib/config/
 
   fonts:

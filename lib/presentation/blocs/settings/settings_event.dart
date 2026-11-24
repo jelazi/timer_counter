@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../data/models/tray_display_settings.dart';
+
 abstract class SettingsEvent extends Equatable {
   const SettingsEvent();
 
@@ -190,6 +192,14 @@ class ChangeRemindBreakAfter extends SettingsEvent {
 class ToggleAllowOverlapTimes extends SettingsEvent {
   final bool value;
   const ToggleAllowOverlapTimes(this.value);
+
+  @override
+  List<Object?> get props => [value];
+}
+
+class ChangeTrayDisplay extends SettingsEvent {
+  final TrayDisplaySettings value;
+  const ChangeTrayDisplay(this.value);
 
   @override
   List<Object?> get props => [value];

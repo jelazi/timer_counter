@@ -15,6 +15,8 @@ class AppConstants {
   static const String standaloneInvoicesBox = 'standalone_invoices';
   static const String clientsBox = 'clients';
   static const String projectClientsBox = 'project_clients';
+  static const String pomodoroBox = 'pomodoro';
+  static const String pomodoroSessionsBox = 'pomodoro_sessions';
 
   // Settings Keys
   static const String themeMode = 'theme_mode';
@@ -70,6 +72,9 @@ class AppConstants {
 
   // The account's own billing identity (synced as one record)
   static const String supplierProfile = 'supplier_profile';
+
+  // Which parts of the menu bar title and tray menu this device shows
+  static const String trayDisplay = 'tray_display';
 
   // Whether the "create clients from invoices" preview was already offered on this device
   static const String clientMigrationOffered = 'client_migration_offered';

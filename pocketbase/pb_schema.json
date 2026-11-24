@@ -1105,5 +1105,93 @@
                 "maxSize": 2000000
             }
         ]
+    },
+    {
+        "id": "tc_pomostate0",
+        "name": "pomodoro_state",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "pst_item_id",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "pst_user_rel",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "pst_data",
+                "name": "data",
+                "type": "json",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "maxSize": 2000000
+            }
+        ]
+    },
+    {
+        "id": "tc_pomosess00",
+        "name": "pomodoro_sessions",
+        "type": "base",
+        "system": false,
+        "listRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "viewRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "createRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "updateRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "deleteRule": "@request.auth.id != \"\" && user = @request.auth.id",
+        "fields": [
+            {
+                "id": "pss_item_id",
+                "name": "item_id",
+                "type": "text",
+                "system": false,
+                "hidden": false,
+                "presentable": true,
+                "required": true
+            },
+            {
+                "id": "pss_user_rel",
+                "name": "user",
+                "type": "relation",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "collectionId": "_pb_users_auth_",
+                "cascadeDelete": false,
+                "maxSelect": 1
+            },
+            {
+                "id": "pss_data",
+                "name": "data",
+                "type": "json",
+                "system": false,
+                "hidden": false,
+                "presentable": false,
+                "required": true,
+                "maxSize": 2000000
+            }
+        ]
     }
 ]

@@ -3,6 +3,7 @@ import 'package:hive_ce/hive.dart';
 import '../../core/constants/app_constants.dart';
 import '../models/invoice_settings.dart';
 import '../models/supplier_profile.dart';
+import '../models/tray_display_settings.dart';
 import '../models/work_day_schedule.dart';
 
 class SettingsRepository {
@@ -113,6 +114,14 @@ class SettingsRepository {
     }
     await _box.put(AppConstants.recentTasks, recent);
   }
+
+  TrayDisplaySettings getTrayDisplay() {
+    final raw = _box.get(AppConstants.trayDisplay);
+    if (raw is! Map) return const TrayDisplaySettings();
+    return TrayDisplaySettings.fromJson(Map<String, dynamic>.from(raw));
+  }
+
+  Future<void> setTrayDisplay(TrayDisplaySettings value) => _box.put(AppConstants.trayDisplay, value.toJson());
 
   // Allow overlapping time entries
   bool getAllowOverlapTimes() => _box.get(AppConstants.allowOverlapTimes, defaultValue: false) as bool;

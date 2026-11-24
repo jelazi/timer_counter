@@ -9,6 +9,8 @@ import '../../core/constants/app_constants.dart';
 import '../../data/models/category_model.dart';
 import '../../data/models/client_model.dart';
 import '../../data/models/monthly_hours_target_model.dart';
+import '../../data/models/pomodoro_session.dart';
+import '../../data/models/pomodoro_settings.dart';
 import '../../data/models/project_client_model.dart';
 import '../../data/models/project_model.dart';
 import '../../data/models/running_timer_model.dart';
@@ -19,6 +21,7 @@ import '../../data/models/time_entry_model.dart';
 import '../../data/repositories/category_repository.dart';
 import '../../data/repositories/client_repository.dart';
 import '../../data/repositories/monthly_hours_target_repository.dart';
+import '../../data/repositories/pomodoro_repository.dart';
 import '../../data/repositories/project_client_repository.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/running_timer_repository.dart';
@@ -27,6 +30,8 @@ import '../../data/repositories/standalone_invoice_repository.dart';
 import '../../data/repositories/task_repository.dart';
 import '../../data/repositories/time_entry_repository.dart';
 import 'deletion_journal_service.dart';
+import 'pomodoro_engine.dart';
+import 'pomodoro_state_merge.dart';
 import 'sync_ledger.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -50,6 +55,9 @@ enum SyncCollection {
   projectClients,
   invoices,
   supplierProfile,
+  pomodoroState,
+  pomodoroSettings,
+  pomodoroSessions,
 }
 
 /// Collections added for per-context work schedules.
@@ -71,6 +79,18 @@ const _userSettingsCollection = 'user_settings';
 
 /// Item id of the supplier profile record in [_userSettingsCollection].
 const _supplierProfileItem = 'supplier_profile';
+
+/// Item id of the pomodoro settings record in [_userSettingsCollection].
+const _pomodoroSettingsItem = 'pomodoro_settings';
+
+/// Optional like the client collections. Holds one record per account that is
+/// never deleted: an ended session is a record without a session.
+const _pomodoroStateCollection = 'pomodoro_state';
+const _pomodoroStateItem = 'current';
+
+/// Finished pomodoro sessions. Records never change, they are only added or
+/// deleted, and a full upload never deletes server records the device lacks.
+const _pomodoroSessionsCollection = 'pomodoro_sessions';
 
 /// Callback for reporting sync progress.
 typedef SyncProgressCallback = void Function(String message, double progress);
@@ -187,6 +207,7 @@ class PocketBaseSyncService {
   final ClientRepository _clientRepo;
   final ProjectClientRepository _projectClientRepo;
   final StandaloneInvoiceRepository _invoiceRepo;
+  final PomodoroRepository? _pomodoroRepo;
   final http.Client Function()? _httpClientFactory;
 
   late PocketBase _pb;
@@ -263,6 +284,7 @@ class PocketBaseSyncService {
     required ClientRepository clientRepo,
     required ProjectClientRepository projectClientRepo,
     required StandaloneInvoiceRepository invoiceRepo,
+    PomodoroRepository? pomodoroRepo,
     @visibleForTesting http.Client Function()? httpClientFactory,
   }) : _categoryRepo = categoryRepo,
        _projectRepo = projectRepo,
@@ -274,6 +296,7 @@ class PocketBaseSyncService {
        _clientRepo = clientRepo,
        _projectClientRepo = projectClientRepo,
        _invoiceRepo = invoiceRepo,
+       _pomodoroRepo = pomodoroRepo,
        _httpClientFactory = httpClientFactory {
     _pb = _createClient(serverUrl);
     _ledger = SyncLedger.decode(_settingsRepo.getPocketBaseSyncLedger());
@@ -410,6 +433,7 @@ class PocketBaseSyncService {
     await _projectClientRepo.deleteAll();
     await _invoiceRepo.deleteAll();
     await _settingsRepo.clearSupplierProfile();
+    await _pomodoroRepo?.clearAccountData();
     await _settingsRepo.setPocketBaseLastSync('');
     _ledger.clear();
     await _saveLedger();
@@ -513,6 +537,7 @@ class PocketBaseSyncService {
       await _subscribeDayOverrides();
       await _subscribeContextCollections();
       await _subscribeClientCollections();
+      await _subscribePomodoro();
 
       _setStatus(SyncStatus.connected);
       _lastError = null;
@@ -543,7 +568,7 @@ class PocketBaseSyncService {
     } catch (e) {
       debugPrint('[PocketBaseSync] Error stopping context listeners: $e');
     }
-    for (final collection in [_clientsCollection, _projectClientsCollection, _invoicesCollection, _userSettingsCollection]) {
+    for (final collection in [_clientsCollection, _projectClientsCollection, _invoicesCollection, _userSettingsCollection, _pomodoroStateCollection, _pomodoroSessionsCollection]) {
       try {
         await _pb.collection(collection).unsubscribe();
       } catch (e) {
@@ -651,6 +676,95 @@ class PocketBaseSyncService {
     return _pushUpsert(_userSettingsCollection, _supplierProfileItem, _supplierProfileToMap(profile));
   }
 
+  Future<void> pushPomodoroRecord(PomodoroSessionRecord record) => _pushUpsert(_pomodoroSessionsCollection, record.id, _pomodoroRecordToMap(record));
+
+  Future<void> deletePomodoroRecord(String id) => _pushDelete(_pomodoroSessionsCollection, id);
+
+  Map<String, dynamic> _pomodoroRecordToMap(PomodoroSessionRecord record) => {'item_id': record.id, 'data': record.toJson()};
+
+  PomodoroSessionRecord _pomodoroRecordFromMap(Map<String, dynamic> map) => PomodoroSessionRecord.fromJson(_decodeJsonMap(map['data']));
+
+  Future<void> pushPomodoroSettings() {
+    final repo = _pomodoroRepo;
+    if (repo == null) return Future.value();
+    return _pushUpsert(_userSettingsCollection, _pomodoroSettingsItem, _pomodoroSettingsToMap(repo.getSettings()));
+  }
+
+  /// Sends the local pomodoro state after merging it with the server's, so a
+  /// stale device never overwrites a newer state or revives an ended session.
+  Future<void> pushPomodoroState() async {
+    if (_pomodoroRepo == null) return;
+    final version = _ledger.markPending(_pomodoroStateCollection, _pomodoroStateItem, PendingOp.upsert);
+    await _saveLedger();
+    if (!await _ensureAuth()) return;
+    if (await _syncPomodoroState()) {
+      _ledger.confirm(_pomodoroStateCollection, _pomodoroStateItem);
+      _ledger.clearPending(_pomodoroStateCollection, _pomodoroStateItem, version: version);
+      await _saveLedger();
+    }
+  }
+
+  /// Merges the server's pomodoro state into the local one without writing back.
+  Future<void> pullPomodoroState({Duration timeout = const Duration(seconds: 3)}) async {
+    if (_pomodoroRepo == null || !isSignedIn) return;
+    try {
+      final existing = await _pb.collection(_pomodoroStateCollection).getList(filter: 'item_id = "$_pomodoroStateItem" && user = "$userId"', perPage: 1).timeout(timeout);
+      if (existing.items.isEmpty) return;
+      await _applyPomodoroMerge(_pomodoroStateFromRecord(existing.items.first.toJson()));
+    } catch (e) {
+      debugPrint('[PocketBaseSync] pomodoro pull skipped: $e');
+    }
+  }
+
+  Future<bool> _syncPomodoroState() async {
+    final repo = _pomodoroRepo;
+    if (repo == null) return true;
+    try {
+      final existing = await _pb.collection(_pomodoroStateCollection).getList(filter: 'item_id = "$_pomodoroStateItem" && user = "$userId"', perPage: 1);
+      if (existing.items.isEmpty) {
+        await _pb.collection(_pomodoroStateCollection).create(body: {..._pomodoroStateToMap(repo.getLiveState()), 'user': userId});
+        return true;
+      }
+      final record = existing.items.first;
+      final remote = _pomodoroStateFromRecord(record.toJson());
+      final merged = await _applyPomodoroMerge(remote);
+      if (merged != remote) await _pb.collection(_pomodoroStateCollection).update(record.id, body: _pomodoroStateToMap(merged));
+      return true;
+    } catch (e) {
+      debugPrint('[PocketBaseSync] pomodoro state sync error: $e');
+      return false;
+    }
+  }
+
+  /// Merges [remote] into the local state, files sessions it supersedes and
+  /// returns the merged state.
+  Future<PomodoroLiveState> _applyPomodoroMerge(PomodoroLiveState remote) async {
+    final repo = _pomodoroRepo!;
+    final local = repo.getLiveState();
+    final result = PomodoroStateMerge.merge(local, remote);
+    var changed = false;
+    if (result.state != local) {
+      await repo.setLiveState(result.state);
+      changed = true;
+    }
+    for (final superseded in result.superseded) {
+      if (repo.hasRecord(superseded.session.id)) continue;
+      final advanced = PomodoroEngine.advance(superseded.session, repo.getSettings(), superseded.endedAt);
+      final record = advanced.endedRecord ?? PomodoroEngine.stop(advanced.session!, superseded.endedAt, reason: PomodoroEndReason.replaced);
+      await repo.addRecord(record);
+      unawaited(pushPomodoroRecord(record).catchError((Object e) => debugPrint('[PocketBaseSync] pomodoro record push error: $e')));
+      changed = true;
+    }
+    if (changed) _collectionChangeController.add(SyncCollection.pomodoroState);
+    return result.state;
+  }
+
+  PomodoroLiveState _pomodoroStateFromRecord(Map<String, dynamic> record) => PomodoroLiveState.fromJson(_decodeJsonMap(record['data']));
+
+  Map<String, dynamic> _pomodoroStateToMap(PomodoroLiveState state) => {'item_id': _pomodoroStateItem, 'data': state.toJson()};
+
+  Map<String, dynamic> _pomodoroSettingsToMap(PomodoroSettings settings) => {'item_id': _pomodoroSettingsItem, 'data': settings.toJson()};
+
   /// Queue the change before sending it, so a push that cannot go out now
   /// (offline, expired token, server error) is retried instead of forgotten.
   Future<void> _pushUpsert(String collection, String itemId, Map<String, dynamic> data) async {
@@ -684,7 +798,10 @@ class PocketBaseSyncService {
       for (final (collection, itemId, op) in _ledger.pendingEntries()) {
         if (!await _ensureAuth()) return;
         final version = _ledger.pendingVersion(collection, itemId);
-        if (op == PendingOp.delete) {
+        if (collection == _pomodoroStateCollection) {
+          if (!await _syncPomodoroState()) continue;
+          _ledger.confirm(collection, itemId);
+        } else if (op == PendingOp.delete) {
           if (!await _deleteRecord(collection, itemId)) continue;
           _ledger.unconfirm(collection, itemId);
         } else {
@@ -739,7 +856,14 @@ class PocketBaseSyncService {
       case _invoicesCollection:
         final i = _invoiceRepo.getById(itemId);
         return i == null ? null : _invoiceToMap(i);
+      case _pomodoroSessionsCollection:
+        final record = _pomodoroRepo?.getRecord(itemId);
+        return record == null ? null : _pomodoroRecordToMap(record);
       case _userSettingsCollection:
+        if (itemId == _pomodoroSettingsItem) {
+          final settings = _pomodoroRepo?.getSettings();
+          return settings == null ? null : _pomodoroSettingsToMap(settings);
+        }
         final profile = itemId == _supplierProfileItem ? _settingsRepo.getSupplierProfile() : null;
         return profile == null ? null : _supplierProfileToMap(profile);
     }
@@ -788,6 +912,7 @@ class PocketBaseSyncService {
 
       onProgress?.call('Clients and invoices…', 0.99);
       await _uploadClientData();
+      await _uploadPomodoroData();
 
       _settingsRepo.setPocketBaseLastSync(DateTime.now().toIso8601String());
       onProgress?.call('Done', 1.0);
@@ -857,6 +982,8 @@ class PocketBaseSyncService {
       final remoteProjectClients = await _downloadOptionalCollection(_projectClientsCollection, _projectClientFromMap);
       final remoteInvoices = await _downloadOptionalCollection(_invoicesCollection, _invoiceFromMap);
       final remoteUserSettings = await _downloadOptionalCollection<Map<String, dynamic>>(_userSettingsCollection, (m) => m);
+      final remotePomodoroStates = _pomodoroRepo == null ? null : await _downloadOptionalCollection<Map<String, dynamic>>(_pomodoroStateCollection, (m) => m);
+      final remotePomodoroRecords = _pomodoroRepo == null ? null : await _downloadOptionalCollection(_pomodoroSessionsCollection, _pomodoroRecordFromMap);
 
       // ── Phase 2: apply. Everything is in hand, so a failure here cannot
       // leave us reconciled against a partial download. ─────────────────────
@@ -923,6 +1050,17 @@ class PocketBaseSyncService {
             (l) => l.id,
           );
         }
+        final pomodoroRepo = _pomodoroRepo;
+        if (remotePomodoroRecords != null && pomodoroRepo != null) {
+          await _replaceLocal<PomodoroSessionRecord>(
+            _pomodoroSessionsCollection,
+            remotePomodoroRecords,
+            pomodoroRepo.getRecords().map((r) => r.id).toSet(),
+            (r) => pomodoroRepo.addRecord(r),
+            (id) => pomodoroRepo.deleteRecord(id),
+            (r) => r.id,
+          );
+        }
         if (remoteInvoices != null) {
           await _replaceLocal<StandaloneInvoiceModel>(
             _invoicesCollection,
@@ -936,6 +1074,7 @@ class PocketBaseSyncService {
       });
 
       if (remoteUserSettings != null) await _applyRemoteUserSettings(remoteUserSettings);
+      if (remotePomodoroStates != null) await _applyRemotePomodoroStates(remotePomodoroStates);
 
       // Day overrides are cheap settings keys, not records — but the same
       // "empty remote must not wipe local" rule applies.
@@ -1247,11 +1386,37 @@ class PocketBaseSyncService {
         if (_suppressListeners) return;
         final record = e.record;
         if (record == null || e.action == 'delete') return;
-        await _applyRemoteUserSettings([record.toJson()]);
+        await _applyRemoteUserSettings([record.toJson()], complete: false);
         _collectionChangeController.add(SyncCollection.supplierProfile);
       }, filter: 'user = "$userId"');
     } catch (e) {
       debugPrint('[PocketBaseSync] Client collections unavailable, real-time sync for them is off: $e');
+    }
+  }
+
+  /// Real-time pomodoro state. Every event is merged, never applied blindly;
+  /// when the local side wins, the merged state is sent back.
+  Future<void> _subscribePomodoro() async {
+    if (_pomodoroRepo == null || !await _serverHasCollection(_pomodoroStateCollection)) return;
+    try {
+      await _pb.collection(_pomodoroStateCollection).subscribe('*', (e) async {
+        if (_suppressListeners) return;
+        final record = e.record;
+        if (record == null || e.action == 'delete' || record.getStringValue('item_id') != _pomodoroStateItem) return;
+        final remote = _pomodoroStateFromRecord(record.toJson());
+        final merged = await _applyPomodoroMerge(remote);
+        if (merged != remote) await pushPomodoroState();
+      }, filter: 'user = "$userId"');
+      if (await _serverHasCollection(_pomodoroSessionsCollection)) {
+        await _pb.collection(_pomodoroSessionsCollection).subscribe('*', (e) {
+          if (_suppressListeners) return;
+          final repo = _pomodoroRepo;
+          _handleEvent<PomodoroSessionRecord>(_pomodoroSessionsCollection, e, _pomodoroRecordFromMap, repo.addRecord, repo.deleteRecord);
+          _collectionChangeController.add(SyncCollection.pomodoroSessions);
+        }, filter: 'user = "$userId"');
+      }
+    } catch (e) {
+      debugPrint('[PocketBaseSync] Pomodoro state unavailable, real-time sync for it is off: $e');
     }
   }
 
@@ -1265,21 +1430,24 @@ class PocketBaseSyncService {
     }
   }
 
-  /// Apply downloaded `user_settings` records. The supplier profile is a single
-  /// record per account: the side edited later wins, and a local profile the
-  /// server does not have yet is queued for upload instead of being dropped.
-  Future<void> _applyRemoteUserSettings(List<Map<String, dynamic>> records) async {
-    Map<String, dynamic>? remoteProfileRecord;
-    for (final record in records) {
-      if (record['item_id'] == _supplierProfileItem) remoteProfileRecord = record;
-    }
+  /// Apply downloaded `user_settings` records. Each item is a single record
+  /// per account: the side edited later wins, and a local item the server does
+  /// not have yet is queued for upload instead of being dropped. A real-time
+  /// event carries one record, so [complete] is false and absent items are
+  /// left alone.
+  Future<void> _applyRemoteUserSettings(List<Map<String, dynamic>> records, {bool complete = true}) async {
+    final byItem = <String, Map<String, dynamic>>{for (final r in records) (r['item_id'] as String? ?? ''): r};
+    if (complete || byItem.containsKey(_supplierProfileItem)) await _applyRemoteSupplierProfile(byItem[_supplierProfileItem]);
+    if (_pomodoroRepo != null && (complete || byItem.containsKey(_pomodoroSettingsItem))) await _applyRemotePomodoroSettings(byItem[_pomodoroSettingsItem]);
+    await _saveLedger();
+  }
 
+  Future<void> _applyRemoteSupplierProfile(Map<String, dynamic>? remoteProfileRecord) async {
     final local = _settingsRepo.getSupplierProfile();
     if (_ledger.pendingOp(_userSettingsCollection, _supplierProfileItem) != null) return;
 
     if (remoteProfileRecord == null) {
       if (local != null) _ledger.markPending(_userSettingsCollection, _supplierProfileItem, PendingOp.upsert);
-      await _saveLedger();
       return;
     }
 
@@ -1289,6 +1457,69 @@ class PocketBaseSyncService {
       await _settingsRepo.setSupplierProfile(remote);
     } else if (local.updatedAt.isAfter(remote.updatedAt)) {
       _ledger.markPending(_userSettingsCollection, _supplierProfileItem, PendingOp.upsert);
+    }
+  }
+
+  Future<void> _applyRemotePomodoroSettings(Map<String, dynamic>? record) async {
+    final repo = _pomodoroRepo!;
+    if (_ledger.pendingOp(_userSettingsCollection, _pomodoroSettingsItem) != null) return;
+    final local = repo.getSettings();
+
+    if (record == null) {
+      if (local.updatedAt != null) _ledger.markPending(_userSettingsCollection, _pomodoroSettingsItem, PendingOp.upsert);
+      return;
+    }
+
+    _ledger.confirm(_userSettingsCollection, _pomodoroSettingsItem);
+    final remote = PomodoroSettings.fromJson(_decodeJsonMap(record['data']));
+    final remoteAt = remote.updatedAt;
+    final localAt = local.updatedAt;
+    if (remoteAt != null && (localAt == null || remoteAt.isAfter(localAt))) {
+      await repo.setSettings(remote);
+      _collectionChangeController.add(SyncCollection.pomodoroSettings);
+    } else if (localAt != null && (remoteAt == null || localAt.isAfter(remoteAt))) {
+      _ledger.markPending(_userSettingsCollection, _pomodoroSettingsItem, PendingOp.upsert);
+    }
+  }
+
+  /// The downloaded pomodoro state merges into the local one; a local state the
+  /// server does not have yet is queued for upload.
+  Future<void> _applyRemotePomodoroStates(List<Map<String, dynamic>> records) async {
+    Map<String, dynamic>? record;
+    for (final r in records) {
+      if (r['item_id'] == _pomodoroStateItem) record = r;
+    }
+    if (record == null) {
+      if (!_pomodoroRepo!.getLiveState().isEmpty) _ledger.markPending(_pomodoroStateCollection, _pomodoroStateItem, PendingOp.upsert);
+      return;
+    }
+    final remote = _pomodoroStateFromRecord(record);
+    final merged = await _applyPomodoroMerge(remote);
+    if (merged != remote) {
+      _ledger.markPending(_pomodoroStateCollection, _pomodoroStateItem, PendingOp.upsert);
+    } else {
+      _ledger.confirm(_pomodoroStateCollection, _pomodoroStateItem);
+    }
+  }
+
+  /// Pomodoro settings and state on a full upload. Failures are logged: the
+  /// collection is optional on the server.
+  Future<void> _uploadPomodoroData() async {
+    final repo = _pomodoroRepo;
+    if (repo == null) return;
+    if (repo.getSettings().updatedAt != null && await _upsertRecord(_userSettingsCollection, _pomodoroSettingsItem, _pomodoroSettingsToMap(repo.getSettings()))) {
+      _ledger.confirm(_userSettingsCollection, _pomodoroSettingsItem);
+      _ledger.clearPending(_userSettingsCollection, _pomodoroSettingsItem, version: _ledger.pendingVersion(_userSettingsCollection, _pomodoroSettingsItem));
+    }
+    for (final record in repo.getRecords()) {
+      if (await _upsertRecord(_pomodoroSessionsCollection, record.id, _pomodoroRecordToMap(record))) {
+        _ledger.confirm(_pomodoroSessionsCollection, record.id);
+        _ledger.clearPending(_pomodoroSessionsCollection, record.id, version: _ledger.pendingVersion(_pomodoroSessionsCollection, record.id));
+      }
+    }
+    if (!repo.getLiveState().isEmpty && await _syncPomodoroState()) {
+      _ledger.confirm(_pomodoroStateCollection, _pomodoroStateItem);
+      _ledger.clearPending(_pomodoroStateCollection, _pomodoroStateItem, version: _ledger.pendingVersion(_pomodoroStateCollection, _pomodoroStateItem));
     }
     await _saveLedger();
   }

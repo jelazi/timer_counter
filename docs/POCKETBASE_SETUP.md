@@ -16,8 +16,10 @@ The app syncs these PocketBase collections:
 - `day_overrides`
 - `context_settings`
 - `context_day_overrides`
+- `clients`, `project_clients`, `invoices`, `user_settings` (clients, synced invoices, the supplier profile and the pomodoro settings)
+- `pomodoro_state`, `pomodoro_sessions` (the shared pomodoro session and, later, its history)
 
-The last two hold the per-work-context schedules, month goals and days off. They
+`context_settings` and `context_day_overrides` hold the per-work-context schedules, month goals and days off. They
 were added later, so a server whose schema predates them still works: the app
 detects that they are missing and keeps that data local until they are imported.
 An older app version does not know them at all and leaves them untouched, so old
@@ -124,6 +126,15 @@ The schema is stored in `pocketbase/pb_schema.json`.
 4. Review and confirm the import.
 5. Verify that all nine app collections exist: `categories`, `projects`, `tasks`, `time_entries`, `running_timers`, `monthly_targets`, `day_overrides`, `context_settings`, and `context_day_overrides`.
 6. Re-importing on an existing server adds the two `context_*` collections and leaves the existing records alone.
+
+### Adding the optional collections to a running server
+
+`pocketbase/pb_schema_clients_addon.json` (clients, invoices, `user_settings`) and
+`pocketbase/pb_schema_pomodoro_addon.json` (`pomodoro_state`, `pomodoro_sessions`) contain only the
+new collections. Back up the server first, then import the file in Settings -> Import collections
+with **"Merge with the existing collections" ON** — with it off, the import replaces the whole schema
+and deletes every collection that is not in the file. Until a file is imported, the app keeps that
+data on the device and syncs everything else.
 
 The schema includes API rules so authenticated users can list, view, update, and delete only their own records.
 
@@ -245,8 +256,10 @@ Aplikace synchronizuje tyto PocketBase kolekce:
 - `day_overrides`
 - `context_settings`
 - `context_day_overrides`
+- `clients`, `project_clients`, `invoices`, `user_settings` (firmy, synchronizované faktury, profil dodavatele a nastavení pomodora)
+- `pomodoro_state`, `pomodoro_sessions` (sdílené pomodoro sezení a později jeho historie)
 
-Poslední dvě drží rozvrhy, měsíční cíle a dny volna jednotlivých pracovních
+`context_settings` a `context_day_overrides` drží rozvrhy, měsíční cíle a dny volna jednotlivých pracovních
 režimů. Byly přidány později, takže server se starším schématem funguje dál:
 aplikace pozná, že kolekce chybí, a tato data si nechá lokálně, dokud je
 nenaimportuješ. Starší verze aplikace je vůbec nezná a nesáhne na ně, takže
@@ -353,6 +366,15 @@ Schéma je uložené v `pocketbase/pb_schema.json`.
 4. Zkontroluj a potvrď import.
 5. Ověř, že existuje všech devět aplikačních kolekcí: `categories`, `projects`, `tasks`, `time_entries`, `running_timers`, `monthly_targets`, `day_overrides`, `context_settings` a `context_day_overrides`.
 6. Opakovaný import na běžícím serveru jen doplní dvě kolekce `context_*`, stávající záznamy zůstanou nedotčené.
+
+### Doplnění volitelných kolekcí na běžící server
+
+`pocketbase/pb_schema_clients_addon.json` (firmy, faktury, `user_settings`) a
+`pocketbase/pb_schema_pomodoro_addon.json` (`pomodoro_state`, `pomodoro_sessions`) obsahují jen nové
+kolekce. Nejdřív zálohuj server, pak soubor naimportuj v Settings -> Import collections se
+**zapnutým „Merge with the existing collections“** — vypnutá volba nahradí celé schéma a smaže
+všechny kolekce, které v souboru nejsou. Dokud soubor nenaimportuješ, aplikace si tato data drží
+v zařízení a synchronizuje vše ostatní.
 
 Schéma obsahuje API pravidla, takže přihlášení uživatelé mohou číst, upravovat a mazat jen své vlastní záznamy.
 

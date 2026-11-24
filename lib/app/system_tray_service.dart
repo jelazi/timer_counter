@@ -5,12 +5,35 @@ import 'package:system_tray/system_tray.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../core/services/dock_service.dart';
+import '../data/models/tray_display_settings.dart';
 
 /// Callback signature for starting a timer from the tray menu.
 typedef TrayStartTimerCallback = void Function(String projectId, String taskId);
 
 /// Callback signature for stopping a timer from the tray menu.
 typedef TrayStopTimerCallback = void Function(String timerId);
+
+/// Callback for "start a pomodoro together with this task's timer";
+/// [timerRunning] when that timer already runs.
+typedef TrayStartPomodoroWithTimerCallback = void Function(String projectId, String taskId, bool timerRunning);
+
+class TrayMenuAction {
+  final String label;
+  final VoidCallback? onClicked;
+
+  const TrayMenuAction(this.label, [this.onClicked]);
+}
+
+/// The pomodoro block of the tray menu, labels already translated.
+class TrayPomodoroMenu {
+  final List<TrayMenuAction> actions;
+  final String withTimerLabel;
+
+  /// Null while a session runs: a second one cannot be started.
+  final TrayStartPomodoroWithTimerCallback? onStartWithTimer;
+
+  const TrayPomodoroMenu({required this.actions, required this.withTimerLabel, this.onStartWithTimer});
+}
 
 /// Info about a project+tasks for the tray menu.
 class TrayProjectInfo {
@@ -71,6 +94,9 @@ class TrayRecentTaskInfo {
 class SystemTrayService {
   final SystemTray _systemTray = SystemTray();
   bool _isInitialized = false;
+  String? _lastTitle;
+  String? _lastTooltip;
+  String? _lastMenuSignature;
 
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -169,16 +195,19 @@ class SystemTrayService {
   }
 
   Future<void> updateTooltip(String tooltip) async {
-    if (!_isInitialized) return;
+    if (!_isInitialized || tooltip == _lastTooltip) return;
+    _lastTooltip = tooltip;
     await _systemTray.setToolTip(tooltip);
   }
 
   Future<void> updateTitle(String title) async {
-    if (!_isInitialized) return;
+    if (!_isInitialized || title == _lastTitle) return;
+    _lastTitle = title;
     await _systemTray.setTitle(title);
   }
 
-  /// Build a rich tray menu with running timers, recent tasks, and project/task quick-start.
+  /// Build a rich tray menu with the pomodoro, running timers, recent tasks and
+  /// project/task quick-start; each block can be switched off in [display].
   Future<void> updateMenu({
     required List<TrayRunningTimerInfo> runningTimers,
     required List<TrayRecentTaskInfo> recentTasks,
@@ -186,6 +215,8 @@ class SystemTrayService {
     required VoidCallback onStopAll,
     required TrayStopTimerCallback onStopTimer,
     required TrayStartTimerCallback onStartTimer,
+    TrayDisplaySettings display = const TrayDisplaySettings(),
+    TrayPomodoroMenu? pomodoro,
   }) async {
     if (!_isInitialized) return;
 
@@ -197,8 +228,38 @@ class SystemTrayService {
       MenuSeparator(),
     ];
 
+    final runningPairs = runningTimers
+        .map((t) => '${t.projectId}:${t.taskId}')
+        .toSet();
+
+    if (pomodoro != null && display.menuPomodoro) {
+      for (final action in pomodoro.actions) {
+        menuItems.add(
+          MenuItemLabel(
+            label: action.label,
+            enabled: action.onClicked != null,
+            onClicked: action.onClicked == null ? null : (_) => action.onClicked!(),
+          ),
+        );
+      }
+      if (display.menuPomodoroWithTimer && pomodoro.onStartWithTimer != null && recentTasks.isNotEmpty) {
+        final subMenu = SubMenu(label: pomodoro.withTimerLabel, children: []);
+        for (final recent in recentTasks) {
+          final isRunning = runningPairs.contains('${recent.projectId}:${recent.taskId}');
+          subMenu.children.add(
+            MenuItemLabel(
+              label: '${recent.projectName} / ${recent.taskName}',
+              onClicked: (_) => pomodoro.onStartWithTimer!(recent.projectId, recent.taskId, isRunning),
+            ),
+          );
+        }
+        menuItems.add(subMenu);
+      }
+      menuItems.add(MenuSeparator());
+    }
+
     // Running timers section
-    if (runningTimers.isNotEmpty) {
+    if (runningTimers.isNotEmpty && display.menuRunningTimers) {
       for (final timer in runningTimers) {
         menuItems.add(
           MenuItemLabel(
@@ -215,11 +276,7 @@ class SystemTrayService {
     }
 
     // Recent tasks — shown at root level for quick access
-    if (recentTasks.isNotEmpty) {
-      // Collect running project+task pairs to disable them
-      final runningPairs = runningTimers
-          .map((t) => '${t.projectId}:${t.taskId}')
-          .toSet();
+    if (recentTasks.isNotEmpty && display.menuRecentTasks) {
       for (final recent in recentTasks) {
         final isRunning = runningPairs.contains(
           '${recent.projectId}:${recent.taskId}',
@@ -238,7 +295,7 @@ class SystemTrayService {
     }
 
     // Start timer — project → task sub-menus
-    if (projects.isNotEmpty) {
+    if (projects.isNotEmpty && display.menuStartTimer) {
       menuItems.add(
         MenuItemLabel(label: '--- Start Timer ---', enabled: false),
       );
@@ -260,9 +317,29 @@ class SystemTrayService {
 
     menuItems.add(MenuItemLabel(label: 'Quit', onClicked: (_) => _quitApp()));
 
+    // The menu is refreshed every second; rebuilding the native menu only when
+    // it changed keeps an open menu from flickering.
+    final signature = _signature(menuItems);
+    if (signature == _lastMenuSignature) return;
+    _lastMenuSignature = signature;
+
     final menu = Menu();
     await menu.buildFrom(menuItems);
     await _systemTray.setContextMenu(menu);
+  }
+
+  static String _signature(List<MenuItemBase> items) {
+    final buffer = StringBuffer();
+    for (final item in items) {
+      if (item is SubMenu) {
+        buffer.write('[${item.label}:${_signature(item.children)}]');
+      } else if (item is MenuItemLabel) {
+        buffer.write('${item.label}|${item.enabled}|${item.onClicked != null};');
+      } else {
+        buffer.write('-;');
+      }
+    }
+    return buffer.toString();
   }
 
   Future<void> destroy() async {

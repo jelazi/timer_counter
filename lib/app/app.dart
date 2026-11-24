@@ -9,14 +9,17 @@ import '../core/services/backup_service.dart';
 import '../core/services/daily_snapshot_service.dart';
 import '../core/services/deletion_journal_service.dart';
 import '../core/services/pocketbase_sync_service.dart';
+import '../core/services/pomodoro_alerts.dart';
 import '../core/services/snapshot_diff_service.dart';
 import '../core/theme/app_theme.dart';
 import '../core/theme/desktop_theme.dart';
 import '../core/utils/platform_utils.dart';
 import '../core/utils/time_formatter.dart';
+import '../data/models/pomodoro_session.dart';
 import '../data/repositories/category_repository.dart';
 import '../data/repositories/client_repository.dart';
 import '../data/repositories/monthly_hours_target_repository.dart';
+import '../data/repositories/pomodoro_repository.dart';
 import '../data/repositories/project_client_repository.dart';
 import '../data/repositories/project_repository.dart';
 import '../data/repositories/running_timer_repository.dart';
@@ -28,10 +31,14 @@ import '../presentation/blocs/category/category_bloc.dart';
 import '../presentation/blocs/category/category_event.dart';
 import '../presentation/blocs/client/client_bloc.dart';
 import '../presentation/blocs/client/client_event.dart';
+import '../presentation/blocs/pomodoro/pomodoro_bloc.dart';
+import '../presentation/blocs/pomodoro/pomodoro_event.dart';
+import '../presentation/blocs/pomodoro/pomodoro_state.dart';
 import '../presentation/blocs/project/project_bloc.dart';
 import '../presentation/blocs/project/project_event.dart';
 import '../presentation/blocs/settings/settings_bloc.dart';
 import '../presentation/blocs/settings/settings_event.dart';
+import '../presentation/blocs/settings/settings_state.dart';
 import '../presentation/blocs/standalone_invoice/standalone_invoice_bloc.dart';
 import '../presentation/blocs/standalone_invoice/standalone_invoice_event.dart';
 import '../presentation/blocs/statistics/statistics_bloc.dart';
@@ -42,7 +49,9 @@ import '../presentation/blocs/timer/timer_event.dart';
 import '../presentation/blocs/timer/timer_state.dart';
 import '../presentation/screens/backup_history_screen.dart';
 import '../presentation/widgets/auth_gate.dart';
+import '../presentation/widgets/pomodoro_card.dart';
 import 'system_tray_service.dart';
+import 'tray_title.dart';
 
 class TymeApp extends StatelessWidget {
   final CategoryRepository categoryRepository;
@@ -55,6 +64,8 @@ class TymeApp extends StatelessWidget {
   final StandaloneInvoiceRepository standaloneInvoiceRepository;
   final ClientRepository clientRepository;
   final ProjectClientRepository projectClientRepository;
+  final PomodoroRepository pomodoroRepository;
+  final PomodoroAlerts? pomodoroAlerts;
   final SystemTrayService? systemTrayService;
   final PocketBaseSyncService? pocketBaseSyncService;
   final BackupService backupService;
@@ -74,6 +85,8 @@ class TymeApp extends StatelessWidget {
     required this.standaloneInvoiceRepository,
     required this.clientRepository,
     required this.projectClientRepository,
+    required this.pomodoroRepository,
+    this.pomodoroAlerts,
     required this.backupService,
     required this.snapshotService,
     required this.snapshotDiffService,
@@ -96,6 +109,7 @@ class TymeApp extends StatelessWidget {
         Provider<StandaloneInvoiceRepository>.value(value: standaloneInvoiceRepository),
         Provider<ClientRepository>.value(value: clientRepository),
         Provider<ProjectClientRepository>.value(value: projectClientRepository),
+        Provider<PomodoroRepository>.value(value: pomodoroRepository),
         if (systemTrayService != null) Provider<SystemTrayService>.value(value: systemTrayService!),
         Provider<PocketBaseSyncService?>.value(value: pocketBaseSyncService),
         Provider<BackupService>.value(value: backupService),
@@ -123,6 +137,11 @@ class TymeApp extends StatelessWidget {
               settingsRepository: settingsRepository,
               syncService: pocketBaseSyncService,
             ),
+          ),
+          BlocProvider<PomodoroBloc>(
+            create: (context) =>
+                PomodoroBloc(repository: pomodoroRepository, runningTimerRepository: runningTimerRepository, syncService: pocketBaseSyncService, alerts: pomodoroAlerts)
+                  ..add(const LoadPomodoro()),
           ),
           BlocProvider<StatisticsBloc>(
             create: (context) => StatisticsBloc(timeEntryRepository: timeEntryRepository, projectRepository: projectRepository, settingsRepository: settingsRepository),
@@ -251,12 +270,15 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
           localizationsDelegates: context.localizationDelegates,
           supportedLocales: context.supportedLocales,
           locale: context.locale,
-          home: BlocListener<TimerBloc, TimerState>(
-            listener: (context, timerState) {
-              if (PlatformUtils.isDesktop && widget.systemTrayService != null) {
-                _updateSystemTray(context, timerState);
-              }
-            },
+          home: MultiBlocListener(
+            listeners: [
+              BlocListener<TimerBloc, TimerState>(listener: (context, _) => _updateSystemTray(context)),
+              BlocListener<PomodoroBloc, PomodoroState>(listener: (context, _) => _updateSystemTray(context)),
+              BlocListener<SettingsBloc, SettingsState>(
+                listenWhen: (previous, current) => previous.trayDisplay != current.trayDisplay,
+                listener: (context, _) => _updateSystemTray(context),
+              ),
+            ],
             child: AuthGate(syncService: widget.pocketBaseSyncService),
           ),
         );
@@ -264,15 +286,19 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
     );
   }
 
-  void _updateSystemTray(BuildContext context, TimerState timerState) {
-    if (widget.systemTrayService == null) return;
-    final trayService = widget.systemTrayService!;
+  void _updateSystemTray(BuildContext context) {
+    final trayService = widget.systemTrayService;
+    if (!PlatformUtils.isDesktop || trayService == null) return;
     final projectRepo = context.read<ProjectRepository>();
     final taskRepo = context.read<TaskRepository>();
+    final settingsRepo = context.read<SettingsRepository>();
+    final timerBloc = context.read<TimerBloc>();
+    final pomodoroBloc = context.read<PomodoroBloc>();
+    final display = context.read<SettingsBloc>().state.trayDisplay;
+    final timerState = timerBloc.state;
+    final timersLoaded = timerState is TimerRunning;
 
-    // Build project list for quick-start
-    final activeProjects = projectRepo.getActive();
-    final projectInfos = activeProjects.map((p) {
+    final projectInfos = projectRepo.getActive().map((p) {
       final tasks = taskRepo.getByProject(p.id);
       return TrayProjectInfo(
         id: p.id,
@@ -281,92 +307,102 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
       );
     }).toList();
 
-    if (timerState is TimerRunning) {
-      // Build running timer info
-      final runningTimerInfos = timerState.runningTimers.map((t) {
-        final project = projectRepo.getById(t.projectId);
-        final task = taskRepo.getById(t.taskId);
-        return TrayRunningTimerInfo(
-          id: t.id,
-          projectId: t.projectId,
-          taskId: t.taskId,
-          projectName: project?.name ?? 'Unknown',
-          taskName: task?.name ?? 'Unknown',
-          elapsed: TimeFormatter.formatDuration(t.elapsedSeconds, showSeconds: false),
-        );
-      }).toList();
+    final runningTimerInfos = !timersLoaded
+        ? <TrayRunningTimerInfo>[]
+        : timerState.runningTimers.map((t) {
+            final project = projectRepo.getById(t.projectId);
+            final task = taskRepo.getById(t.taskId);
+            return TrayRunningTimerInfo(
+              id: t.id,
+              projectId: t.projectId,
+              taskId: t.taskId,
+              projectName: project?.name ?? 'Unknown',
+              taskName: task?.name ?? 'Unknown',
+              elapsed: TimeFormatter.formatDuration(t.elapsedSeconds, showSeconds: false),
+            );
+          }).toList();
+    final first = runningTimerInfos.isEmpty ? null : runningTimerInfos.first;
+    final totalFormatted = timersLoaded ? TimeFormatter.formatDuration(timerState.totalTodaySeconds, showSeconds: false) : null;
 
-      // Update tooltip — show current task + running time + total today
-      final totalFormatted = TimeFormatter.formatDuration(timerState.totalTodaySeconds, showSeconds: false);
-      String tooltip = 'Timer Counter';
-      if (runningTimerInfos.isNotEmpty) {
-        final first = runningTimerInfos.first;
-        tooltip = '${first.projectName} / ${first.taskName} — ${first.elapsed}';
-      }
+    var tooltip = 'Timer Counter';
+    if (timersLoaded) {
+      if (first != null) tooltip = '${first.projectName} / ${first.taskName} — ${first.elapsed}';
       tooltip += ' | Today: $totalFormatted';
-      trayService.updateTooltip(tooltip);
+    }
+    trayService.updateTooltip(tooltip);
 
-      // Update title — show task name + elapsed | total today
-      if (runningTimerInfos.isNotEmpty) {
-        final first = runningTimerInfos.first;
-        trayService.updateTitle('${first.taskName} ${first.elapsed} | $totalFormatted');
-      } else {
-        trayService.updateTitle('0:00 | $totalFormatted');
+    final pomodoroState = pomodoroBloc.state;
+    final session = pomodoroState.session;
+    final rounds = pomodoroState.settings.roundsBeforeLongBreak;
+    final pomodoroInfo = session == null
+        ? null
+        : TrayPomodoroInfo(
+            isWork: session.phase == PomodoroPhase.work,
+            isPaused: session.isPaused,
+            isAwaitingStart: session.isAwaitingStart,
+            countdown: formatPomodoroCountdown(session.remainingSeconds(DateTime.now())),
+            round: session.round(rounds),
+            rounds: rounds,
+            phaseLabel: pomodoroPhaseLabel(session.phase),
+          );
+
+    trayService.updateTitle(
+      TrayTitle.build(display: display, timersLoaded: timersLoaded, pomodoro: pomodoroInfo, taskName: first?.taskName, elapsed: first?.elapsed, todayTotal: totalFormatted),
+    );
+
+    final recentTaskInfos = <TrayRecentTaskInfo>[];
+    for (final pair in settingsRepo.getRecentTasks()) {
+      final p = projectRepo.getById(pair['projectId'] ?? '');
+      final t = taskRepo.getById(pair['taskId'] ?? '');
+      if (p != null && t != null && !p.isArchived) {
+        recentTaskInfos.add(TrayRecentTaskInfo(projectId: p.id, taskId: t.id, projectName: p.name, taskName: t.name, projectColor: p.colorValue));
       }
+    }
 
-      // Build recent tasks list for tray
-      final settingsRepo = context.read<SettingsRepository>();
-      final recentPairs = settingsRepo.getRecentTasks();
-      final recentTaskInfos = <TrayRecentTaskInfo>[];
-      for (final pair in recentPairs) {
-        final p = projectRepo.getById(pair['projectId'] ?? '');
-        final t = taskRepo.getById(pair['taskId'] ?? '');
-        if (p != null && t != null && !p.isArchived) {
-          recentTaskInfos.add(TrayRecentTaskInfo(projectId: p.id, taskId: t.id, projectName: p.name, taskName: t.name, projectColor: p.colorValue));
-        }
-      }
+    void startTimer(String projectId, String taskId) {
+      settingsRepo.addRecentTask(projectId, taskId);
+      timerBloc.add(StartTimer(projectId: projectId, taskId: taskId));
+    }
 
-      // Update menu
-      trayService.updateMenu(
-        runningTimers: runningTimerInfos,
-        recentTasks: recentTaskInfos,
-        projects: projectInfos,
-        onStopAll: () => context.read<TimerBloc>().add(const StopAllTimers()),
-        onStopTimer: (timerId) => context.read<TimerBloc>().add(StopTimer(timerId)),
-        onStartTimer: (projectId, taskId) {
-          settingsRepo.addRecentTask(projectId, taskId);
-          context.read<TimerBloc>().add(StartTimer(projectId: projectId, taskId: taskId));
-        },
-      );
-    } else {
-      // No timer running — show 0:00 and empty total
-      trayService.updateTooltip('Timer Counter');
-      trayService.updateTitle('0:00');
+    trayService.updateMenu(
+      runningTimers: runningTimerInfos,
+      recentTasks: recentTaskInfos,
+      projects: projectInfos,
+      onStopAll: () => timerBloc.add(const StopAllTimers()),
+      onStopTimer: (timerId) => timerBloc.add(StopTimer(timerId)),
+      onStartTimer: startTimer,
+      display: display,
+      pomodoro: _trayPomodoroMenu(pomodoroBloc, pomodoroInfo, startTimer),
+    );
+  }
 
-      // Build recent tasks list for tray
-      final settingsRepo = context.read<SettingsRepository>();
-      final recentPairs = settingsRepo.getRecentTasks();
-      final recentTaskInfos = <TrayRecentTaskInfo>[];
-      for (final pair in recentPairs) {
-        final p = projectRepo.getById(pair['projectId'] ?? '');
-        final t = taskRepo.getById(pair['taskId'] ?? '');
-        if (p != null && t != null && !p.isArchived) {
-          recentTaskInfos.add(TrayRecentTaskInfo(projectId: p.id, taskId: t.id, projectName: p.name, taskName: t.name, projectColor: p.colorValue));
-        }
-      }
-
-      // Update menu with no running timers
-      trayService.updateMenu(
-        runningTimers: [],
-        recentTasks: recentTaskInfos,
-        projects: projectInfos,
-        onStopAll: () {},
-        onStopTimer: (_) {},
-        onStartTimer: (projectId, taskId) {
-          settingsRepo.addRecentTask(projectId, taskId);
-          context.read<TimerBloc>().add(StartTimer(projectId: projectId, taskId: taskId));
+  TrayPomodoroMenu _trayPomodoroMenu(PomodoroBloc bloc, TrayPomodoroInfo? info, TrayStartTimerCallback startTimer) {
+    final withTimerLabel = '🍅 ${tr('pomodoro.tray_with_timer')}';
+    if (info == null) {
+      return TrayPomodoroMenu(
+        actions: [TrayMenuAction('🍅 ${tr('pomodoro.tray_start')}', () => bloc.add(const StartPomodoro(notifyIfNoTimer: true)))],
+        withTimerLabel: withTimerLabel,
+        onStartWithTimer: (projectId, taskId, timerRunning) {
+          if (!timerRunning) startTimer(projectId, taskId);
+          bloc.add(const StartPomodoro(timerStarted: true));
         },
       );
     }
+    final marker = info.isPaused ? ' ⏸' : (info.isAwaitingStart ? ' ▶' : '');
+    return TrayPomodoroMenu(
+      withTimerLabel: withTimerLabel,
+      actions: [
+        TrayMenuAction('${info.icon} ${info.phaseLabel} ${info.countdown} (${info.round}/${info.rounds})$marker'),
+        if (info.isAwaitingStart)
+          TrayMenuAction('▶ ${tr(info.isWork ? 'pomodoro.start_work' : 'pomodoro.start_break')}', () => bloc.add(const StartPendingPomodoroPhase()))
+        else ...[
+          info.isPaused
+              ? TrayMenuAction('▶ ${tr('pomodoro.resume')}', () => bloc.add(const ResumePomodoro()))
+              : TrayMenuAction('⏸ ${tr('pomodoro.pause')}', () => bloc.add(const PausePomodoro())),
+          TrayMenuAction('⏭ ${tr('pomodoro.skip')}', () => bloc.add(const SkipPomodoroPhase())),
+        ],
+        TrayMenuAction('⏹ ${tr('pomodoro.stop')}', () => bloc.add(const StopPomodoro())),
+      ],
+    );
   }
 }

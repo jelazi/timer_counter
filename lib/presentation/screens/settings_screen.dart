@@ -36,6 +36,8 @@ import '../widgets/supplier_profile_dialog.dart';
 import 'backup_history_screen.dart';
 import 'work_context_screen.dart';
 import '../widgets/app_switch_tile.dart';
+import '../widgets/pomodoro_settings_section.dart';
+import '../widgets/tray_display_settings_section.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -184,6 +186,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 20),
+
+                                _buildSectionTitle(context, tr('pomodoro.title')),
+                                const PomodoroSettingsSection(),
+                                const SizedBox(height: 20),
+
+                                if (PlatformUtils.isDesktop) ...[
+                                  _buildSectionTitle(context, tr('tray.section_title')),
+                                  const TrayDisplaySettingsSection(),
+                                  const SizedBox(height: 20),
+                                ],
 
                                 // Working Hours
                                 _buildSectionTitle(context, tr('settings.working_hours')),

@@ -6,11 +6,14 @@ import 'package:hive_ce/hive.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:timer_counter/core/services/pocketbase_sync_service.dart';
+import 'package:timer_counter/core/services/pomodoro_engine.dart';
 import 'package:timer_counter/core/services/sync_ledger.dart';
 import 'package:timer_counter/data/models/category_model.dart';
 import 'package:timer_counter/data/models/client_model.dart';
 import 'package:timer_counter/data/models/invoice_settings.dart';
 import 'package:timer_counter/data/models/monthly_hours_target_model.dart';
+import 'package:timer_counter/data/models/pomodoro_session.dart';
+import 'package:timer_counter/data/models/pomodoro_settings.dart';
 import 'package:timer_counter/data/models/project_client_model.dart';
 import 'package:timer_counter/data/models/project_model.dart';
 import 'package:timer_counter/data/models/running_timer_model.dart';
@@ -21,6 +24,7 @@ import 'package:timer_counter/data/models/time_entry_model.dart';
 import 'package:timer_counter/data/repositories/category_repository.dart';
 import 'package:timer_counter/data/repositories/client_repository.dart';
 import 'package:timer_counter/data/repositories/monthly_hours_target_repository.dart';
+import 'package:timer_counter/data/repositories/pomodoro_repository.dart';
 import 'package:timer_counter/data/repositories/project_client_repository.dart';
 import 'package:timer_counter/data/repositories/project_repository.dart';
 import 'package:timer_counter/data/repositories/running_timer_repository.dart';
@@ -45,6 +49,8 @@ class FakePocketBase {
     final id = 'pb${_nextId++}';
     (_collections[collection] ??= {})[id] = {'id': id, 'collectionName': collection, 'user': _userId, ...fields};
   }
+
+  void remove(String collection, String itemId) => _collections[collection]?.removeWhere((_, r) => r['item_id'] == itemId);
 
   List<Map<String, dynamic>> records(String collection) => _collections[collection]?.values.toList() ?? const [];
 
@@ -120,6 +126,7 @@ void main() {
   late ClientRepository clients;
   late ProjectClientRepository projectClients;
   late StandaloneInvoiceRepository invoices;
+  late PomodoroRepository pomodoro;
 
   setUpAll(() {
     Hive.registerAdapter(CategoryModelAdapter());
@@ -148,6 +155,7 @@ void main() {
     clients = ClientRepository();
     projectClients = ProjectClientRepository();
     invoices = StandaloneInvoiceRepository();
+    pomodoro = PomodoroRepository();
     for (final init in [
       settings.init,
       timeEntries.init,
@@ -159,6 +167,7 @@ void main() {
       clients.init,
       projectClients.init,
       invoices.init,
+      pomodoro.init,
     ]) {
       await init();
     }
@@ -184,6 +193,7 @@ void main() {
     clientRepo: clients,
     projectClientRepo: projectClients,
     invoiceRepo: invoices,
+    pomodoroRepo: pomodoro,
     httpClientFactory: server.client,
   );
 
@@ -438,6 +448,189 @@ void main() {
       expect(result.error, isNull);
       expect(settings.getSupplierProfile()?.party.name, 'Only local');
       expect(server.record('user_settings', 'supplier_profile'), isNotNull);
+    });
+  });
+
+  group('pomodoro', () {
+    final t0 = DateTime(2026, 11, 24, 9);
+    DateTime at(int minutes) => t0.add(Duration(minutes: minutes));
+    const cfg = PomodoroSettings();
+
+    PomodoroSession started(String id, int minute) => PomodoroEngine.start(id: id, settings: cfg, now: at(minute), startDevice: 'macOS');
+    PomodoroLiveState live(PomodoroSession s, [List<String> ended = const []]) => PomodoroLiveState(session: s, endedSessionIds: ended, updatedAt: s.updatedAt);
+    PomodoroLiveState? serverState() {
+      final record = server.record('pomodoro_state', 'current');
+      return record == null ? null : PomodoroLiveState.fromJson(jsonDecode(jsonEncode(record['data'])) as Map<String, dynamic>);
+    }
+
+    void seedState(PomodoroLiveState state) => server.seed('pomodoro_state', {'item_id': 'current', 'data': state.toJson()});
+
+    test('a pushed state reaches the shared record', () async {
+      await pomodoro.setLiveState(live(started('x', 0)));
+      await createService().pushPomodoroState();
+      expect(serverState()?.session?.id, 'x');
+      expect(savedLedger().pendingCount, 0);
+    });
+
+    test('a stale device does not bring back a session ended elsewhere', () async {
+      seedState(PomodoroLiveState(endedSessionIds: const ['x'], updatedAt: at(10)));
+      await pomodoro.setLiveState(live(PomodoroEngine.skip(started('x', 0), cfg, at(15))));
+
+      await createService().pushPomodoroState();
+
+      expect(pomodoro.getLiveState().session, isNull);
+      expect(serverState()?.session, isNull);
+      expect(serverState()?.endedSessionIds, ['x']);
+    });
+
+    test('downloadAll takes a newer change made on another device', () async {
+      final s = started('x', 0);
+      await pomodoro.setLiveState(live(s));
+      seedState(live(PomodoroEngine.pause(s, at(5))));
+
+      final result = await createService().downloadAll();
+
+      expect(result.error, isNull);
+      expect(pomodoro.getSession()?.isPaused, isTrue);
+    });
+
+    test('two sessions started apart keep the later one and file the earlier one as replaced', () async {
+      await pomodoro.setLiveState(live(started('a', 0)));
+      seedState(live(started('b', 10)));
+
+      await createService().downloadAll();
+
+      expect(pomodoro.getSession()?.id, 'b');
+      final record = pomodoro.getRecords().single;
+      expect(record.id, 'a');
+      expect(record.endReason, PomodoroEndReason.replaced);
+      expect(record.endedAt, at(10));
+      expect(record.workSeconds, 10 * 60);
+      expect(serverState()?.session?.id, 'b');
+      expect(serverState()?.endedSessionIds, ['a']);
+    });
+
+    test('a server without pomodoro_state syncs everything else and sends the state once it has it', () async {
+      server.missingCollections.add('pomodoro_state');
+      server.seed(_entries, remoteEntry('e1', notes: 'from server'));
+      await pomodoro.setLiveState(live(started('x', 0)));
+      final service = createService();
+      await service.pushPomodoroState();
+
+      final first = await service.downloadAll();
+      expect(first.error, isNull);
+      expect(timeEntries.getById('e1')?.notes, 'from server');
+      expect(savedLedger().pendingOp('pomodoro_state', 'current'), PendingOp.upsert);
+      expect(pomodoro.getSession()?.id, 'x');
+
+      server.missingCollections.clear();
+      final second = await service.downloadAll();
+      expect(second.error, isNull);
+      expect(serverState()?.session?.id, 'x');
+      expect(savedLedger().pendingCount, 0);
+    });
+
+    test('pomodoro settings edited later win in both directions; untouched defaults are not uploaded', () async {
+      await createService().downloadAll();
+      expect(server.record('user_settings', 'pomodoro_settings'), isNull);
+
+      server.seed('user_settings', {'item_id': 'pomodoro_settings', 'data': const PomodoroSettings(workMinutes: 50).copyWith(updatedAt: at(10)).toJson()});
+      await pomodoro.setSettings(const PomodoroSettings(workMinutes: 30).copyWith(updatedAt: at(1)));
+      await createService().downloadAll();
+      expect(pomodoro.getSettings().workMinutes, 50);
+
+      await pomodoro.setSettings(const PomodoroSettings(workMinutes: 40).copyWith(updatedAt: at(20)));
+      await createService().downloadAll();
+      expect(jsonDecode(jsonEncode(server.record('user_settings', 'pomodoro_settings')?['data']))['workMinutes'], 40);
+    });
+
+    test('pushPomodoroSettings and the supplier profile live side by side in user_settings', () async {
+      await settings.setSupplierProfile(
+        SupplierProfile(
+          party: const InvoiceParty(name: 'Me'),
+          updatedAt: at(0),
+        ),
+      );
+      final service = createService();
+      await service.pushSupplierProfile();
+      await pomodoro.setSettings(const PomodoroSettings(shortBreakMinutes: 7).copyWith(updatedAt: at(1)));
+      await service.pushPomodoroSettings();
+
+      await createService().downloadAll();
+
+      expect(server.records('user_settings'), hasLength(2));
+      expect(settings.getSupplierProfile()?.party.name, 'Me');
+      expect(pomodoro.getSettings().shortBreakMinutes, 7);
+      expect(savedLedger().pendingCount, 0);
+    });
+
+    test('clearing local data drops the pomodoro but keeps the device preference', () async {
+      await pomodoro.setLiveState(live(started('x', 0)));
+      await pomodoro.setSettings(const PomodoroSettings(workMinutes: 50).copyWith(updatedAt: at(1)));
+      await pomodoro.addRecord(PomodoroEngine.stop(started('old', 0), at(5)));
+      await pomodoro.setShowOnTimeTracking(false);
+
+      await createService().clearLocalData();
+
+      expect(pomodoro.getLiveState(), PomodoroLiveState.empty);
+      expect(pomodoro.getSettings(), const PomodoroSettings());
+      expect(pomodoro.getRecords(), isEmpty);
+      expect(pomodoro.getShowOnTimeTracking(), isFalse);
+    });
+
+    PomodoroSessionRecord finished(String id, int minute) => PomodoroEngine.stop(started(id, 0), at(minute));
+
+    test('a finished session reaches the server and another device downloads it', () async {
+      final record = finished('r1', 30);
+      await pomodoro.addRecord(record);
+      await createService().pushPomodoroRecord(record);
+      expect(server.record('pomodoro_sessions', 'r1'), isNotNull);
+
+      await pomodoro.clearAccountData();
+      await settings.setPocketBaseSyncLedger('');
+      await createService().downloadAll();
+      expect(pomodoro.getRecord('r1'), record);
+    });
+
+    test('a session deleted on another device disappears; one never uploaded is sent instead of dropped', () async {
+      final kept = finished('kept', 30);
+      final deletedElsewhere = finished('gone', 40);
+      final service = createService();
+      for (final r in [kept, deletedElsewhere]) {
+        await pomodoro.addRecord(r);
+        await service.pushPomodoroRecord(r);
+      }
+      server.remove('pomodoro_sessions', 'gone');
+      final offline = finished('offline', 50);
+      await pomodoro.addRecord(offline);
+
+      final result = await service.downloadAll();
+
+      expect(result.error, isNull);
+      expect(pomodoro.getRecord('gone'), isNull);
+      expect(pomodoro.getRecord('kept'), kept);
+      expect(server.record('pomodoro_sessions', 'offline'), isNotNull);
+    });
+
+    test('deleting a session removes it from the server', () async {
+      final record = finished('r1', 30);
+      await pomodoro.addRecord(record);
+      final service = createService();
+      await service.pushPomodoroRecord(record);
+      await pomodoro.deleteRecord('r1');
+      await service.deletePomodoroRecord('r1');
+      expect(server.record('pomodoro_sessions', 'r1'), isNull);
+    });
+
+    test('a full upload never deletes server sessions this device lacks', () async {
+      server.seed('pomodoro_sessions', {'item_id': 'other-device', 'data': finished('other-device', 20).toJson()});
+      await pomodoro.addRecord(finished('mine', 30));
+
+      final result = await createService().uploadAll();
+
+      expect(result.error, isNull);
+      expect(server.record('pomodoro_sessions', 'other-device'), isNotNull);
+      expect(server.record('pomodoro_sessions', 'mine'), isNotNull);
     });
   });
 }

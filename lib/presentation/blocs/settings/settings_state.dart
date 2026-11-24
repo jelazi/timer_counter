@@ -1,5 +1,7 @@
 import 'package:equatable/equatable.dart';
 
+import '../../../data/models/tray_display_settings.dart';
+
 class SettingsState extends Equatable {
   final String themeMode;
   final String language;
@@ -24,6 +26,7 @@ class SettingsState extends Equatable {
   final int remindBreakUrgency;
   final int remindBreakAfter;
   final bool allowOverlapTimes;
+  final TrayDisplaySettings trayDisplay;
   final Map<int, ({String start, String end, bool enabled})> workSchedule;
 
   const SettingsState({
@@ -50,6 +53,7 @@ class SettingsState extends Equatable {
     this.remindBreakUrgency = 2,
     this.remindBreakAfter = 90,
     this.allowOverlapTimes = false,
+    this.trayDisplay = const TrayDisplaySettings(),
     this.workSchedule = const {},
   });
 
@@ -77,6 +81,7 @@ class SettingsState extends Equatable {
     int? remindBreakUrgency,
     int? remindBreakAfter,
     bool? allowOverlapTimes,
+    TrayDisplaySettings? trayDisplay,
     Map<int, ({String start, String end, bool enabled})>? workSchedule,
   }) {
     return SettingsState(
@@ -103,6 +108,7 @@ class SettingsState extends Equatable {
       remindBreakUrgency: remindBreakUrgency ?? this.remindBreakUrgency,
       remindBreakAfter: remindBreakAfter ?? this.remindBreakAfter,
       allowOverlapTimes: allowOverlapTimes ?? this.allowOverlapTimes,
+      trayDisplay: trayDisplay ?? this.trayDisplay,
       workSchedule: workSchedule ?? this.workSchedule,
     );
   }
@@ -132,6 +138,7 @@ class SettingsState extends Equatable {
     remindBreakUrgency,
     remindBreakAfter,
     allowOverlapTimes,
+    trayDisplay,
     workSchedule,
   ];
 }

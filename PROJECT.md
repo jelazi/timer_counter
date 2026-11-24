@@ -2,9 +2,9 @@
 name: Timer Counter
 description: Time tracking app for desktop and mobile with projects, statistics, PDF reports, invoices and PocketBase sync.
 status: active
-progress: 85
+progress: 88
 tags: [flutter, bloc, hive, pocketbase, desktop, macos]
-next: Run setup-Timer-Counter-1.0.12.exe on the Lenovo and check the app; decide on the regenerated plugin registrants.
+next: Check pomodoro notifications on the iPhone (installed) and build for Windows, then release 1.0.13.
 agent: claude
 ---
 
