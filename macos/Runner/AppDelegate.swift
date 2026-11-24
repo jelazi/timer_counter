@@ -102,6 +102,52 @@ class AppDelegate: FlutterAppDelegate, UNUserNotificationCenterDelegate {
     UNUserNotificationCenter.current().setNotificationCategories(categories)
   }
 
+  // MARK: - Tray title
+
+  /// The tray icon as the system_tray plugin set it, kept while the title carries it in the middle.
+  private var trayIcon: NSImage?
+
+  /// The system_tray plugin keeps its status item private, so the button is found in the status bar window.
+  private func trayButton() -> NSStatusBarButton? {
+    func find(_ view: NSView?) -> NSStatusBarButton? {
+      guard let view = view else { return nil }
+      if let button = view as? NSStatusBarButton { return button }
+      for child in view.subviews {
+        if let button = find(child) { return button }
+      }
+      return nil
+    }
+    for window in NSApp.windows where String(describing: type(of: window)).contains("StatusBarWindow") {
+      if let button = find(window.contentView) { return button }
+    }
+    return nil
+  }
+
+  /// `leading` (the pomodoro) goes before the tray icon, `trailing` (the timer) after it.
+  private func setTrayTitle(leading: String, trailing: String) -> Bool {
+    guard let button = trayButton() else { return false }
+    if trayIcon == nil { trayIcon = button.image }
+    guard !leading.isEmpty, let icon = trayIcon else {
+      if let icon = trayIcon {
+        button.image = icon
+        button.imagePosition = .imageLeft
+      }
+      button.title = [leading, trailing].filter { !$0.isEmpty }.joined(separator: " ")
+      return true
+    }
+    let font = button.font ?? NSFont.menuBarFont(ofSize: 0)
+    let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
+    let title = NSMutableAttributedString(string: leading + " ", attributes: attributes)
+    let attachment = NSTextAttachment()
+    attachment.image = icon
+    attachment.bounds = CGRect(x: 0, y: ((font.capHeight - icon.size.height) / 2).rounded(), width: icon.size.width, height: icon.size.height)
+    title.append(NSAttributedString(attachment: attachment))
+    if !trailing.isEmpty { title.append(NSAttributedString(string: " " + trailing, attributes: attributes)) }
+    button.image = nil
+    button.attributedTitle = title
+    return true
+  }
+
   // MARK: - Application lifecycle
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
@@ -127,6 +173,15 @@ class AppDelegate: FlutterAppDelegate, UNUserNotificationCenterDelegate {
       default:
         result(FlutterMethodNotImplemented)
       }
+    }
+
+    let trayChannel = FlutterMethodChannel(name: "com.timer_counter/tray", binaryMessenger: controller.engine.binaryMessenger)
+    trayChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
+      guard call.method == "setTitle", let args = call.arguments as? [String: Any] else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(self?.setTrayTitle(leading: args["leading"] as? String ?? "", trailing: args["trailing"] as? String ?? "") ?? false)
     }
 
     let pomodoro = FlutterMethodChannel(name: "com.timer_counter/pomodoro", binaryMessenger: controller.engine.binaryMessenger)

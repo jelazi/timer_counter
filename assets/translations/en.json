@@ -295,7 +295,9 @@
         "menu_running_timers": "Running timers and \"Stop all\"",
         "menu_recent_tasks": "Recent tasks ★",
         "menu_start_timer": "Start timer ▸ (projects)",
-        "device_only_note": "Applies to this device only. With every text part off, only the app icon stays in the menu bar."
+        "device_only_note": "Applies to this device only. With every text part off, only the app icon stays in the menu bar.",
+        "timer": "Timer",
+        "stop_all": "Stop all timers"
     },
     "time_entries": {
         "title": "Time Entries",

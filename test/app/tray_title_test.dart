@@ -45,6 +45,19 @@ void main() {
     expect(TrayTitle.build(display: allOff, timersLoaded: true, pomodoro: pomodoro(isPaused: true), taskName: 'Úkol', elapsed: '00:42', todayTotal: '03:15'), '');
   });
 
+  test('the pomodoro and the timer come apart for the macOS menu bar, where the app icon sits between them', () {
+    expect(
+      TrayTitle.parts(display: everything, timersLoaded: true, pomodoro: pomodoro(), taskName: 'Úkol', elapsed: '00:42', todayTotal: '03:15'),
+      (pomodoroPart: '🍅 18:42 2/4', timerPart: 'Úkol 00:42 | 03:15'),
+    );
+    expect(TrayTitle.parts(display: defaults, timersLoaded: true, todayTotal: '03:15'), (pomodoroPart: '', timerPart: '0:00 | 03:15'));
+    expect(
+      TrayTitle.parts(display: allOff.copyWith(titlePomodoroIcon: true, titleTodayTotal: true), timersLoaded: true, pomodoro: pomodoro(), todayTotal: '03:15'),
+      (pomodoroPart: '🍅', timerPart: '03:15'),
+    );
+    expect(TrayTitle.build(display: allOff.copyWith(titlePomodoroIcon: true, titleTodayTotal: true), timersLoaded: true, pomodoro: pomodoro(), todayTotal: '03:15'), '🍅 | 03:15');
+  });
+
   test('display settings survive a round trip and fall back to the defaults', () {
     const custom = TrayDisplaySettings(titlePomodoroCountdown: true, menuRecentTasks: false);
     expect(TrayDisplaySettings.fromJson(custom.toJson()), custom);

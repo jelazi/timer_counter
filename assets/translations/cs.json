@@ -292,10 +292,12 @@
         "title_today_total": "Dnešní součet",
         "menu_pomodoro": "Ovládání pomodora",
         "menu_pomodoro_with_timer": "Pomodoro + timer ▸",
-        "menu_running_timers": "Běžící timery a „Stop all“",
+        "menu_running_timers": "Běžící timery a „Zastavit všechny“",
         "menu_recent_tasks": "Nedávné úkoly ★",
         "menu_start_timer": "Spustit timer ▸ (projekty)",
-        "device_only_note": "Platí jen pro toto zařízení. Když vypneš všechny části textu, v liště zůstane jen ikona aplikace."
+        "device_only_note": "Platí jen pro toto zařízení. Když vypneš všechny části textu, v liště zůstane jen ikona aplikace.",
+        "timer": "Timer",
+        "stop_all": "Zastavit všechny timery"
     },
     "time_entries": {
         "title": "Přehled časových záznamů",

@@ -347,8 +347,18 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
             phaseLabel: pomodoroPhaseLabel(session.phase),
           );
 
+    final titleParts = TrayTitle.parts(
+      display: display,
+      timersLoaded: timersLoaded,
+      pomodoro: pomodoroInfo,
+      taskName: first?.taskName,
+      elapsed: first?.elapsed,
+      todayTotal: totalFormatted,
+    );
     trayService.updateTitle(
       TrayTitle.build(display: display, timersLoaded: timersLoaded, pomodoro: pomodoroInfo, taskName: first?.taskName, elapsed: first?.elapsed, todayTotal: totalFormatted),
+      pomodoroPart: titleParts.pomodoroPart,
+      timerPart: titleParts.timerPart,
     );
 
     final recentTaskInfos = <TrayRecentTaskInfo>[];
@@ -374,14 +384,22 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
       onStartTimer: startTimer,
       display: display,
       pomodoro: _trayPomodoroMenu(pomodoroBloc, pomodoroInfo, startTimer),
+      labels: TrayMenuLabels(
+        show: tr('tray.show'),
+        pomodoro: tr('pomodoro.title'),
+        timer: tr('tray.timer'),
+        stopAll: tr('tray.stop_all'),
+        startTimer: tr('tray.start_timer'),
+        quit: tr('tray.quit'),
+      ),
     );
   }
 
   TrayPomodoroMenu _trayPomodoroMenu(PomodoroBloc bloc, TrayPomodoroInfo? info, TrayStartTimerCallback startTimer) {
-    final withTimerLabel = '🍅 ${tr('pomodoro.tray_with_timer')}';
+    final withTimerLabel = '▶ ${tr('pomodoro.tray_with_timer')}';
     if (info == null) {
       return TrayPomodoroMenu(
-        actions: [TrayMenuAction('🍅 ${tr('pomodoro.tray_start')}', () => bloc.add(const StartPomodoro(notifyIfNoTimer: true)))],
+        actions: [TrayMenuAction('▶ ${tr('pomodoro.tray_start')}', () => bloc.add(const StartPomodoro(notifyIfNoTimer: true)))],
         withTimerLabel: withTimerLabel,
         onStartWithTimer: (projectId, taskId, timerRunning) {
           if (!timerRunning) startTimer(projectId, taskId);
@@ -393,7 +411,7 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
     return TrayPomodoroMenu(
       withTimerLabel: withTimerLabel,
       actions: [
-        TrayMenuAction('${info.icon} ${info.phaseLabel} ${info.countdown} (${info.round}/${info.rounds})$marker'),
+        TrayMenuAction('${info.phaseLabel} ${info.countdown} (${info.round}/${info.rounds})$marker'),
         if (info.isAwaitingStart)
           TrayMenuAction('▶ ${tr(info.isWork ? 'pomodoro.start_work' : 'pomodoro.start_break')}', () => bloc.add(const StartPendingPomodoroPhase()))
         else ...[

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:system_tray/system_tray.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -33,6 +34,25 @@ class TrayPomodoroMenu {
   final TrayStartPomodoroWithTimerCallback? onStartWithTimer;
 
   const TrayPomodoroMenu({required this.actions, required this.withTimerLabel, this.onStartWithTimer});
+}
+
+/// The tray menu's own texts, already translated.
+class TrayMenuLabels {
+  final String show;
+  final String pomodoro;
+  final String timer;
+  final String stopAll;
+  final String startTimer;
+  final String quit;
+
+  const TrayMenuLabels({
+    this.show = 'Show Timer Counter',
+    this.pomodoro = 'Pomodoro',
+    this.timer = 'Timer',
+    this.stopAll = 'Stop All Timers',
+    this.startTimer = 'Start Timer',
+    this.quit = 'Quit',
+  });
 }
 
 /// Info about a project+tasks for the tray menu.
@@ -92,6 +112,8 @@ class TrayRecentTaskInfo {
 }
 
 class SystemTrayService {
+  static const _channel = MethodChannel('com.timer_counter/tray');
+
   final SystemTray _systemTray = SystemTray();
   bool _isInitialized = false;
   String? _lastTitle;
@@ -200,9 +222,19 @@ class SystemTrayService {
     await _systemTray.setToolTip(tooltip);
   }
 
-  Future<void> updateTitle(String title) async {
-    if (!_isInitialized || title == _lastTitle) return;
-    _lastTitle = title;
+  /// On macOS the app icon sits between [pomodoroPart] and [timerPart]; elsewhere, or when that fails, [title] is
+  /// shown next to the icon.
+  Future<void> updateTitle(String title, {String pomodoroPart = '', String timerPart = ''}) async {
+    final key = '$title\u0000$pomodoroPart\u0000$timerPart';
+    if (!_isInitialized || key == _lastTitle) return;
+    _lastTitle = key;
+    if (Platform.isMacOS) {
+      try {
+        if (await _channel.invokeMethod<bool>('setTitle', {'leading': pomodoroPart, 'trailing': timerPart}) == true) return;
+      } on Object catch (error) {
+        debugPrint('[SystemTray] Native title failed: $error');
+      }
+    }
     await _systemTray.setTitle(title);
   }
 
@@ -217,12 +249,13 @@ class SystemTrayService {
     required TrayStartTimerCallback onStartTimer,
     TrayDisplaySettings display = const TrayDisplaySettings(),
     TrayPomodoroMenu? pomodoro,
+    TrayMenuLabels labels = const TrayMenuLabels(),
   }) async {
     if (!_isInitialized) return;
 
     final menuItems = <MenuItemBase>[
       MenuItemLabel(
-        label: 'Show Timer Counter',
+        label: labels.show,
         onClicked: (_) => _showWindow(),
       ),
       MenuSeparator(),
@@ -233,6 +266,7 @@ class SystemTrayService {
         .toSet();
 
     if (pomodoro != null && display.menuPomodoro) {
+      menuItems.add(MenuItemLabel(label: '🍅  ${labels.pomodoro}', enabled: false));
       for (final action in pomodoro.actions) {
         menuItems.add(
           MenuItemLabel(
@@ -258,8 +292,14 @@ class SystemTrayService {
       menuItems.add(MenuSeparator());
     }
 
-    // Running timers section
-    if (runningTimers.isNotEmpty && display.menuRunningTimers) {
+    final showRunning = runningTimers.isNotEmpty && display.menuRunningTimers;
+    final showRecent = recentTasks.isNotEmpty && display.menuRecentTasks;
+    final showStart = projects.any((p) => p.tasks.isNotEmpty) && display.menuStartTimer;
+    if (showRunning || showRecent || showStart) {
+      menuItems.add(MenuItemLabel(label: '⏱️  ${labels.timer}', enabled: false));
+    }
+
+    if (showRunning) {
       for (final timer in runningTimers) {
         menuItems.add(
           MenuItemLabel(
@@ -270,13 +310,11 @@ class SystemTrayService {
         );
       }
       menuItems.add(
-        MenuItemLabel(label: 'Stop All Timers', onClicked: (_) => onStopAll()),
+        MenuItemLabel(label: '⏹ ${labels.stopAll}', onClicked: (_) => onStopAll()),
       );
-      menuItems.add(MenuSeparator());
     }
 
-    // Recent tasks — shown at root level for quick access
-    if (recentTasks.isNotEmpty && display.menuRecentTasks) {
+    if (showRecent) {
       for (final recent in recentTasks) {
         final isRunning = runningPairs.contains(
           '${recent.projectId}:${recent.taskId}',
@@ -291,14 +329,10 @@ class SystemTrayService {
           ),
         );
       }
-      menuItems.add(MenuSeparator());
     }
 
-    // Start timer — project → task sub-menus
-    if (projects.isNotEmpty && display.menuStartTimer) {
-      menuItems.add(
-        MenuItemLabel(label: '--- Start Timer ---', enabled: false),
-      );
+    if (showStart) {
+      menuItems.add(MenuItemLabel(label: '${labels.startTimer}:', enabled: false));
       for (final project in projects) {
         if (project.tasks.isEmpty) continue;
         final subMenu = SubMenu(label: project.name, children: []);
@@ -312,10 +346,10 @@ class SystemTrayService {
         }
         menuItems.add(subMenu);
       }
-      menuItems.add(MenuSeparator());
     }
+    if (showRunning || showRecent || showStart) menuItems.add(MenuSeparator());
 
-    menuItems.add(MenuItemLabel(label: 'Quit', onClicked: (_) => _quitApp()));
+    menuItems.add(MenuItemLabel(label: labels.quit, onClicked: (_) => _quitApp()));
 
     // The menu is refreshed every second; rebuilding the native menu only when
     // it changed keeps an open menu from flickering.

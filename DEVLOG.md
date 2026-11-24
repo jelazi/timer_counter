@@ -1,5 +1,94 @@
 # Development Log
 
+## 2026-11-24 (part 11) — fix: timer header icon in the tray menu as large as the pomodoro one
+
+### What was done
+
+- `SystemTrayService.updateMenu`: the timer header is `⏱️  Timer` (U+23F1 followed by U+FE0F) instead of a bare
+  U+23F1.
+
+### What was fixed
+
+- Owner report: the timer icon in the dropdown menu was faint and smaller than 🍅. Without the emoji variation
+  selector macOS draws U+23F1 as a small monochrome text glyph; with it, as a colour emoji the size of 🍅.
+
+### Current state
+
+- `flutter analyze`: no issues; `flutter test`: 200 passed.
+- Rendered with `NSFont.menuFont` in a throwaway Swift script: `⏱️` matches 🍅 in size and colour, the old `⏱`
+  is a small black glyph.
+- Release build installed into `/Applications/Timer Counter.app` and launched (container backup
+  `~/Documents/timer_counter_container_backup_2026-11-24_16-01-38/`).
+
+### Pending / next steps
+
+- Owner check of the tray menu with a running pomodoro.
+- Allow notifications on the iPhone (Settings → Pomodoro → Allow), then Windows build and release 1.0.13.
+
+## 2026-11-24 (part 10) — fix: one pomodoro icon in the tray menu, timer icon in the timer header
+
+### What was done
+
+- `app.dart` `_trayPomodoroMenu`: the status line of a running pomodoro is `Práce 18:42 (2/4)` without the 🍅 / ☕
+  in front; only the section header „🍅 Pomodoro“ carries the icon.
+- `SystemTrayService.updateMenu`: the timer section header is „⏱  Timer“ (text icon like the pomodoro header)
+  instead of the app icon image; `_iconPath` removed.
+
+### What was fixed
+
+- Owner report: the pomodoro section showed the 🍅 twice (header and the phase line), the timer header had no icon.
+
+### Current state
+
+- `flutter analyze`: no issues; `flutter test`: 200 passed.
+- Release build installed into `/Applications/Timer Counter.app` and launched (container backup
+  `~/Documents/timer_counter_container_backup_2026-11-24_15-58-41/`). The menu itself not opened by me.
+
+### Pending / next steps
+
+- Owner check: tray menu with a running pomodoro; menu bar `🍅 time <icon> timer` in light and dark menu bar.
+- Allow notifications on the iPhone (Settings → Pomodoro → Allow), then Windows build and release 1.0.13.
+
+## 2026-11-24 (part 9) — feat: menu bar order pomodoro → app icon → timer, tray menu sections in one language
+
+### What was done
+
+- `TrayTitle.parts` (lib/app/tray_title.dart) returns the pomodoro part and the timer part (task, elapsed,
+  `| today`) apart; `TrayTitle.build` keeps the old joined text for the fallback.
+- macOS (`macos/Runner/AppDelegate.swift`): channel `com.timer_counter/tray`, `setTitle {leading, trailing}`.
+  The status button of the system_tray plugin is found in the status bar window; with a pomodoro the title becomes
+  `🍅 18:42 <app icon> Úkol 00:42 | 03:15` (attributed title, icon as a text attachment, menu bar font,
+  `labelColor`); without a pomodoro the icon goes back to the left of the plain title.
+  `SystemTrayService.updateTitle(title, pomodoroPart:, timerPart:)` uses it on macOS and falls back to the plugin's
+  `setTitle(title)` when the button is not found.
+- Tray menu (`SystemTrayService.updateMenu`): section header „🍅 Pomodoro“ above the pomodoro items, header „Timer“
+  with the app icon above the running timers, „Zastavit všechny timery“, recent tasks and „Spustit časovač:“ +
+  projects, one separator after each section. Pomodoro items start with ▶ instead of a second 🍅.
+- Every menu text is translated: `TrayMenuLabels` from `app.dart` (`tray.show`, `pomodoro.title`, new `tray.timer`,
+  new `tray.stop_all`, `tray.start_timer`, `tray.quit`); before, „Show Timer Counter“, „Stop All Timers“,
+  „--- Start Timer ---“ and „Quit“ were English in the Czech app. Settings label `tray.menu_running_timers` (cs)
+  no longer says „Stop all“.
+- Test: `TrayTitle.parts` for pomodoro + timer, no pomodoro, pomodoro icon + today total only.
+
+### What was fixed
+
+- Owner report: the menu mixed English and Czech; the pomodoro and the timer were not separated in the menu bar
+  title and the tray menu.
+
+### Current state
+
+- `flutter analyze`: no issues; `flutter test`: 200 passed.
+- Release build installed into `/Applications/Timer Counter.app` and launched (container backup
+  `~/Documents/timer_counter_container_backup_2026-11-24_15-49-07/`). Not checked visually: the status item is
+  hidden in the menu bar overflow on this screen and no pomodoro was started by me.
+- Older entries (2026-11-24 parts 1–2) moved to `docs/devlog/2026-11.md`.
+
+### Pending / next steps
+
+- Owner check: start a pomodoro on the Mac — menu bar `🍅 time <icon> timer`, text colour in light and dark menu
+  bar; open the tray menu (sections, Czech texts).
+- Allow notifications on the iPhone (Settings → Pomodoro → Allow), then Windows build and release 1.0.13.
+
 ## 2026-11-24 (part 8) — fix: notifications could not be allowed on iOS
 
 ### What was fixed
@@ -260,119 +349,3 @@
 - Two-device check: start on one device, pause / skip / stop on the other; edit the settings on one.
 - Step 3: menu bar title and tray blocks, the no-timer warning (`docs/pomodoro-spec.md` §4, §7).
 
-## 2026-11-24 (part 2) — feat: pomodoro timer, step 2 of 5 (PocketBase sync)
-
-### What was done
-
-- `PomodoroLiveState` (`data/models/pomodoro_session.dart`): what all devices share — the session or
-  none, the ids of ended sessions (newest 20) and `updatedAt`. New end reason `replaced`.
-- `core/services/pomodoro_state_merge.dart` `PomodoroStateMerge.merge` (pure, order-independent):
-  the side that ended a session beats a device still running it, even with an older timestamp; an
-  empty side never ends a session it does not list as ended; two different running sessions → the
-  later start wins and the other is returned as `SupersededPomodoro` (ends when the winner started);
-  otherwise the newer `updatedAt` (then `seq`, then the JSON) wins; ended ids are always united.
-- `PomodoroRepository` stores the live state under `live_state` (reads the step-1 `session` key once
-  and drops it on the next write); `hasRecord`, `clearAccountData` (keeps the per-device switch).
-- `PocketBaseSyncService` (optional `pomodoroRepo`):
-  - `pushPomodoroState` (ledger-queued) reads the server record, merges, writes back only when the
-    merge differs from the server; `pullPomodoroState` (3 s timeout, no write); `_flushPending`
-    sends a queued `pomodoro_state` through the same merge, never a blind upsert;
-  - real-time `pomodoro_state` subscription (only when the server has the collection) merges every
-    event and pushes back when the local side won; superseded sessions are filed into the history;
-  - `downloadAll` merges the optional `pomodoro_state` download and queues a local state the server
-    lacks; `uploadAll` sends settings and state via `_uploadPomodoroData`;
-  - `pushPomodoroSettings`: item `pomodoro_settings` in `user_settings`, newer `updatedAt` wins,
-    unedited defaults (`updatedAt == null`) are never uploaded. `_applyRemoteUserSettings` split
-    per item; real-time events pass `complete: false` so an event for one item cannot queue the other;
-  - `clearLocalData` (account switch) clears the pomodoro account data; new
-    `SyncCollection.pomodoroState` / `pomodoroSettings`.
-- `PomodoroBloc`: pushes after every state change, reloads on the two sync events; `StartPomodoro`
-  pulls the server state first and, when a session already runs, emits `startConflict` instead of
-  starting; `StartPomodoro(replaceExisting: true)` ends it into the history and starts a new one.
-- `PomodoroCard`: dialog "Pomodoro už běží" (device, phase, time left) → "Převzít" / "Ukončit a
-  začít nové". `pomodoro.conflict_*` translations cs + en.
-- `pocketbase/pb_schema_pomodoro_addon.json` (`pomodoro_state`, `pomodoro_sessions`; `item_id`,
-  `user`, `data` json; owner-only rules like `user_settings`) and the same two collections appended
-  to `pocketbase/pb_schema.json`. `docs/POCKETBASE_SETUP.md` (en + cs) lists the optional
-  collections and how to import an add-on with "Merge with the existing collections" ON.
-
-### What was fixed
-
-- Found by the new sync test: when the local and server state had the same session and timestamp,
-  the JSON tie-break could pick the server side and drop a freshly ended id, so a superseded session
-  could come back. Ended ids are now united in every merge branch.
-
-### Current state
-
-- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 161 passed
-  (new: `test/core/services/pomodoro_state_merge_test.dart` 8, pomodoro group in
-  `pocketbase_sync_service_test.dart` 8, 3 bloc tests, the conflict dialog in `pomodoro_card_test.dart`).
-- Release build installed into `/Applications/Timer Counter.app` (container backup
-  `~/Documents/timer_counter_container_backup_2026-11-24_12-19-11/`); the app process starts.
-  Not clicked through by me.
-- Live server (`http://timer.91.98.132.127.sslip.io`, anonymous GET): `pomodoro_state` and
-  `pomodoro_sessions` → 404 (not imported yet), `user_settings` and `time_entries` → 200. Until the
-  import the pomodoro state stays local and queued; everything else syncs as before.
-- Older app versions (1.0.12) ignore `pomodoro_settings` in `user_settings`; a real-time event for it
-  only makes them resend their supplier profile (newer wins, harmless).
-
-### Pending / next steps
-
-- Owner: back up the server and import `pocketbase/pb_schema_pomodoro_addon.json` in the PocketBase
-  Admin UI with "Merge with the existing collections" ON; then check the two collections answer 200.
-- Try two devices: start on one, pause/skip/stop on the other; settings edited on one appear on the other.
-- Step 3: menu bar title and tray blocks, the no-timer warning (`docs/pomodoro-spec.md` §4, §7).
-- Backups (`BackupService`) still do not include the pomodoro data.
-
-## 2026-11-24 — feat: pomodoro timer, step 1 of 5 (core, local only)
-
-### What was done
-
-- Design interview with the owner (Q1–Q17) written down as `docs/pomodoro-spec.md`: the pomodoro is
-  independent of project timers, breaks are phases of its cycle, one session per account, delivered
-  in 5 steps (core → sync → menu bar → sounds/notifications → history).
-- `data/models/pomodoro_settings.dart` `PomodoroSettings` (work / short / long break minutes, rounds
-  before a long break, auto-start break (on) / work (off), `updatedAt`, lenient `fromJson` with clamping).
-- `data/models/pomodoro_session.dart`: `PomodoroPhase`, `PomodoroStatus` (running / paused /
-  awaitingStart), `PomodoroSession` (live state derived from timestamps: phase start, phase length
-  copied at phase start, paused-in-phase, `seq`, totals of work / break / paused / waiting) and
-  `PomodoroSessionRecord` (finished session for the history).
-- `core/services/pomodoro_engine.dart` `PomodoroEngine` (pure): `start`, `advance` (replays phase ends
-  up to now, long break after N completed pomodoros, ends a session idle for more than one cycle at
-  the moment it went idle with reason `inactivity`), `pause`, `resume`, `skip` (skipped work keeps its
-  time, is not a pomodoro), `startPendingPhase` (uses current settings), `stop` → record.
-- `data/repositories/pomodoro_repository.dart` with two new Hive boxes `pomodoro` (settings, live
-  session, local "show pomodoro" switch) and `pomodoro_sessions` (records), stored as JSON maps — no
-  new Hive type ids.
-- `presentation/blocs/pomodoro/` (`PomodoroBloc` / event / state): 1 s ticker only while a session
-  exists, injectable clock, persists replayed transitions, files the record on stop or inactivity,
-  `todayCompleted`. Registered in `main.dart` / `app.dart`.
-- `presentation/widgets/pomodoro_card.dart` on Time Tracking (desktop and mobile, above the running
-  timer card): idle → start + "today N 🍅"; active → phase, progress ring, countdown, round / paused /
-  waiting, session total with work and break split, pause/resume, skip, stop, "Start work/break".
-- `presentation/widgets/pomodoro_settings_section.dart` in Settings above Working Hours: show pomodoro
-  (local), lengths, rounds, both auto-start switches, note that changes apply from the next phase.
-- `PlatformUtils.deviceLabel`; `pomodoro.*` translations in cs + en.
-
-### What was fixed
-
-- The "Start work" button overflowed the card by 21 px on a 320 px phone (found by the new widget
-  test); the button is now `Flexible` with an ellipsis.
-
-### Current state
-
-- `flutter analyze --no-pub`: no issues. `TZ=Europe/Prague flutter test --no-pub`: 142 passed
-  (30 new: `test/core/services/pomodoro_engine_test.dart`, `test/presentation/blocs/pomodoro_bloc_test.dart`,
-  `test/presentation/pomodoro_card_test.dart`).
-- Release build installed into `/Applications/Timer Counter.app` (container backup
-  `~/Documents/timer_counter_container_backup_2026-11-24_11-56-27/`); the app starts and the screenshot
-  shows the idle pomodoro card on Time Tracking. Start / pause / skip / stop not clicked by me in the
-  real app. `sqlite3.framework` is no longer in the bundle — `pubspec.lock` has no sqlite dependency.
-- Nothing is synced yet; backups (`BackupService`) and "clear local data" do not include the pomodoro boxes.
-
-### Pending / next steps
-
-- Try the pomodoro in the Mac app (start, pause, skip, waiting for work, stop, settings).
-- Step 2: `pocketbase/pb_schema_pomodoro_addon.json`, sync of `pomodoro_state` and `pomodoro_settings`
-  (server import only after the owner's OK), "already running elsewhere" dialog.
-- Decide in step 2 whether backups and "clear local data" cover the pomodoro boxes.
