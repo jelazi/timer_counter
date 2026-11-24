@@ -210,6 +210,7 @@ class _AppWithThemeState extends State<_AppWithTheme> with WidgetsBindingObserve
     // Mobile suspends the real-time SSE connection while backgrounded, so on
     // resume we reconnect and pull anything changed while we were away.
     if (state == AppLifecycleState.resumed) {
+      _messengerKey.currentContext?.read<PomodoroBloc>().add(const LoadPomodoro());
       _resumeAndResync();
     }
   }

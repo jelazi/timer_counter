@@ -13,7 +13,9 @@ abstract class PomodoroAlerts {
   /// Fires when the user tapped a notification of a phase waiting to start.
   Stream<void> get startPendingRequests;
 
-  Future<void> requestPermission();
+  /// [fromUser] means the user asked explicitly, so a permission refused
+  /// earlier sends them to the system settings.
+  Future<void> requestPermission({bool fromUser = false});
 
   Future<bool> permissionGranted();
 

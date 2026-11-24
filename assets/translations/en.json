@@ -718,7 +718,6 @@
         "permission_denied": "Notifications are off",
         "permission_denied_desc": "Without them the phone cannot ring at the end of a phase while the app is in the background.",
         "permission_allow": "Allow",
-        "permission_open_settings": "Open settings",
         "settings_sounds_device": "Sounds on this device",
         "settings_notifications_device": "System notifications on this device",
         "settings_device_only": "This device only",

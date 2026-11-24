@@ -1,9 +1,6 @@
-import 'dart:io' show Platform;
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/utils/platform_utils.dart';
 import '../../data/models/pomodoro_settings.dart';
@@ -158,16 +155,7 @@ class _SoundsCard extends StatelessWidget {
               leading: Icon(Icons.notifications_off_outlined, color: Theme.of(context).colorScheme.error),
               title: Text(tr('pomodoro.permission_denied')),
               subtitle: Text(tr('pomodoro.permission_denied_desc')),
-              trailing: TextButton(
-                onPressed: () {
-                  if (Platform.isIOS) {
-                    launchUrl(Uri.parse('app-settings:'));
-                  } else {
-                    bloc.add(const RequestPomodoroPermission());
-                  }
-                },
-                child: Text(tr(Platform.isIOS ? 'pomodoro.permission_open_settings' : 'pomodoro.permission_allow')),
-              ),
+              trailing: TextButton(onPressed: () => bloc.add(const RequestPomodoroPermission()), child: Text(tr('pomodoro.permission_allow'))),
             ),
             const Divider(height: 1),
           ],

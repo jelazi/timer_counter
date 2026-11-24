@@ -169,7 +169,7 @@ class PomodoroBloc extends Bloc<PomodoroEvent, PomodoroState> {
 
   Future<void> _onRequestPermission(RequestPomodoroPermission event, Emitter<PomodoroState> emit) async {
     await _run(emit, () async {
-      await _alerts?.requestPermission();
+      await _alerts?.requestPermission(fromUser: true);
       await _checkPermission();
       _scheduledFor = null;
     });

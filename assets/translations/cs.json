@@ -718,7 +718,6 @@
         "permission_denied": "Notifikace jsou vypnuté",
         "permission_denied_desc": "Bez nich telefon na konci fáze nezazvoní, když je aplikace na pozadí.",
         "permission_allow": "Povolit",
-        "permission_open_settings": "Otevřít nastavení",
         "settings_sounds_device": "Zvuky na tomto zařízení",
         "settings_notifications_device": "Systémové notifikace na tomto zařízení",
         "settings_device_only": "Jen toto zařízení",

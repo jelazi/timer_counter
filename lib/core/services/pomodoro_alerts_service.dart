@@ -16,7 +16,8 @@ import 'pomodoro_alerts.dart';
 import 'pomodoro_engine.dart';
 
 /// macOS shows pomodoro notifications through its own channel because the app
-/// delegate already owns the notification centre for the work reminders;
+/// delegate already owns the notification centre for the work reminders (on
+/// iOS the same channel only reports and opens the notification permission);
 /// Windows, Android and iOS use flutter_local_notifications. On mobile the
 /// phase ends are scheduled ahead, so they ring while the app is suspended.
 class DefaultPomodoroAlerts implements PomodoroAlerts {
@@ -24,7 +25,7 @@ class DefaultPomodoroAlerts implements PomodoroAlerts {
 
   DefaultPomodoroAlerts({required PomodoroRepository repository}) : _repository = repository;
 
-  static const _macChannel = MethodChannel('com.timer_counter/pomodoro');
+  static const _channel = MethodChannel('com.timer_counter/pomodoro');
   static const _startPendingId = 'start_pending';
   static const _awaitingCategory = 'pomodoro_awaiting';
   static const _phaseNotificationId = 900;
@@ -56,7 +57,7 @@ class DefaultPomodoroAlerts implements PomodoroAlerts {
     _initStarted = true;
     try {
       if (_isMac) {
-        _macChannel.setMethodCallHandler((call) async {
+        _channel.setMethodCallHandler((call) async {
           if (call.method == 'onStartPending') _startPending.add(null);
         });
       }
@@ -111,11 +112,16 @@ class DefaultPomodoroAlerts implements PomodoroAlerts {
   // ── Permission ────────────────────────────────────────────────────────
 
   @override
-  Future<void> requestPermission() async {
+  Future<void> requestPermission({bool fromUser = false}) async {
     if (!_ready || !_isMobile) return;
     try {
       if (Platform.isIOS) {
-        await _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()?.requestPermissions(alert: true, sound: true);
+        final status = await _iosAuthorizationStatus();
+        if (status == 'denied') {
+          if (fromUser) await _channel.invokeMethod<void>('openNotificationSettings');
+        } else if (status != 'authorized') {
+          await _plugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()?.requestPermissions(alert: true, sound: true);
+        }
         return;
       }
       final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
@@ -126,6 +132,14 @@ class DefaultPomodoroAlerts implements PomodoroAlerts {
       }
     } catch (e) {
       debugPrint('[PomodoroAlerts] permission request failed: $e');
+    }
+  }
+
+  Future<String?> _iosAuthorizationStatus() async {
+    try {
+      return await _channel.invokeMethod<String>('authorizationStatus');
+    } on MissingPluginException {
+      return null;
     }
   }
 
@@ -250,7 +264,7 @@ class DefaultPomodoroAlerts implements PomodoroAlerts {
     if (!_ready || !_repository.getNotificationsOnDevice()) return;
     try {
       if (_isMac) {
-        await _macChannel.invokeMethod('show', {'title': title, 'body': body, 'identifier': id == _phaseNotificationId ? 'pomodoro_phase' : 'pomodoro_$id', 'awaiting': awaiting});
+        await _channel.invokeMethod('show', {'title': title, 'body': body, 'identifier': id == _phaseNotificationId ? 'pomodoro_phase' : 'pomodoro_$id', 'awaiting': awaiting});
       } else if (_usesPlugin) {
         await _plugin.show(
           id: id,

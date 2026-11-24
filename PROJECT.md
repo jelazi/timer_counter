@@ -4,7 +4,7 @@ description: Time tracking app for desktop and mobile with projects, statistics,
 status: active
 progress: 88
 tags: [flutter, bloc, hive, pocketbase, desktop, macos]
-next: Check pomodoro notifications on the iPhone (installed) and build for Windows, then release 1.0.13.
+next: "Allow notifications on the iPhone (Settings → Pomodoro → Allow) and check a phase-end notification with the phone locked; then Windows build and release 1.0.13."
 agent: claude
 ---
 

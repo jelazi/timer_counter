@@ -36,7 +36,7 @@ class _FakeAlerts implements PomodoroAlerts {
   Future<void> init() async {}
 
   @override
-  Future<void> requestPermission() async => permissionRequests++;
+  Future<void> requestPermission({bool fromUser = false}) async => permissionRequests++;
 
   @override
   Future<bool> permissionGranted() async => granted;

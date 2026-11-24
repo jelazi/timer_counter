@@ -1,5 +1,42 @@
 # Development Log
 
+## 2026-11-24 (part 8) — fix: notifications could not be allowed on iOS
+
+### What was fixed
+
+- iPhone: the "Notifications are off" hint in Settings → Pomodoro only opened `app-settings:`, but iOS
+  lists Notifications under the app only after the app has asked once. The pomodoro had never been
+  started on the phone (it ran from the Mac), so permission was still not determined, no system
+  dialog ever appeared and the system settings had nothing to switch on.
+
+### What was done
+
+- `ios/Runner/AppDelegate.swift`: channel `com.timer_counter/pomodoro` (registrar
+  `PomodoroPermission`) with `authorizationStatus` (`notDetermined` / `denied` / `authorized`) and
+  `openNotificationSettings` (`openNotificationSettingsURLString` on iOS 16+, else app settings).
+- `PomodoroAlerts.requestPermission({fromUser})`; `DefaultPomodoroAlerts` on iOS asks the system
+  (dialog) unless permission was denied before, and only then — and only for `fromUser` — opens the
+  notification settings. `_macChannel` renamed `_channel`, as iOS uses it too.
+- `PomodoroBloc._onRequestPermission` passes `fromUser: true`; the hint's button now always sends
+  `RequestPomodoroPermission` with the label "Allow"; key `pomodoro.permission_open_settings` removed
+  (cs/en); `url_launcher` / `dart:io` imports dropped from `pomodoro_settings_section.dart`.
+- `_AppWithThemeState.didChangeAppLifecycleState` (`lib/app/app.dart`): on resume adds `LoadPomodoro`, so the hint goes away
+  after returning from the system settings.
+
+### Current state
+
+- `flutter analyze`: no issues; `flutter test`: 199 passed.
+- iPhone: container backed up to `~/Documents/timer_counter_iphone_backup_2026-11-24_14-19-20/`,
+  release build installed and launched. Mac: container backed up to
+  `~/Documents/timer_counter_container_backup_2026-11-24_14-20-33/`, release installed into
+  `/Applications`. The dialog on the phone not yet confirmed by the owner.
+
+### Pending / next steps
+
+- Owner: Settings → Pomodoro → "Allow" on the iPhone, then check a phase-end notification with the
+  phone locked.
+- Windows build on the Lenovo, then release 1.0.13.
+
 ## 2026-11-24 (part 7) — pomodoro build installed on the owner's iPhone
 
 ### What was done
@@ -339,34 +376,3 @@
 - Step 2: `pocketbase/pb_schema_pomodoro_addon.json`, sync of `pomodoro_state` and `pomodoro_settings`
   (server import only after the owner's OK), "already running elsewhere" dialog.
 - Decide in step 2 whether backups and "clear local data" cover the pomodoro boxes.
-
-## 2026-11-23 (part 17) — release 1.0.12: commit, tag, iPhone install, Windows installer on the Lenovo
-
-### What was done
-
-- Committed parts 14–16 (earnings, undo snackbars, dialog contexts) as `27022fd` on `develop`, annotated
-  tag `v1.0.12` ("Timer Counter 1.0.12+13"); pushed `develop` and the tags `v1.0.11`, `v1.0.12`.
-- User's iPhone (`00008120-000619A10AE8201E`): app container backed up to
-  `~/Documents/timer_counter_iphone_backup_2026-11-23_19-28-57/` (17 MB), new `flutter build ios --release`
-  (26.1 MB) installed with `devicectl device install app` and launched. Eli's iPhone left alone on request.
-- Lenovo (Windows, `lenovo-ideapad`, 192.168.1.26, user `jelazi`): reached over SSH from `m1-server`
-  with `~/.ssh/id_ed25519_lenovo` and `HostKeyAlias=lenovo-ideapad` (its known_hosts entry is by name,
-  the name does not resolve). Repo `C:\Users\jelazi\Workspace\timer_counter` fast-forwarded
-  c21afb4 → 27022fd; `deploy_windows.bat` run with `NONINTERACTIVE_DEPLOY=1` (the app was not running).
-
-### Current state
-
-- Before the build: `flutter analyze --no-pub` no issues; `TZ=Europe/Prague flutter test --no-pub` 112 passed.
-- iPhone: `devicectl device info apps` → Timer Counter 1.0.12 (13). Not checked on its screen by me.
-- Lenovo: `Output\setup-Timer-Counter-1.0.12.exe` (14.9 MB) and a copy + ZIP in
-  `deploy\output\windows\20261123_193409\`; `timer_counter.exe` ProductVersion 1.0.12+13. Not installed.
-- Installer ZIP copied to the Raspberry Pi SSD share (`//jelazi@192.168.1.35/SSD`, mounted at
-  `/Volumes/SSD`) as `setup-Timer-Counter-1.0.12.zip` next to 1.0.10/1.0.11; SHA-256 `4bb83bef…5f3a`
-  matches the Lenovo copy, the ZIP holds `setup-Timer-Counter-1.0.12.exe` (14 944 329 B).
-- On the Lenovo `flutter pub get` changed the generated plugin registrants (linux/macos/windows); left
-  uncommitted there.
-
-### Pending / next steps
-
-- Run the installer on the Lenovo and check the app (sync, earnings).
-- Decide whether the regenerated plugin registrants from the Lenovo belong in the repo.
